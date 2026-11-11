@@ -23,11 +23,14 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
+    # यदि आपकी प्रोजेक्ट फाइलें 'KayX' नामक सब-फोल्डर के अंदर हैं, 
+    # तो यहाँ working-directory जोड़ने से Gradle सही जगह पर रन होगा।
     - name: Build Debug APK
       run: gradle assembleDebug
+      working-directory: ./KayX  # यदि प्रोजेक्ट सब-फोल्डर में है तो यह लाइन जोड़ें, अन्यथा हटा दें
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: KayX-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: '**/build/outputs/apk/debug/app-debug.apk'
