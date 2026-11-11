@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK from Zip
 
 on:
   push:
@@ -23,14 +23,33 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
-    # यदि आपकी प्रोजेक्ट फाइलें 'KayX' नामक सब-फोल्डर के अंदर हैं, 
-    # तो यहाँ working-directory जोड़ने से Gradle सही जगह पर रन होगा।
+    # यह स्टेप रिपॉजिटरी में मौजूद ज़िप फ़ाइल को ढूंढकर अपने आप अनजिप कर देगा
+    - name: Unzip Project Archive
+      run: |
+        ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
+        if [ -n "$ZIP_FILE" ]; then
+          echo "Found zip file: $ZIP_FILE"
+          unzip -q "$ZIP_FILE" -d extracted_project
+        else
+          echo "No zip file found in root, proceeding with standard structure."
+        fi
+
+    # यदि ज़िप अनजिप होने के बाद 'KayX' फोल्डर के अंदर है, तो यह कमांड वहां से बिल्ड चलाएगी
     - name: Build Debug APK
-      run: gradle assembleDebug
-      working-directory: ./KayX  # यदि प्रोजेक्ट सब-फोल्डर में है तो यह लाइन जोड़ें, अन्यथा हटा दें
+      run: |
+        if [ -d "extracted_project/KayX" ]; then
+          cd extracted_project/KayX
+          gradle assembleDebug
+        elif [ -f "build.gradle.kts" ]; then
+          gradle assembleDebug
+        else
+          echo "Build configuration not found!"
+          exit 1
+        fi
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: KayX-debug
         path: '**/build/outputs/apk/debug/app-debug.apk'
+        
