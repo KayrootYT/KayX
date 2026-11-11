@@ -23,7 +23,6 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
-    # यह स्टेप ज़िप फ़ाइल को अपने आप अनजिप कर देगा
     - name: Unzip Project Archive
       run: |
         ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
@@ -31,20 +30,27 @@ jobs:
           echo "Found zip file: $ZIP_FILE"
           unzip -q "$ZIP_FILE" -d extracted_project
         else
-          echo "No zip file found in root, proceeding with standard structure."
+          echo "No zip file found in root."
         fi
 
-    # सही पाथ से Gradle बिल्ड चलाना
+    # यह स्टेप अनजिप फोल्डर के अंदर जाकर अपने आप ग्रेdle ढूंढकर बिल्ड कर देगा
     - name: Build Debug APK
       run: |
         if [ -d "extracted_project/KayX" ]; then
           cd extracted_project/KayX
           gradle assembleDebug
-        elif [ -f "build.gradle.kts" ]; then
-          gradle assembleDebug
+        elif [ -d "extracted_project" ]; then
+          # अगर ज़िप के अंदर सीधे फोल्डर हैं
+          SUBDIR=$(find extracted_project -maxdepth 2 -name "build.gradle.kts" -exec dirname {} \;)
+          if [ -n "$SUBDIR" ]; then
+            cd "$SUBDIR"
+            gradle assembleDebug
+          else
+            echo "build.gradle.kts not found inside extracted folder"
+            exit 1
+          fi
         else
-          echo "Build configuration not found!"
-          exit 1
+          gradle assembleDebug
         fi
 
     - name: Upload APK Artifact
@@ -52,3 +58,4 @@ jobs:
       with:
         name: KayX-debug
         path: '**/build/outputs/apk/debug/app-debug.apk'
+        
