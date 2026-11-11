@@ -23,7 +23,7 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
-    # यह स्टेप रिपॉजिटरी में मौजूद ज़िप फ़ाइल को ढूंढकर अपने आप अनजिप कर देगा
+    # यह स्टेप ज़िप फ़ाइल को अपने आप अनजिप कर देगा
     - name: Unzip Project Archive
       run: |
         ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
@@ -34,7 +34,7 @@ jobs:
           echo "No zip file found in root, proceeding with standard structure."
         fi
 
-    # यदि ज़िप अनजिप होने के बाद 'KayX' फोल्डर के अंदर है, तो यह कमांड वहां से बिल्ड चलाएगी
+    # सही पाथ से Gradle बिल्ड चलाना
     - name: Build Debug APK
       run: |
         if [ -d "extracted_project/KayX" ]; then
@@ -52,4 +52,3 @@ jobs:
       with:
         name: KayX-debug
         path: '**/build/outputs/apk/debug/app-debug.apk'
-        
