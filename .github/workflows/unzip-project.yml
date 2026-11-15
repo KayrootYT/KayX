@@ -1,0 +1,50 @@
+name: Extract KayX ZIP into repository
+
+on:
+  push:
+    branches:
+      - unzip-project
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Safely extract project ZIP
+        run: |
+          python3 - <<'PY'
+          import pathlib, stat, zipfile
+          archive = pathlib.Path("KayX.zip")
+          target = pathlib.Path("KayX-source")
+          if not archive.is_file():
+              raise SystemExit("KayX.zip not found")
+          with zipfile.ZipFile(archive) as z:
+              for item in z.infolist():
+                  p = pathlib.PurePosixPath(item.filename)
+                  mode = item.external_attr >> 16
+                  if p.is_absolute() or ".." in p.parts:
+                      raise SystemExit(f"Unsafe archive path: {item.filename}")
+                  if stat.S_ISLNK(mode):
+                      raise SystemExit(f"Symlink not allowed: {item.filename}")
+              z.extractall(target)
+          print(f"Extracted {len(z.infolist())} archive entries into {target}/")
+          PY
+
+      - name: Commit extracted files to this branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add KayX-source/
+          if git diff --cached --quiet; then
+            echo "No extracted-file changes to commit."
+            exit 0
+          fi
+          git commit -m "Extract KayX project ZIP into repository"
+          git push origin HEAD:unzip-project
