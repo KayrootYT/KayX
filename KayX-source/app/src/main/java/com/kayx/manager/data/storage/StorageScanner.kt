@@ -92,10 +92,20 @@ object StorageScanner {
         val ctx = appCtx ?: return null
         return runCatching {
             val out = ArrayList<ScanFile>(20_000)
-            val c = MediaStore.Files.FileColumns
-            ctx.contentResolver.query(MediaStore.Files.getContentUri("external"), arrayOf(c.DATA, c.SIZE, c.DATE_MODIFIED),
-                "${c.SIZE} > 0 AND ${c.DATA} LIKE ?", arrayOf(root.path + "/%"), null)?.use { q ->
-                val ip = q.getColumnIndexOrThrow(c.DATA); val isz = q.getColumnIndexOrThrow(c.SIZE); val id = q.getColumnIndexOrThrow(c.DATE_MODIFIED)
+            val dataColumn = "_data"
+            val sizeColumn = "_size"
+            val modifiedColumn = "date_modified"
+
+            ctx.contentResolver.query(
+                MediaStore.Files.getContentUri("external"),
+                arrayOf(dataColumn, sizeColumn, modifiedColumn),
+                "$sizeColumn > 0 AND $dataColumn LIKE ?",
+                arrayOf(root.path + "/%"),
+                null
+            )?.use { q ->
+                val ip = q.getColumnIndexOrThrow(dataColumn)
+                val isz = q.getColumnIndexOrThrow(sizeColumn)
+                val id = q.getColumnIndexOrThrow(modifiedColumn)
                 val skip = root.path + "/Android/"
                 while (q.moveToNext()) {
                     val path = q.getString(ip) ?: continue
@@ -166,7 +176,6 @@ object StorageScanner {
             val byHash = HashMap<String, MutableList<ScanFile>>()
             for (s in group) hash(File(s.path))?.let { byHash.getOrPut(it) { ArrayList() }.add(s) }
             byHash.values.filter { it.size > 1 }.forEach { same ->
-                // keep the oldest copy as the original
                 out += same.sortedBy { it.modified }.drop(1)
             }
         }
@@ -182,13 +191,11 @@ object StorageScanner {
         md.digest().joinToString("") { "%02x".format(it) }
     }.getOrNull()
 
-    /** Total and available bytes of shared storage, or null if unreadable. */
     fun deviceStorage(): Pair<Long, Long>? = runCatching {
         val st = StatFs(externalRoot().path)
         st.totalBytes to st.availableBytes
     }.getOrNull()
 
-    /** Permanently deletes [list]. Returns (deleted count, freed bytes). */
     fun delete(ctx: Context, list: List<ScanFile>): Pair<Int, Long> {
         var n = 0; var freed = 0L
         val removed = ArrayList<String>()
