@@ -1,87 +1,42 @@
-name: KayX Android Build
-
+name: Build and test KayX
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
-
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Extract KayX.zip
-        run: |
-          if [ ! -f KayX.zip ]; then
-            echo "ERROR: KayX.zip repo root me nahi mila"
-            ls -la
-            exit 1
-          fi
-
-          mkdir -p extracted_project
-          unzip -q KayX.zip -d extracted_project
-
-      - name: Locate Android Project
-        run: |
-          PROJECT=$(find extracted_project \
-            \( -name settings.gradle.kts -o -name settings.gradle \) \
-            -print -quit)
-
-          if [ -z "$PROJECT" ]; then
-            echo "ERROR: Gradle settings file not found"
-            find extracted_project -maxdepth 4 -type f
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
-          echo "Project found: $PROJECT"
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+          java-version: 17
+      - uses: android-actions/setup-ndk@v1
         with:
-          gradle-version: 8.9
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+          ndk-version: r27c
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
-
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/kayx-core
       - name: Rust unit tests
-        run: cargo test --manifest-path "$PROJECT_DIR/rust/kayx-core/Cargo.toml"
-
+        run: cargo test --manifest-path rust/kayx-core/Cargo.toml
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
-
-      - name: Build Debug APK
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Verify APK artifact + native libs
         run: |
-          cd "$PROJECT_DIR"
-
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug --no-daemon
-          else
-            gradle assembleDebug --no-daemon
-          fi
-
-      - name: Verify native lib in APK
-        run: |
-          APK=$(find extracted_project -path '*outputs/apk/debug/*.apk' | head -n 1)
-          test -s "$APK"
-          unzip -l "$APK" | grep libkayx_core.so
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep libkayx_core.so
+      - uses: actions/upload-artifact@v4
         with:
-          name: KayX-Debug-APK
-          path: extracted_project/**/build/outputs/apk/debug/*.apk
+          name: KayX-debug
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error

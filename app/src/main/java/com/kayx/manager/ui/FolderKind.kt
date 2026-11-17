@@ -1,0 +1,86 @@
+package com.kayx.manager.ui
+
+import android.util.LruCache
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+import java.io.File
+
+/** What a folder mostly contains; drives the folder's icon (photos folder -> photo icon, music folder -> music icon …). */
+enum class FolderKind(val icon: ImageVector, val color: Color) {
+    PHOTO(Icons.Default.PhotoLibrary, Color(0xFF00ACC1)),
+    MUSIC(Icons.Default.LibraryMusic, Color(0xFFAB47BC)),
+    VIDEO(Icons.Default.VideoLibrary, Color(0xFFFF7043)),
+    DOCS(Icons.Default.Description, Color(0xFF5C6BF5)),
+    ARCHIVE(Icons.Default.FolderZip, Color(0xFFA1887F)),
+    APK(Icons.Default.Android, Color(0xFF43A047)),
+    CODE(Icons.Default.Code, Color(0xFF607D8B)),
+    NONE(Icons.Default.Folder, Color(0xFFFFB02E))
+}
+
+object FolderKinds {
+    private val IMG = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "avif", "tif", "tiff", "ico", "raw", "dng", "psd")
+    private val AUD = setOf("mp3", "m4a", "wav", "ogg", "oga", "opus", "flac", "aac", "wma", "aiff", "mid", "midi", "amr")
+    private val VID = setOf("mp4", "mkv", "webm", "mov", "avi", "3gp", "m4v", "mpeg", "mpg", "mts", "m2ts", "wmv", "flv")
+    private val DOC = setOf("pdf", "doc", "docx", "docm", "dot", "dotx", "xls", "xlsx", "xlsm", "xltx", "ods", "odt", "ppt", "pptx", "pptm", "ppsx", "odp", "epub", "mobi", "txt", "md", "rtf", "csv")
+    private val ZIP = setOf("zip", "7z", "rar", "tar", "gz", "bz2", "xz", "tgz", "zst", "iso", "jar")
+    private val APKS = setOf("apk", "apks", "xapk", "apkm")
+    private val CODE = setOf("kt", "kts", "java", "smali", "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "c", "h", "cpp", "hpp", "cs", "php", "swift", "sh", "html", "css", "scss", "xml", "json", "toml", "gradle", "sql", "yml", "yaml")
+
+    private const val SCAN_LIMIT = 400
+    private val cache = LruCache<String, FolderKind>(4000)
+    private val gate = Semaphore(2)
+
+    private fun key(path: String, modified: Long) = "$path|$modified"
+    fun peek(path: String, modified: Long): FolderKind? = cache.get(key(path, modified))
+
+    suspend fun load(path: String, modified: Long): FolderKind {
+        peek(path, modified)?.let { return it }
+        val kind = withContext(Dispatchers.IO) { gate.withPermit { scan(path) } }
+        cache.put(key(path, modified), kind)
+        return kind
+    }
+
+    /** Looks at the folder's direct files (first [SCAN_LIMIT]) and returns the most common media/document type. */
+    private fun scan(path: String): FolderKind {
+        val names = runCatching { File(path).list() }.getOrNull() ?: return FolderKind.NONE
+        val counts = IntArray(FolderKind.values().size)
+        for (n in names.take(SCAN_LIMIT)) {
+            val e = n.substringAfterLast('.', "").lowercase()
+            if (e.isEmpty()) continue
+            val k = when (e) {
+                in IMG -> FolderKind.PHOTO; in AUD -> FolderKind.MUSIC; in VID -> FolderKind.VIDEO
+                in APKS -> FolderKind.APK; in ZIP -> FolderKind.ARCHIVE; in DOC -> FolderKind.DOCS
+                in CODE -> FolderKind.CODE; else -> null
+            } ?: continue
+            counts[k.ordinal]++
+        }
+        var best = FolderKind.NONE; var bestN = 0
+        for (k in FolderKind.values()) if (k != FolderKind.NONE && counts[k.ordinal] > bestN) { best = k; bestN = counts[k.ordinal] }
+        return best
+    }
+}
+
+@Composable
+fun rememberFolderKind(path: String, modified: Long, enabled: Boolean): FolderKind {
+    if (!enabled) return FolderKind.NONE
+    val initial = remember(path, modified) { FolderKinds.peek(path, modified) ?: FolderKind.NONE }
+    val kind by produceState(initial, path, modified) { value = FolderKinds.load(path, modified) }
+    return kind
+}
