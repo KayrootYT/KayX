@@ -18,7 +18,9 @@ if [[ ! -x "$cmdline_tools/bin/sdkmanager" ]]; then
     mv "$unpack/cmdline-tools/"* "$cmdline_tools/"
 fi
 
+set +o pipefail
 yes | "$cmdline_tools/bin/sdkmanager" --sdk_root="$sdk_root" --licenses >/dev/null
+set -o pipefail
 "$cmdline_tools/bin/sdkmanager" --sdk_root="$sdk_root" \
     "platform-tools" \
     "platforms;android-34" \
