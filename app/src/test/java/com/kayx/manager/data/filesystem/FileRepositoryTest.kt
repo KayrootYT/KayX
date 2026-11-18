@@ -4,6 +4,7 @@ import com.kayx.manager.domain.model.SortBy
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -70,9 +71,9 @@ class FileRepositoryTest {
             File(destinationDir, "report.txt").writeText("existing")
             val updates = mutableListOf<Triple<Int, Int, String>>()
 
-            val result = FileOps.transfer(listOf(source), destinationDir, move = false, policy = Conflict.KEEP_BOTH) { done, total, name ->
+            val result = FileOps.transfer(listOf(source), destinationDir, move = false, policy = Conflict.KEEP_BOTH, onProgress = { done, total, name ->
                 updates += Triple(done, total, name)
-            }
+            })
 
             assertTrue(result.isSuccess)
             assertEquals("existing", File(destinationDir, "report.txt").readText())

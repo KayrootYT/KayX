@@ -1,0 +1,17 @@
+{
+  "name": "KayX Android",
+  "image": "mcr.microsoft.com/devcontainers/java:1-17-bookworm",
+  "remoteEnv": {
+    "ANDROID_HOME": "${containerEnv:HOME}/.android-sdk",
+    "ANDROID_SDK_ROOT": "${containerEnv:HOME}/.android-sdk"
+  },
+  "postCreateCommand": "bash .devcontainer/setup-android-sdk.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "fwcd.kotlin"
+      ]
+    }
+  }
+}

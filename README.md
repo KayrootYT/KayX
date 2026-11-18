@@ -8,6 +8,9 @@ KayX is an offline-first Android file manager and utility toolkit built with Kot
 - Android SDK matching `compileSdk` in `app/build.gradle.kts`
 - Gradle 8.9
 
+The `.devcontainer` setup uses JDK 17 and installs Android SDK 34, platform-tools,
+and build-tools 34.0.0 when the Codespace is created.
+
 ```bash
 gradle testDebugUnitTest --no-daemon
 gradle assembleDebug --no-daemon
