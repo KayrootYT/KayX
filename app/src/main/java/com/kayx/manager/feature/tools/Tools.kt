@@ -870,7 +870,8 @@ fun HtmlPreviewScreen(spec: String, onBack: () -> Unit) {
                     settings.javaScriptEnabled = SettingsStore.htmlJavaScript
                     settings.domStorageEnabled = true
                     settings.mediaPlaybackRequiresUserGesture = false
-                    settings.allowFileAccess = true
+                    // The preview is served from a loopback HTTP server; WebView does not need file:// access.
+                    settings.allowFileAccess = false
                     settings.allowContentAccess = false
                     settings.allowFileAccessFromFileURLs = false
                     settings.allowUniversalAccessFromFileURLs = false
