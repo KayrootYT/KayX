@@ -8,6 +8,7 @@ import com.kayx.manager.data.apk.ApkSignRepo
 import com.kayx.manager.data.archive.ArchiveEdit
 import com.kayx.manager.data.archive.MultiExtract
 import com.kayx.manager.data.filesystem.Conflict
+import com.kayx.manager.data.filesystem.ExternalOps
 import com.kayx.manager.data.filesystem.RecycleBin
 import com.kayx.manager.data.filesystem.FileOps
 import com.kayx.manager.data.filesystem.FileRepository
@@ -517,6 +518,18 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             val out = FileOps.uniqueName(f.parentFile ?: f, f.nameWithoutExtension + "_signed.apk")
             val r = withContext(Dispatchers.IO) { ApkSignRepo.sign(ctx.applicationContext, f, out) }
             _s.update { st -> st.copy(message = r.fold({ "Signed → ${out.name}" }, { e -> "Sign failed: ${e.message}" })) }
+            reload()
+        }
+    }
+
+    fun convert(ctx: Context, path: String) {
+        viewModelScope.launch {
+            notify("Converting…")
+            val result = withContext(Dispatchers.IO) {
+                ExternalOps.convert(ctx.applicationContext, File(path))
+            }
+            repo.invalidateSearchCache()
+            notify(result)
             reload()
         }
     }

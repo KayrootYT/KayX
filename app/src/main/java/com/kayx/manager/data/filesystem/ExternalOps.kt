@@ -12,8 +12,11 @@ import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
+import kotlin.math.sqrt
 
 object ExternalOps {
+    private const val MAX_CONVERT_IMAGE_PIXELS = 16_777_216L
+
     /** Null (instead of a crash) when the file lives in a location FileProvider cannot expose. */
     fun safeUriFor(ctx: Context, f: File): Uri? = try {
         FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
@@ -84,14 +87,26 @@ object ExternalOps {
         return try {
             when (f.extension.lowercase()) {
                 "pdf" -> {
-                    val out = File(f.parentFile, f.nameWithoutExtension + "_pages").apply { mkdirs() }
-                    val pfd = android.os.ParcelFileDescriptor.open(f, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
-                    android.graphics.pdf.PdfRenderer(pfd).use { r ->
-                        for (i in 0 until r.pageCount) r.openPage(i).use { pg ->
-                            val bmp = android.graphics.Bitmap.createBitmap(pg.width * 2, pg.height * 2, android.graphics.Bitmap.Config.ARGB_8888)
-                            bmp.eraseColor(android.graphics.Color.WHITE)
-                            pg.render(bmp, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                            File(out, "page_${i + 1}.png").outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                    val out = File(f.parentFile, f.nameWithoutExtension + "_pages")
+                    check(out.isDirectory || out.mkdirs()) { "Could not create output folder" }
+                    android.os.ParcelFileDescriptor.open(f, android.os.ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+                        android.graphics.pdf.PdfRenderer(pfd).use { r ->
+                            for (i in 0 until r.pageCount) r.openPage(i).use { pg ->
+                                val pagePixels = (pg.width.toLong() * pg.height).coerceAtLeast(1L)
+                                val scale = minOf(2.0, sqrt(MAX_CONVERT_IMAGE_PIXELS.toDouble() / pagePixels))
+                                val width = (pg.width * scale).toInt().coerceAtLeast(1)
+                                val height = (pg.height * scale).toInt().coerceAtLeast(1)
+                                val bmp = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+                                try {
+                                    bmp.eraseColor(android.graphics.Color.WHITE)
+                                    pg.render(bmp, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                    File(out, "page_${i + 1}.png").outputStream().use {
+                                        check(bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) { "Could not encode PDF page ${i + 1}" }
+                                    }
+                                } finally {
+                                    bmp.recycle()
+                                }
+                            }
                         }
                     }
                     "Saved ${out.listFiles()?.size ?: 0} PNG pages in ${out.name}"
@@ -99,8 +114,20 @@ object ExternalOps {
                 "png", "jpg", "jpeg", "webp" -> {
                     val png = f.extension.lowercase() != "png"
                     val dst = File(f.parentFile, f.nameWithoutExtension + if (png) ".png" else ".jpg")
+                    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeFile(f.path, bounds)
+                    val pixels = bounds.outWidth.toLong() * bounds.outHeight
+                    if (pixels > MAX_CONVERT_IMAGE_PIXELS) return "Image is too large to convert safely (over 16 MP)"
                     val bmp = android.graphics.BitmapFactory.decodeFile(f.path) ?: return "Cannot decode image"
-                    dst.outputStream().use { bmp.compress(if (png) android.graphics.Bitmap.CompressFormat.PNG else android.graphics.Bitmap.CompressFormat.JPEG, 95, it) }
+                    try {
+                        dst.outputStream().use {
+                            check(bmp.compress(if (png) android.graphics.Bitmap.CompressFormat.PNG else android.graphics.Bitmap.CompressFormat.JPEG, 95, it)) {
+                                "Could not encode ${dst.name}"
+                            }
+                        }
+                    } finally {
+                        bmp.recycle()
+                    }
                     "Saved ${dst.name}"
                 }
                 else -> { openWith(ctx, f); "Opening in a converter-capable app (Office/WPS)" }
