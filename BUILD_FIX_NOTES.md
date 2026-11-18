@@ -18,9 +18,13 @@
 - CI workflow YAML parsed successfully.
 - Final ZIP archive passed `unzip -t` integrity validation.
 
-## Not verified in this environment
-- A full Gradle/Kotlin/Android build and the unit tests were not executed because this environment does not have a Gradle executable/wrapper or Android SDK installed.
-- Root, Shizuku, Dhizuku, FTP/FTPS, SFTP, SMB, WebDAV, and full Android 15/16 behavior are not claimed as implemented. Their follow-up work is documented in `IMPLEMENTATION_PLAN.md`.
+## Current verification
+- `./gradlew assembleDebug --no-daemon` passed with JDK 17 and Android SDK 34.
+- `./gradlew testDebugUnitTest --no-daemon` passed after fixing the stale transfer callback argument and missing `assertFalse` import.
+- The local build skipped `cargoNdkBuild` because `cargo-ndk` is not installed; native Rust packaging and Rust tests were not verified.
+- Device behavior for scoped storage, SAF browsing, Root/Shizuku/Dhizuku, network protocols, and Android 15/16 remains unverified. Follow-up work is documented in `IMPLEMENTATION_PLAN.md`.
 
 
-Latest source hardening also adds PBKDF2-based private-space PIN storage with legacy migration and a canonical-path boundary check before cleanup deletion. These changes have static/source review and JVM test coverage added, but the test suite has not been executed because the Android/Gradle toolchain is unavailable in this environment.
+Latest source hardening also adds PBKDF2-based private-space PIN storage with legacy migration and a canonical-path boundary check before cleanup deletion. JVM tests for those boundaries are included and passed in the current Gradle run.
+
+The current follow-up provisions a Java 17 / Android SDK 34 Codespace, repairs two unit-test compilation errors found during the first full Gradle run, and moves PDF/image conversion off the UI thread. Conversion bitmaps are explicitly recycled and bounded to 16 MP per render.

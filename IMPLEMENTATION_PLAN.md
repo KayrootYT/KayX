@@ -30,6 +30,7 @@ A source module is not proof that every workflow is complete or works on every A
 - [x] CI now runs unit tests, builds the debug APK, and verifies the APK artifact on pushes, pull requests, and manual runs.
 - [ ] Run CI on GitHub and resolve any newly surfaced compiler/test errors.
 - [ ] Add device tests for scoped storage, SD cards, SAF, and Android 13–16 behavior.
+- [ ] Integrate persisted SAF tree grants into browsing and file operations. The current picker stores permissions, but the main UI still gates entry on all-files access and the file browser uses `java.io.File`.
 
 ### Phase 2 — iOS 26 visual system (current partial)
 - [x] Retain the existing iOS-inspired grouped surfaces, large title components, segmented controls, light/dark/AMOLED palettes, and glass cards.
@@ -46,6 +47,7 @@ A source module is not proof that every workflow is complete or works on every A
 - [ ] Add durable operation queue with progress, pause/resume, retry, and notification actions.
 - [ ] Add undo/redo journal and duplicate/large-file workflows with safe deletion confirmation.
 - [ ] Add thumbnail caching and bounded-memory media previews.
+- [ ] Add cross-root global search, grid/list mode, settings backup/restore, persistent operation notifications, and undo for move/delete.
 
 ### Phase 4 — Advanced Android access
 - [x] Replace the current Shizuku placeholder with the official Shizuku API (api/provider 13.1.5, user service via AIDL) and the explicit Shizuku permission flow. Root explorer can use Shizuku as its backend (Settings → Advanced access). Not yet build-verified on a device.
