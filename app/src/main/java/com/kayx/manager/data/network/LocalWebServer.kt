@@ -54,10 +54,16 @@ class LocalWebServer(root: File) {
         val inp = c.getInputStream().bufferedReader(Charsets.ISO_8859_1)
         val reqLine = inp.readLine() ?: return@use
         var range: String? = null
+        var host: String? = null
+        var origin: String? = null
         while (true) {
             val l = inp.readLine() ?: break
             if (l.isEmpty()) break
-            if (l.startsWith("range:", ignoreCase = true)) range = l.substringAfter(':').trim()
+            when {
+                l.startsWith("range:", ignoreCase = true) -> range = l.substringAfter(':').trim()
+                l.startsWith("host:", ignoreCase = true) -> host = l.substringAfter(':').trim()
+                l.startsWith("origin:", ignoreCase = true) -> origin = l.substringAfter(':').trim()
+            }
         }
         val parts = reqLine.split(' ')
         val method = parts.getOrNull(0) ?: "GET"
@@ -70,6 +76,10 @@ class LocalWebServer(root: File) {
             out.flush()
         }
         if (method != "GET" && method != "HEAD") return@use reply(405, "Method Not Allowed")
+        val expectedHost = "127.0.0.1:${server?.localPort}"
+        val expectedOrigin = "http://$expectedHost"
+        if (host != expectedHost) return@use reply(403, "Forbidden")
+        if (origin != null && origin != expectedOrigin) return@use reply(403, "Forbidden")
         var f = File(rootDir, Uri.decode(target.substringBefore('?').substringBefore('#')).trimStart('/')).canonicalFile
         if (f.path != rootDir.path && !f.path.startsWith(rootDir.path + File.separator)) return@use reply(403, "Forbidden")
         if (f.isDirectory) f = File(f, "index.html")
@@ -94,7 +104,7 @@ class LocalWebServer(root: File) {
             .append("Content-Length: ").append(count).append("\r\n")
             .append("Accept-Ranges: bytes\r\n")
             .append("Cache-Control: no-cache\r\n")
-            .append("Access-Control-Allow-Origin: *\r\n")
+            .append("X-Content-Type-Options: nosniff\r\n")
         if (partial) head.append("Content-Range: bytes $start-$end/$len\r\n")
         head.append("Connection: close\r\n\r\n")
         out.write(head.toString().toByteArray())
