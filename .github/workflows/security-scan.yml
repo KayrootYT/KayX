@@ -1,0 +1,31 @@
+name: KayX Security Scan
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mobsfscan:
+    name: Android source security scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install MobSF source scanner
+        run: python -m pip install --upgrade mobsfscan
+      - name: Scan Android source and configuration
+        run: mobsfscan . --type android --json --no-fail --output mobsfscan-report.json
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: KayX-security-report
+          path: mobsfscan-report.json
+          if-no-files-found: error
+          retention-days: 30
