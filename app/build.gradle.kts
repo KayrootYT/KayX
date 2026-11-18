@@ -14,8 +14,17 @@ android {
         versionName = "0.4.0"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
+    signingConfigs {
+        create("release") {
+            storeFile = file(System.getenv("KAYX_KEYSTORE_PATH") ?: "missing-release-key.jks")
+            storePassword = System.getenv("KAYX_KEYSTORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("KAYX_KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("KAYX_KEY_PASSWORD") ?: ""
+        }
+    }
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
