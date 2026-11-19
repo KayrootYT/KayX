@@ -16,6 +16,42 @@ class FileRepository {
 
     fun invalidateSearchCache() = searchEngine.invalidate()
 
+    suspend fun list(dir: File, showHidden: Boolean = false, sort: SortBy = SortBy.NAME): List<FileItem> = withContext(Dispatchers.IO) {
+        if (!dir.exists() || !dir.isDirectory) return@withContext emptyList()
+        var files = dir.listFiles()
+        if (dir.absolutePath == "/") {
+            // Android often hides parts of "/" from apps: merge in the well-known top-level folders so the root is never blank.
+            val have = files.orEmpty().map { it.name }.toSet()
+            val extra = listOf("storage", "sdcard", "system", "system_ext", "vendor", "product", "odm", "data", "cache", "mnt", "etc", "apex", "oem", "metadata", "config", "dev", "proc", "sys", "acct", "linkerconfig", "bin", "lib")
+                .filter { it !in have }.map { File("/", it) }.filter { it.exists() }
+            files = (files.orEmpty().toList() + extra).toTypedArray()
+        }
+        if (files == null) return@withContext emptyList()
+        files.asSequence()
+            .filter { showHidden || !it.isHidden }
+            .map { f ->
+                FileItem(
+                    path = f.absolutePath,
+                    name = f.name,
+                    isDir = f.isDirectory,
+                    size = if (f.isFile) f.length() else 0L,
+                    modified = f.lastModified(),
+                    hidden = f.isHidden
+                )
+            }
+            .sortedWith { a, b ->
+                if (a.isDir != b.isDir) return@sortedWith if (a.isDir) -1 else 1
+                when (sort) {
+                    SortBy.NAME -> a.name.compareTo(b.name, ignoreCase = true)
+                    SortBy.TYPE -> a.name.substringAfterLast('.', "").compareTo(b.name.substringAfterLast('.', ""), ignoreCase = true)
+                    SortBy.SIZE -> b.size.compareTo(a.size)
+                    SortBy.DATE -> b.modified.compareTo(a.modified)
+                }
+            }
+            .toList()
+    }
+
+
     suspend fun search(
         dir: File, query: String, showHidden: Boolean = false,
         mode: SearchMode = SearchMode.CONTAINS, maxAgeMs: Long = 0L,
