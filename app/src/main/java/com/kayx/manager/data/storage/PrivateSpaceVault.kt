@@ -137,13 +137,14 @@ internal object PrivateSpaceVault {
     private fun encryptTree(source: File, target: File, key: ByteArray) {
         require(source.isDirectory) { "Private-space staging directory is missing" }
         var count = 0
-        fun walk(src: File, dst: File) {
+        fun walk(src: File, dst: File, depth: Int) {
+            require(depth <= 128) { "Private space folder nesting exceeds 128 levels" }
             src.listFiles().orEmpty().forEach { item ->
                 require(!java.nio.file.Files.isSymbolicLink(item.toPath())) { "Private space cannot contain symbolic links: ${item.name}" }
                 val out = File(dst, item.name + if (item.isFile) EXT else "")
                 if (item.isDirectory) {
                     check(out.mkdirs() || out.isDirectory) { "Cannot create vault directory" }
-                    walk(item, out)
+                    walk(item, out, depth + 1)
                 } else if (item.isFile) {
                     count++
                     require(count <= MAX_FILES) { "Private space exceeds $MAX_FILES files" }
@@ -151,19 +152,20 @@ internal object PrivateSpaceVault {
                 }
             }
         }
-        walk(source, target)
+        walk(source, target, 0)
     }
 
     private fun decryptTree(source: File, target: File, key: ByteArray) {
         if (!source.exists()) return
         require(source.isDirectory) { "Private vault is not a directory" }
         var count = 0
-        fun walk(src: File, dst: File) {
+        fun walk(src: File, dst: File, depth: Int) {
+            require(depth <= 128) { "Private vault folder nesting exceeds 128 levels" }
             src.listFiles().orEmpty().forEach { item ->
                 require(!java.nio.file.Files.isSymbolicLink(item.toPath())) { "Invalid symbolic link in private vault" }
                 if (item.isDirectory) {
                     check(dst.resolve(item.name).mkdirs() || dst.resolve(item.name).isDirectory)
-                    walk(item, File(dst, item.name))
+                    walk(item, File(dst, item.name), depth + 1)
                 } else if (item.isFile && item.name.endsWith(EXT)) {
                     count++
                     require(count <= MAX_FILES) { "Private vault exceeds $MAX_FILES files" }
@@ -174,7 +176,7 @@ internal object PrivateSpaceVault {
                 }
             }
         }
-        walk(source, target)
+        walk(source, target, 0)
     }
 
     internal fun encryptFile(input: File, output: File, key: ByteArray) {
@@ -238,17 +240,18 @@ internal object PrivateSpaceVault {
 
     private fun treeFiles(root: File): Map<String, File> {
         val result = LinkedHashMap<String, File>()
-        fun walk(dir: File) {
+        fun walk(dir: File, depth: Int) {
+            require(depth <= 128) { "Private space folder nesting exceeds 128 levels" }
             dir.listFiles().orEmpty().forEach { file ->
                 require(!java.nio.file.Files.isSymbolicLink(file.toPath()))
-                if (file.isDirectory) walk(file)
+                if (file.isDirectory) walk(file, depth + 1)
                 else if (file.isFile) {
                     val relative = file.relativeTo(root).invariantSeparatorsPath
                     require(result.put(relative, file) == null) { "Duplicate private-space path" }
                 }
             }
         }
-        walk(root)
+        walk(root, 0)
         return result
     }
 
