@@ -223,7 +223,7 @@ pub fn decode(data: &[u8]) -> Result<String, String> {
             }
             0x0104 => {
                 if chunk_size < 28 { return Err("Truncated CDATA chunk".into()); }
-                output.push_str(&"    ".repeat(depth));
+                push_out(&mut output, &"    ".repeat(depth))?;
                 push_out(&mut output, &esc(st!(reader.i32(pos + 16))))?;
                 push_char(&mut output, '\n')?;
             }
