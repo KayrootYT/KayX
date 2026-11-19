@@ -97,7 +97,7 @@ object RootShell {
     fun head(path: String, bytes: Int = 65_536): Res {
         require(bytes in 1..128 * 1024) { "Read size must be between 1 byte and 128 KiB" }
         val result = run("head -c $bytes -- ${q(path)} | base64", 10_000)
-        if (result.code != 0) return result
+        if (result.code != 0 || result.err.isNotBlank()) return result.copy(code = if (result.code == 0) -1 else result.code)
         return runCatching {
             val decoded = android.util.Base64.decode(result.out, android.util.Base64.DEFAULT)
             val raw = decoded.copyOf(minOf(bytes, decoded.size))
@@ -107,7 +107,7 @@ object RootShell {
 
     /** Refuse catastrophic roots and critical mount roots; paths are still quoted and passed after --. */
     fun delete(path: String): Res {
-        val target = runCatching { File(path).canonicalFile }.getOrElse { return Res(-1, "", "Invalid path") }
+        val target = runCatching { File(path).toPath().toAbsolutePath().normalize().toFile() }.getOrElse { return Res(-1, "", "Invalid path") }
         if (!isSafeRecursiveDeleteTarget(target.path)) return Res(-1, "", "Refusing to recursively delete a protected system root")
         return run("rm -rf -- ${q(target.path)}")
     }
@@ -125,7 +125,7 @@ object RootShell {
 /** Pure path guard shared with JVM tests. */
 internal fun isSafeRecursiveDeleteTarget(path: String): Boolean {
     if (path.isBlank()) return false
-    val target = runCatching { File(path).canonicalFile.path }.getOrNull() ?: return false
+    val target = runCatching { File(path).toPath().toAbsolutePath().normalize().toString() }.getOrNull() ?: return false
     val protected = setOf("/", "/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex")
     return target.isNotBlank() && target !in protected
 }
