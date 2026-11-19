@@ -65,8 +65,8 @@ class DexRepository {
         val bytes = file.readBytes()
         val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val magicBytes = ByteArray(8).also { b.position(0); b.get(it) }
-        val magic = magicBytes.toString(Charsets.US_ASCII).trimEnd('\\u0000')
-        require(magic.length == 7 && magic.startsWith("dex\\n") && magic.substring(4, 7).all { it.isDigit() }) { "Unsupported DEX magic: $magic" }
+        val magic = magicBytes.toString(Charsets.US_ASCII).trimEnd('\u0000')
+        require(magic.length == 7 && magic.startsWith("dex\n") && magic.substring(4, 7).all { it.isDigit() }) { "Unsupported DEX magic: $magic" }
         fun uint(offset: Int): Long = b.getInt(offset).toLong() and 0xffffffffL
         val fileSize = uint(32)
         val headerSize = uint(36)
