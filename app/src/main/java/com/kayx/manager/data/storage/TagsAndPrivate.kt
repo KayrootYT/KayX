@@ -150,6 +150,7 @@ internal object PrivateSpacePin {
         }
     }
 
+    /** Legacy installs only: verify the old PIN hash, then migrate to PBKDF2-HMAC-SHA256. */
     fun deriveLegacySha1(pin: String, saltHex: String, iterations: Int): String {
         val salt = saltHex.hexToBytes()
         val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, iterations, 256)
