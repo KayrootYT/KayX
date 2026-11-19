@@ -13,7 +13,15 @@ object RecycleBin {
     }
 
     private fun dir(): File = File(Environment.getExternalStorageDirectory(), ".KayXRecycleBin").apply { mkdirs() }
-    private fun index() = File(dir(), "index.tsv")
+    private fun index(): File {
+        val root = dir()
+        val target = File(root, "index.tsv")
+        val backup = File(root, "index.tsv.bak")
+        if (!target.exists() && backup.exists()) backup.renameTo(target)
+        else if (target.exists()) backup.delete()
+        File(root, "index.tsv.tmp").delete()
+        return target
+    }
 
     private fun payload(id: String): File {
         require(isSafeRecycleEntryId(id)) { "Invalid recycle-bin entry" }
@@ -67,9 +75,8 @@ object RecycleBin {
     }
 
     fun list(): List<Entry> {
-        val d = dir()
-        return rawEntries().filter { File(d, it.first).exists() }.map { (id, path, ts) ->
-            val f = File(d, id)
+        return rawEntries().mapNotNull { (id, path, ts) ->
+            val f = runCatching { payload(id) }.getOrNull()?.takeIf { it.exists() } ?: return@mapNotNull null
             Entry(id, path, ts, f.isDirectory, if (f.isFile) f.length() else 0L)
         }.sortedByDescending { it.deletedAt }
     }
@@ -142,7 +149,7 @@ object RecycleBin {
         }
 
         bin.listFiles().orEmpty().forEach { item ->
-            if (item.name == "index.tsv" || item.name == "index.tsv.tmp" || item.name in indexedIds) return@forEach
+            if (item.name in setOf("index.tsv", "index.tsv.tmp", "index.tsv.bak") || item.name in indexedIds) return@forEach
             val canonical = runCatching { item.canonicalFile }.getOrNull() ?: return@forEach
             if (canonical.parentFile != bin || !isSafeRecycleEntryId(item.name)) return@forEach
             if (isRecycleExpired(item.lastModified(), now) && item.deleteRecursively()) removed++
