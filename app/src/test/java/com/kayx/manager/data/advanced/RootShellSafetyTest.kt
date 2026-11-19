@@ -15,6 +15,11 @@ class RootShellSafetyTest {
         }
     }
 
+    @Test fun refusesBlankDeletePaths() {
+        assertFalse(isSafeRecursiveDeleteTarget(""))
+        assertFalse(isSafeRecursiveDeleteTarget("   "))
+    }
+
     @Test fun allowsSpecificUserFilesAndDirectories() {
         assertTrue(isSafeRecursiveDeleteTarget("/sdcard/Download/old.zip"))
         assertTrue(isSafeRecursiveDeleteTarget("/data/local/tmp/test"))
