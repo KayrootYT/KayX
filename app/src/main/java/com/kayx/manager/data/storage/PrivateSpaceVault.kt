@@ -43,7 +43,7 @@ internal object PrivateSpaceVault {
     private fun vaultDir(ctx: Context) = File(ctx.filesDir, "private_space_vault")
     fun isUnlocked(): Boolean = sessionKey?.size == KEY_BYTES
 
-    fun initialize(ctx: Context, pin: String, stage: File): Result<Unit> = runCatching {
+    @Synchronized fun initialize(ctx: Context, pin: String, stage: File): Result<Unit> = runCatching {
         require(pin.length in 4..8 && pin.all(Char::isDigit)) { "PIN must contain 4–8 digits" }
         val key = ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
@@ -60,7 +60,7 @@ internal object PrivateSpaceVault {
         persistStage(ctx, stage, key)
     }.onFailure { sessionKey = null }
 
-    fun unlock(ctx: Context, pin: String, stage: File): Result<Unit> = runCatching {
+    @Synchronized fun unlock(ctx: Context, pin: String, stage: File): Result<Unit> = runCatching {
         val p = prefs(ctx)
         val salt = Base64.decode(p.getString("vault_salt", null) ?: error("Vault key metadata is missing"), Base64.DEFAULT)
         val wrapped = Base64.decode(p.getString("vault_wrapped_key", null) ?: error("Vault key is missing"), Base64.DEFAULT)
@@ -75,6 +75,7 @@ internal object PrivateSpaceVault {
             // Recover edits left in staging by process death before the last lock transaction.
             persistStage(ctx, stage, key)
         } else {
+            require(vault.isDirectory) { "Encrypted private vault is missing; refusing to create an empty replacement" }
             stage.mkdirs()
             decryptTree(vault, stage, key)
         }
@@ -82,7 +83,7 @@ internal object PrivateSpaceVault {
     }.onFailure { sessionKey = null }
 
     /** Commit all staged edits, verify every encrypted file, then wipe the plaintext staging tree. */
-    fun lock(ctx: Context, stage: File): Result<Unit> = runCatching {
+    @Synchronized fun lock(ctx: Context, stage: File): Result<Unit> = runCatching {
         val key = sessionKey ?: return@runCatching Unit
         persistStage(ctx, stage, key)
         check(stage.deleteRecursively()) { "Could not clear plaintext private-space staging files" }
@@ -190,9 +191,10 @@ internal object PrivateSpaceVault {
         try {
             FileInputStream(input).use { src ->
                 val magic = ByteArray(MAGIC.length)
-                require(src.read(magic) == magic.size && String(magic, Charsets.US_ASCII) == MAGIC) { "Invalid encrypted file header" }
+                src.readFully(magic)
+                require(String(magic, Charsets.US_ASCII) == MAGIC) { "Invalid encrypted file header" }
                 val iv = ByteArray(IV_BYTES)
-                require(src.read(iv) == iv.size) { "Truncated encrypted file header" }
+                src.readFully(iv)
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                 cipher.init(Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
                 FileOutputStream(temp).use { dst ->
