@@ -41,6 +41,7 @@ internal object PrivateSpaceVault {
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private fun vaultDir(ctx: Context) = File(ctx.filesDir, "private_space_vault")
+    private fun sessionMarker(ctx: Context) = File(ctx.filesDir, "private_space_session.active")
     fun isUnlocked(): Boolean = sessionKey?.size == KEY_BYTES
 
     fun fileCount(ctx: Context): Int {
@@ -65,7 +66,8 @@ internal object PrivateSpaceVault {
         sessionKey?.fill(0)
         sessionKey = key
         persistStage(ctx, stage, key)
-    }.onFailure { sessionKey = null }
+        check(sessionMarker(ctx).createNewFile() || sessionMarker(ctx).isFile) { "Could not mark private-space session" }
+    }.onFailure { sessionKey?.fill(0); sessionKey = null }
 
     @Synchronized fun unlock(ctx: Context, pin: String, stage: File): Result<Unit> = runCatching {
         val p = prefs(ctx)
@@ -83,13 +85,24 @@ internal object PrivateSpaceVault {
         require(key.size == KEY_BYTES) { "Invalid vault key" }
 
         val vault = vaultDir(ctx)
-        if (stageHasFiles(stage)) {
-            // Recover edits left in staging by process death before the last lock transaction.
+        if (sessionMarker(ctx).isFile && stage.isDirectory) {
+            // Marker is written only after a complete decrypt. It distinguishes a valid previous
+            // session from a partially materialized tree left by process death during unlock.
             persistStage(ctx, stage, key)
         } else {
             require(vault.isDirectory) { "Encrypted private vault is missing; refusing to create an empty replacement" }
-            stage.mkdirs()
-            decryptTree(vault, stage, key)
+            val temporaryStage = File(ctx.filesDir, "private_space.unlocking")
+            temporaryStage.deleteRecursively()
+            check(temporaryStage.mkdirs()) { "Could not create private-space unlock workspace" }
+            try {
+                decryptTree(vault, temporaryStage, key)
+                check(stage.deleteRecursively()) { "Could not replace incomplete private-space staging data" }
+                check(temporaryStage.renameTo(stage)) { "Could not publish decrypted private-space files" }
+                check(sessionMarker(ctx).createNewFile() || sessionMarker(ctx).isFile) { "Could not mark private-space session" }
+            } catch (t: Throwable) {
+                temporaryStage.deleteRecursively()
+                throw t
+            }
         }
         sessionKey?.fill(0)
         sessionKey = key
@@ -99,6 +112,9 @@ internal object PrivateSpaceVault {
     @Synchronized fun lock(ctx: Context, stage: File): Result<Unit> = runCatching {
         val key = sessionKey ?: return@runCatching Unit
         persistStage(ctx, stage, key)
+        // Remove the marker before wiping plaintext. A crash during deletion then forces a fresh
+        // decrypt from the already-committed vault instead of re-encrypting a partial tree.
+        check(sessionMarker(ctx).delete() || !sessionMarker(ctx).exists()) { "Could not clear private-space session marker" }
         check(stage.deleteRecursively()) { "Could not clear plaintext private-space staging files" }
         check(stage.mkdirs()) { "Could not recreate private-space staging directory" }
         sessionKey = null
@@ -267,8 +283,6 @@ internal object PrivateSpaceVault {
         }
         return md.digest()
     }
-
-    private fun stageHasFiles(stage: File): Boolean = stage.exists() && stage.walkTopDown().any { it.isFile }
 
     private fun deriveKey(pin: String, salt: ByteArray, iterations: Int = ITERATIONS): ByteArray {
         val spec = PBEKeySpec(pin.toCharArray(), salt, iterations, KEY_BYTES * 8)
