@@ -232,15 +232,35 @@ fun GlassCard(
     val base = modifier
         .graphicsLayer { scaleX = scale; scaleY = scale }
         .shadow(elevation.dp, shape, clip = false)
+        .clip(shape)
         .background(fill, shape)
         .border(1.dp, edge, shape)
         .drawBehind {
+            val radius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx())
+            // Broad top specular reflection, fading into the tinted glass body.
             drawRoundRect(
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = if (p.dark) .16f else .72f), Color.Transparent),
-                    startY = 0f, endY = size.height * .42f
+                    listOf(
+                        Color.White.copy(alpha = if (p.dark) .22f else .78f),
+                        Color.White.copy(alpha = if (p.dark) .055f else .18f),
+                        Color.Transparent
+                    ),
+                    startY = 0f, endY = size.height * .48f
                 ),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx())
+                cornerRadius = radius
+            )
+            // Fine inner bevel: bright upper edge and a restrained dark lower edge create depth
+            // without an expensive blur layer on every row in a long directory listing.
+            drawRoundRect(
+                Color.White.copy(alpha = if (p.dark) .20f else .48f),
+                cornerRadius = radius,
+                style = Stroke(width = 0.7.dp.toPx())
+            )
+            drawLine(
+                Color.Black.copy(alpha = if (p.dark) .20f else .055f),
+                start = Offset(18.dp.toPx(), size.height - 1.dp.toPx()),
+                end = Offset(size.width - 18.dp.toPx(), size.height - 1.dp.toPx()),
+                strokeWidth = 1.dp.toPx()
             )
         }
     val m = if (onClick != null || onLongClick != null)
