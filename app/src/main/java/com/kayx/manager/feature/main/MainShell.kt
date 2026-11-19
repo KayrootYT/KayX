@@ -28,6 +28,8 @@ import com.kayx.manager.data.storage.StorageScanner
 import com.kayx.manager.data.storage.formatBytes
 import com.kayx.manager.domain.model.Tool
 import com.kayx.manager.feature.home.HomeScreen
+import com.kayx.manager.feature.search.SearchScreen
+import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.feature.settings.SettingsScreen
 import com.kayx.manager.ui.glass.GlassCard
 import com.kayx.manager.ui.glass.glassBackground
@@ -53,7 +55,9 @@ private enum class MainTab(val label: String, val icon: ImageVector) {
 @Composable
 fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (String) -> Unit, onPush: (String, Tool) -> Unit) {
     var tab by rememberSaveable { mutableStateOf(0) }
-    BackHandler(enabled = tab != 0) { tab = 0 }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = searchOpen) { searchOpen = false }
+    BackHandler(enabled = !searchOpen && tab != 0) { tab = 0 }
     Column(Modifier.fillMaxSize().glassBackground()) {
         Box(Modifier.weight(1f).fillMaxWidth().consumeWindowInsets(WindowInsets.navigationBars)) {
             AnimatedContent(
@@ -65,14 +69,42 @@ fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (Str
                 label = "main-tab-transition"
             ) { destination ->
             when (destination) {
-                MainTab.FILES -> HomeScreen(onSettings = { tab = 3 }, onApps = { onPush("", Tool.APPS) }, onTool = { onPush("", it) }, onPush = onPush, onOpen = onOpen)
+                MainTab.FILES -> if (searchOpen) {
+                    SearchScreen(
+                        onBack = { searchOpen = false },
+                        onOpenDirectory = onOpen,
+                        onOpenFile = { item ->
+                            val ext = item.name.substringAfterLast('.', "").lowercase()
+                            val tool = when (ext) {
+                                "apk" -> Tool.APK
+                                "zip", "apks", "apkm", "xapk", "jar", "aar", "7z", "rar", "tar", "gz", "bz2", "xz" -> Tool.ZIP
+                                "png", "jpg", "jpeg", "webp", "gif", "bmp", "heic" -> Tool.IMAGE
+                                "mp3", "m4a", "wav", "ogg", "opus", "flac", "aac" -> Tool.AUDIO
+                                "mp4", "mkv", "webm", "mov", "avi", "3gp" -> Tool.VIDEO
+                                "html", "htm" -> Tool.HTML
+                                "ttf", "otf", "woff", "woff2" -> Tool.FONT
+                                "dex" -> Tool.DEX
+                                "txt", "md", "log", "json", "xml", "kt", "kts", "java", "js", "ts", "py", "sh", "css", "csv", "ini", "yaml", "yml", "toml", "properties" -> Tool.TEXT
+                                else -> null
+                            }
+                            if (tool != null) onPush(item.path, tool) else onOpen(item.path.substringBeforeLast('/', "/"))
+                        }
+                    )
+                } else HomeScreen(
+                    onSettings = { tab = 3 },
+                    onApps = { onPush("", Tool.APPS) },
+                    onTool = { onPush("", it) },
+                    onPush = onPush,
+                    onOpen = onOpen,
+                    onSearch = { searchOpen = true }
+                )
                 MainTab.STORAGE -> StorageTab(onPush)
                 MainTab.TOOLS -> ToolsTab(onPush)
                 MainTab.SETTINGS -> SettingsScreen(storageGranted, onManageStorage, onBack = { tab = 0 }, showBack = false)
             }
             }
         }
-        NavigationBar(containerColor = Color.Transparent) {
+        if (!searchOpen) NavigationBar(containerColor = Color.Transparent) {
             MainTab.values().forEachIndexed { i, t ->
                 NavigationBarItem(
                     selected = tab == i, onClick = { tab = i },
