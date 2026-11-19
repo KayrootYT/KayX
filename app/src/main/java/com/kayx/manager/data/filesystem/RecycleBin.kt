@@ -48,13 +48,22 @@ object RecycleBin {
     private fun writeIndex(entries: List<Triple<String, String, Long>>) {
         val target = index()
         val temp = File(target.parentFile, "index.tsv.tmp")
-        temp.writeText(entries.joinToString("") { "${it.first}\t${it.second}\t${it.third}\n" })
-        runCatching { temp.setLastModified(System.currentTimeMillis()) }
-        if (target.exists() && !target.delete()) {
-            temp.delete()
-            error("Could not replace recycle-bin index")
+        java.io.FileOutputStream(temp).use { stream ->
+            stream.write(entries.joinToString("") { "${it.first}\t${it.second}\t${it.third}\n" }.toByteArray(Charsets.UTF_8))
+            stream.flush()
+            stream.fd.sync()
         }
-        check(temp.renameTo(target)) { "Could not finalize recycle-bin index" }
+        val backup = File(target.parentFile, "index.tsv.bak")
+        backup.delete()
+        val hadIndex = target.exists()
+        if (hadIndex) check(target.renameTo(backup)) { "Could not preserve recycle-bin index" }
+        try {
+            check(temp.renameTo(target)) { "Could not finalize recycle-bin index" }
+            backup.delete()
+        } catch (t: Throwable) {
+            if (hadIndex) check(backup.renameTo(target)) { "Could not restore recycle-bin index" }
+            throw t
+        }
     }
 
     fun list(): List<Entry> {
@@ -78,13 +87,19 @@ object RecycleBin {
             }
             val deletedAt = System.currentTimeMillis()
             val id = System.nanoTime().toString(36) + "_" + f.name.take(60)
+            val record = Triple(id, f.absolutePath, deletedAt)
+            // Commit intent first: after a crash the index still knows the original path.
+            writeIndex(rawEntries() + added + record)
             val target = payload(id)
-            move(f, target)
-            // A crash before index commit leaves an orphan whose mtime still reflects deletion time.
-            target.setLastModified(deletedAt)
-            added += Triple(id, f.absolutePath, deletedAt)
+            try {
+                move(f, target)
+                target.setLastModified(deletedAt)
+                added += record
+            } catch (t: Throwable) {
+                writeIndex(rawEntries().filterNot { it.first == id })
+                throw t
+            }
         }
-        if (added.isNotEmpty()) writeIndex(rawEntries() + added)
     }
 
     fun restore(e: Entry): Result<File> = runCatching {
