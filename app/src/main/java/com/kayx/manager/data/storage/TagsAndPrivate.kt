@@ -54,31 +54,41 @@ object TagStore {
     fun totalFiles(): Int = tags.values.flatten().distinct().count { File(it).exists() }
 }
 
-/** PIN-protected private folder stored in the app's own storage (invisible to other apps). */
+/** PIN-protected, encrypted private vault stored inside the app sandbox. */
 object PrivateSpace {
     private const val PIN_SCHEME = "pbkdf2-hmac-sha256"
     private const val LEGACY_PBKDF2_SCHEME = "pbkdf2-hmac-sha1"
     private const val PIN_ITERATIONS = 120_000
-    private const val PIN_KEY_BITS = 256
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("kayx_private", Context.MODE_PRIVATE)
 
+    /** Plaintext staging is populated only during an unlocked session and wiped when the app backgrounds. */
     fun dir(ctx: Context): File = File(ctx.applicationContext.filesDir, "private_space").apply { mkdirs() }
     fun hasPin(ctx: Context) = !prefs(ctx).getString("hash", null).isNullOrEmpty()
+    fun isUnlocked(): Boolean = PrivateSpaceVault.isUnlocked()
     fun fileCount(ctx: Context): Int = dir(ctx).walkTopDown().count { it.isFile }
 
-    fun setPin(ctx: Context, pin: String) {
+    fun setPin(ctx: Context, pin: String): Result<Unit> = runCatching {
+        require(pin.length in 4..8 && pin.all(Char::isDigit)) { "PIN must contain 4–8 digits" }
+        val p = prefs(ctx)
         val salt = PrivateSpacePin.newSalt()
         val encoded = PrivateSpacePin.derive(pin, salt, PIN_ITERATIONS)
-        prefs(ctx).edit()
+        check(p.edit()
             .putString("scheme", PIN_SCHEME)
             .putString("salt", salt)
             .putString("hash", encoded)
             .putInt("iterations", PIN_ITERATIONS)
-            .apply()
+            .commit()) { "Could not save private-space PIN" }
+        try {
+            PrivateSpaceVault.initialize(ctx.applicationContext, pin, dir(ctx)).getOrThrow()
+        } catch (t: Throwable) {
+            p.edit().remove("scheme").remove("salt").remove("hash").remove("iterations")
+                .remove("vault_salt").remove("vault_wrapped_key").remove("vault_kdf_iterations").remove("vault_cipher").commit()
+            throw t
+        }
     }
 
-    /** Verifies the PIN and transparently upgrades hashes created by older KayX builds. */
+    /** Verifies the PIN and opens/migrates the encrypted vault into a temporary app-private working directory. */
     fun verify(ctx: Context, pin: String): Boolean {
         val p = prefs(ctx)
         val salt = p.getString("salt", "") ?: ""
@@ -92,14 +102,33 @@ object PrivateSpace {
                 val iterations = p.getInt("iterations", PIN_ITERATIONS).coerceIn(50_000, 500_000)
                 PrivateSpacePin.constantTimeEquals(stored, PrivateSpacePin.deriveLegacySha1(pin, salt, iterations))
             } else {
-                // Previous versions stored SHA-256(salt + PIN). Keep existing private spaces usable.
-                val legacy = PrivateSpacePin.legacyHash(pin, salt)
-                PrivateSpacePin.constantTimeEquals(stored, legacy)
+                PrivateSpacePin.constantTimeEquals(stored, PrivateSpacePin.legacyHash(pin, salt))
             }
         }.getOrDefault(false)
-        if (valid && p.getString("scheme", null) != PIN_SCHEME) setPin(ctx, pin)
-        return valid
+        if (!valid) return false
+
+        return runCatching {
+            if (p.getString("scheme", null) != PIN_SCHEME) {
+                val newSalt = PrivateSpacePin.newSalt()
+                check(p.edit()
+                    .putString("scheme", PIN_SCHEME)
+                    .putString("salt", newSalt)
+                    .putString("hash", PrivateSpacePin.derive(pin, newSalt, PIN_ITERATIONS))
+                    .putInt("iterations", PIN_ITERATIONS)
+                    .commit()) { "Could not upgrade private-space PIN" }
+            }
+            if (p.getString("vault_wrapped_key", null).isNullOrEmpty()) {
+                // Existing pre-vault installs are encrypted on first successful unlock.
+                PrivateSpaceVault.initialize(ctx.applicationContext, pin, dir(ctx)).getOrThrow()
+            } else {
+                PrivateSpaceVault.unlock(ctx.applicationContext, pin, dir(ctx)).getOrThrow()
+            }
+            true
+        }.getOrDefault(false)
     }
+
+    /** Persist edits, authenticate the encrypted copy, then remove plaintext staging data. */
+    fun lock(ctx: Context): Result<Unit> = PrivateSpaceVault.lock(ctx.applicationContext, dir(ctx))
 }
 
 /** Small JVM-only helper so PIN derivation and constant-time comparison can be tested. */
