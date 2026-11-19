@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.domain.model.SortBy
+import com.kayx.manager.domain.model.SearchMode
 import com.kayx.manager.domain.model.Tool
 import com.kayx.manager.ui.glass.GlassCard
 import com.kayx.manager.ui.glass.glassBackground
@@ -87,6 +88,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     var dlg by remember { mutableStateOf<Dlg?>(null) }
     var menu by remember { mutableStateOf(false) }
     var sortPage by remember { mutableStateOf(false) }
+    var searchModeMenu by remember { mutableStateOf(false) }
     var openFor by remember { mutableStateOf<FileItem?>(null) }
     var webFor by remember { mutableStateOf<FileItem?>(null) }
     var itemMenu by remember { mutableStateOf<Pair<FileItem, Int>?>(null) }
@@ -126,7 +128,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 Row(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton({ if (!vm.up()) onExit() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                     if (s.searching) TextField(
-                        s.query, vm::setQuery, Modifier.weight(1f), singleLine = true, placeholder = { Text(if (s.grep) "Search text inside files" else "Search in folder") },
+                        s.query, vm::setQuery, Modifier.weight(1f), singleLine = true,
+                        placeholder = { Text(if (s.grep) "Search inside files" else "Search names, .mp3 or *.mp3") },
+                        trailingIcon = { if (s.query.isNotEmpty()) IconButton({ vm.setQuery("") }) { Icon(Icons.Default.Close, "Clear query") } },
                         colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
                             focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
                     else Column(Modifier.weight(1f)) {
@@ -210,6 +214,36 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         IconButton(vm::selectAll) { Icon(Icons.Default.SelectAll, "Select all") }
                         IconButton(vm::clearSelection) { Icon(Icons.Default.Close, "Clear selection") }
                     }
+                }
+            }
+            if (s.searching) Row(
+                Modifier.fillMaxWidth().padding(top = 5.dp, start = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                Box {
+                    TextButton(onClick = { searchModeMenu = true }) {
+                        Icon(Icons.Default.Tune, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(if (s.grep) "Text content" else SettingsStore.searchMode.label)
+                        Icon(Icons.Default.ArrowDropDown, null)
+                    }
+                    DropdownMenu(searchModeMenu, { searchModeMenu = false }) {
+                        DropdownMenuItem(text = { Text("File name contains") }, onClick = {
+                            SettingsStore.updateSearchMode(SearchMode.CONTAINS); searchModeMenu = false; vm.reload()
+                        })
+                        DropdownMenuItem(text = { Text("Exact file name") }, onClick = {
+                            SettingsStore.updateSearchMode(SearchMode.EXACT); searchModeMenu = false; vm.reload()
+                        })
+                        DropdownMenuItem(text = { Text("Regular expression") }, onClick = {
+                            SettingsStore.updateSearchMode(SearchMode.REGEX); searchModeMenu = false; vm.reload()
+                        })
+                    }
+                }
+                TextButton(onClick = { vm.toggleGrep() }) {
+                    Icon(if (s.grep) Icons.Default.TextFields else Icons.Default.FolderOpen, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text(if (s.grep) "Search names" else "Search file contents")
                 }
             }
             if (!s.dualPane) Row(

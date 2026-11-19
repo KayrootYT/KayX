@@ -65,7 +65,17 @@ class FileRepository {
         mode: SearchMode = SearchMode.CONTAINS, maxAgeMs: Long = 0L
     ): List<FileItem> = withContext(Dispatchers.IO) {
         if (!dir.exists() || !dir.isDirectory || query.isBlank()) return@withContext emptyList()
-        val regex = if (mode == SearchMode.REGEX) runCatching { Regex(query, RegexOption.IGNORE_CASE) }.getOrNull() ?: return@withContext emptyList() else null
+        val needle = query.trim()
+        if (needle.isEmpty()) return@withContext emptyList()
+        // File-manager friendly extension search: ".mp3" and "*.mp3" match files by suffix,
+        // not folders whose names happen to contain the extension text.
+        val extensionQuery = needle.removePrefix("*").takeIf { it.startsWith(".") && it.length > 1 }
+        val globRegex = if (extensionQuery == null && ('*' in needle || '?' in needle)) {
+            Regex("^" + needle.map { ch -> when (ch) { '*' -> ".*"; '?' -> "."; else -> Regex.escape(ch.toString()) } }.joinToString("") + "$", RegexOption.IGNORE_CASE)
+        } else null
+        val regex = if (mode == SearchMode.REGEX && extensionQuery == null && globRegex == null)
+            runCatching { Regex(needle, RegexOption.IGNORE_CASE) }.getOrNull() ?: return@withContext emptyList()
+        else null
         val since = if (maxAgeMs > 0) System.currentTimeMillis() - maxAgeMs else 0L
         val key = dir.absolutePath + "|hidden=$showHidden"
         val now = System.currentTimeMillis()
@@ -77,10 +87,12 @@ class FileRepository {
         index.asSequence()
             .filter { since == 0L || it.modified >= since }
             .filter {
-                when (mode) {
-                    SearchMode.CONTAINS -> it.name.contains(query, ignoreCase = true)
-                    SearchMode.EXACT -> it.name.equals(query, ignoreCase = true)
-                    SearchMode.REGEX -> regex!!.containsMatchIn(it.name)
+                when {
+                    extensionQuery != null -> !it.isDir && it.name.endsWith(extensionQuery, ignoreCase = true)
+                    globRegex != null -> globRegex.matches(it.name)
+                    mode == SearchMode.CONTAINS -> it.name.contains(needle, ignoreCase = true)
+                    mode == SearchMode.EXACT -> it.name.equals(needle, ignoreCase = true)
+                    else -> regex!!.containsMatchIn(it.name)
                 }
             }
             .sortedWith { a, b ->

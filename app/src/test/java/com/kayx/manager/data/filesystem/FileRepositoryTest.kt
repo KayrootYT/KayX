@@ -50,6 +50,30 @@ class FileRepositoryTest {
     }
 
     @Test
+    fun searchSupportsExtensionAndWildcardQueriesLikeFileManagers() = runBlocking {
+        val root = createTempDir(prefix = "kayx-extension-search-")
+        try {
+            val repository = FileRepository()
+            File(root, "music").mkdirs()
+            File(root, "track-one.mp3").writeText("audio")
+            File(root, "track-two.MP3").writeText("audio")
+            File(root, "cover.png").writeText("image")
+
+            assertEquals(
+                listOf("track-one.mp3", "track-two.MP3").sorted(),
+                repository.search(root, ".mp3").map { it.name }.sorted()
+            )
+            assertEquals(
+                listOf("track-one.mp3", "track-two.MP3").sorted(),
+                repository.search(root, "*.mp3").map { it.name }.sorted()
+            )
+            assertEquals(listOf("cover.png"), repository.search(root, "*.png").map { it.name })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun rejectsUnsafeNamesAndExistingTargets() = runBlocking {
         val root = createTempDir(prefix = "kayx-validation-")
         try {
