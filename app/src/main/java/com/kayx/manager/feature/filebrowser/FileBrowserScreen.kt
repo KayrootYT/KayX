@@ -138,11 +138,31 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                 .recoverCatching { android.os.StatFs(android.os.Environment.getExternalStorageDirectory().path).let { it.totalBytes to (it.totalBytes - it.availableBytes) } }
                                 .getOrNull()
                         }
-                        val pathScroll = rememberScrollState()
-                        LaunchedEffect(activePath, pathScroll.maxValue) { pathScroll.scrollTo(pathScroll.maxValue) }
-                        if (s.selected.isNotEmpty()) Text("${s.selected.size} selected", maxLines = 1, style = MaterialTheme.typography.titleMedium)
-                        else Text(activePath.ifEmpty { "/" }, Modifier.horizontalScroll(pathScroll).clickable { dlg = Dlg.Jump }, maxLines = 1, softWrap = false,
-                            style = MaterialTheme.typography.titleMedium)
+                        if (s.selected.isNotEmpty()) {
+                            Text("${s.selected.size} selected", maxLines = 1, style = MaterialTheme.typography.titleMedium)
+                        } else {
+                            // Compact, tappable breadcrumbs replace the hard-to-read absolute path.
+                            Row(
+                                Modifier.weight(1f).horizontalScroll(rememberScrollState()).animateContentSize(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("⌂", Modifier.clip(RoundedCornerShape(8.dp)).clickable { vm.openActive("/") }.padding(horizontal = 6.dp, vertical = 5.dp),
+                                    color = Accent, style = MaterialTheme.typography.titleMedium)
+                                val parts = activePath.split('/').filter { it.isNotBlank() }
+                                parts.forEachIndexed { index, part ->
+                                    val target = "/" + parts.take(index + 1).joinToString("/")
+                                    Text("›", color = Fg.copy(.38f), style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        part,
+                                        Modifier.clip(RoundedCornerShape(7.dp)).clickable { vm.openActive(target) }
+                                            .padding(horizontal = 5.dp, vertical = 5.dp),
+                                        maxLines = 1, softWrap = false,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = if (index == parts.lastIndex) Fg else Accent
+                                    )
+                                }
+                            }
+                        }
                         Text("Folders: $folders  Files: ${shownItems.size - folders}" + (disk?.let { "  Disk: ${fmtSize(it.second)}/${fmtSize(it.first)}" } ?: ""),
                             maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Fg.copy(.5f))
                     }
@@ -466,7 +486,6 @@ private fun FileListPane(
 private fun FileRow(f: FileItem, selected: Boolean, onClick: () -> Unit, onLong: () -> Unit, onSwipe: () -> Unit = {}) {
     val haptics = LocalHapticFeedback.current
     val folder = f.isDir
-    val fk = if (folder) com.kayx.manager.ui.rememberFolderKind(f.path, f.modified, com.kayx.manager.data.settings.SettingsStore.folderIcons) else com.kayx.manager.ui.FolderKind.NONE
     val extension = f.name.substringAfterLast('.', "").lowercase()
     val iconTint by animateColorAsState(
         targetValue = if (selected || folder) Accent else Fg.copy(.78f),
@@ -485,8 +504,8 @@ private fun FileRow(f: FileItem, selected: Boolean, onClick: () -> Unit, onLong:
         ) {
             if ((selected || folder) && com.kayx.manager.data.settings.SettingsStore.icons3d) {
                 com.kayx.manager.ui.Icon3D(
-                    if (selected) Icons.Default.CheckCircle else fk.icon,
-                    if (selected) Accent else fk.color,
+                    if (selected) Icons.Default.CheckCircle else Icons.Default.Folder,
+                    if (selected) Accent else Color(0xFFFFB02E),
                     size = 44.dp, flip = selected,
                     contentDescription = if (selected) "Selected" else "Folder"
                 )
@@ -494,7 +513,7 @@ private fun FileRow(f: FileItem, selected: Boolean, onClick: () -> Unit, onLong:
             Icon(
                 when {
                     selected -> Icons.Default.CheckCircle
-                    folder -> fk.icon
+                    folder -> Icons.Default.Folder
                     extension == "apk" -> Icons.Default.Android
                     extension in ARCHIVE_EXTENSIONS -> Icons.Default.Archive
                     extension in IMAGE_EXTENSIONS -> Icons.Default.Image
