@@ -228,15 +228,25 @@ object StorageScanner {
             val byHash = HashMap<String, MutableList<ScanFile>>()
             for (s in group) hash(File(s.path))?.let { byHash.getOrPut(it) { ArrayList() }.add(s) }
             byHash.values.filter { it.size > 1 }.forEach { same ->
-                // keep the oldest copy as the original
-                out += same.sortedBy { it.modified }.drop(1)
+                // SHA-256 is only a candidate filter; verify actual bytes before reporting duplicates.
+                val exactGroups = ArrayList<MutableList<ScanFile>>()
+                for (candidate in same) {
+                    val matching = exactGroups.firstOrNull { group ->
+                        filesHaveSameContent(File(candidate.path), File(group.first().path))
+                    }
+                    if (matching != null) matching += candidate else exactGroups += mutableListOf(candidate)
+                }
+                exactGroups.filter { it.size > 1 }.forEach { exact ->
+                    // keep the oldest copy as the original
+                    out += exact.sortedBy { it.modified }.drop(1)
+                }
             }
         }
         return out.sortedByDescending { it.size }
     }
 
     private fun hash(f: File): String? = runCatching {
-        val md = MessageDigest.getInstance("MD5")
+        val md = MessageDigest.getInstance("SHA-256")
         f.inputStream().buffered().use { ins ->
             val buf = ByteArray(1 shl 16); var n: Int
             while (ins.read(buf).also { n = it } > 0) md.update(buf, 0, n)
@@ -263,5 +273,35 @@ object StorageScanner {
         if (removed.isNotEmpty()) MediaScannerConnection.scanFile(ctx, removed.toTypedArray(), null, null)
         invalidate()
         return n to freed
+    }
+}
+
+
+/** Byte-for-byte duplicate verification; hashes are never treated as proof of equality. */
+internal fun filesHaveSameContent(left: File, right: File): Boolean = runCatching {
+    if (!left.isFile || !right.isFile || left.length() != right.length()) return@runCatching false
+    left.inputStream().buffered().use { a ->
+        right.inputStream().buffered().use { b ->
+            val ab = ByteArray(64 * 1024)
+            val bb = ByteArray(64 * 1024)
+            while (true) {
+                fun readBlock(input: java.io.InputStream, buffer: ByteArray): Int {
+                    var used = 0
+                    while (used < buffer.size) {
+                        val n = input.read(buffer, used, buffer.size - used)
+                        if (n < 0) break
+                        if (n == 0) continue
+                        used += n
+                    }
+                    return used
+                }
+                val an = readBlock(a, ab)
+                val bn = readBlock(b, bb)
+                if (an != bn || !ab.copyOf(an).contentEquals(bb.copyOf(bn))) return@runCatching false
+                if (an == 0) return@runCatching true
+            }
+            @Suppress("UNREACHABLE_CODE")
+            true
+        }
     }
 }
