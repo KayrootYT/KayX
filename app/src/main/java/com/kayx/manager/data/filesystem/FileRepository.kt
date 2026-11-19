@@ -29,6 +29,22 @@ class FileRepository {
         )
     ).items
 
+    suspend fun searchContents(
+        dir: File, query: String, showHidden: Boolean = false, maxResults: Int = 300,
+        isActive: () -> Boolean = { true }
+    ): List<FileItem> {
+        if (!isActive()) return emptyList()
+        return searchEngine.searchContents(
+            FileSearchRequest(
+                root = dir,
+                query = query,
+                showHidden = showHidden,
+                includeDirectories = false,
+                maxResults = maxResults
+            )
+        ).items
+    }
+
     suspend fun createFolder(parent: File, name: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val folder = File(parent, name)
