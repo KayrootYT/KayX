@@ -117,6 +117,7 @@ fun TerminalScreen(spec: String, onBack: () -> Unit) {
     var input by remember { mutableStateOf("") }
     var running by remember { mutableStateOf(false) }
     var root by remember { mutableStateOf(false) }
+    var confirmRoot by remember { mutableStateOf(false) }
     var proc by remember { mutableStateOf<Process?>(null) }
     val history = remember { mutableListOf<String>() }
     var hIdx by remember { mutableStateOf(0) }
@@ -185,8 +186,16 @@ fun TerminalScreen(spec: String, onBack: () -> Unit) {
     LaunchedEffect(lines.size) { if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex) }
     DisposableEffect(Unit) { onDispose { proc?.destroy() } }
 
+    if (confirmRoot) AlertDialog(
+        onDismissRequest = { confirmRoot = false },
+        title = { Text("Enable root terminal?") },
+        text = { Text("Commands will run with full root privileges and can permanently damage Android or erase data. Only continue with commands you understand.") },
+        confirmButton = { TextButton({ root = true; confirmRoot = false }) { Text("Enable root") } },
+        dismissButton = { TextButton({ confirmRoot = false }) { Text("Cancel") } }
+    )
+
     ToolScaffold("Terminal", onBack, actions = {
-        IconButton({ root = !root }) { Icon(Icons.Default.Security, "Root (su)", tint = if (root) Accent else Fg) }
+        IconButton({ if (root) root = false else confirmRoot = true }) { Icon(Icons.Default.Security, "Root (su)", tint = if (root) Accent else Fg) }
         IconButton({ proc?.destroy() }, enabled = running) { Icon(Icons.Default.Stop, "Stop") }
         IconButton({ lines.clear() }) { Icon(Icons.Default.DeleteSweep, "Clear") }
     }) { pad ->
