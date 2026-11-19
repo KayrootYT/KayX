@@ -121,6 +121,21 @@ fun TerminalScreen(spec: String, onBack: () -> Unit) {
 
     fun add(l: String) { lines.add(l); if (lines.size > 3000) lines.removeRange(0, 500) }
 
+    fun readBoundedLine(reader: java.io.BufferedReader, limit: Int): Pair<String, Boolean>? {
+        val line = StringBuilder(minOf(limit, 4096))
+        var truncated = false
+        var readAny = false
+        while (true) {
+            val ch = reader.read()
+            if (ch < 0) return if (!readAny) null else line.toString() to truncated
+            readAny = true
+            if (ch == '\\n'.code) return line.toString() to truncated
+            if (ch != '\\r'.code) {
+                if (line.length < limit) line.append(ch.toChar()) else truncated = true
+            }
+        }
+    }
+
     fun exec(cmd: String) {
         if (cmd.isBlank() || running) return
         add("$ ${cwd.substringAfterLast('/').ifEmpty { "/" }} > $cmd")
@@ -137,11 +152,25 @@ fun TerminalScreen(spec: String, onBack: () -> Unit) {
         running = true
         scope.launch(Dispatchers.IO) {
             try {
-                val args = if (root) listOf("su", "-c", "cd '$cwd' && $cmd") else listOf("sh", "-c", cmd)
+                val shellCommand = if (root) "cd ${com.kayx.manager.data.advanced.RootShell.q(cwd)} && $cmd" else cmd
+                val args = if (root) listOf("su", "-c", shellCommand) else listOf("sh", "-c", shellCommand)
                 val p = ProcessBuilder(args).directory(File(cwd)).redirectErrorStream(true).start()
                 proc = p
-                p.inputStream.bufferedReader().use { r ->
-                    while (true) { val l = r.readLine() ?: break; add(l) }
+                var captured = 0
+                var truncationShown = false
+                p.inputStream.bufferedReader().use { reader ->
+                    while (true) {
+                        val remaining = (512 * 1024 - captured).coerceAtLeast(0)
+                        val line = readBoundedLine(reader, minOf(16 * 1024, remaining)) ?: break
+                        if (remaining > 0) {
+                            add(line.first)
+                            captured += line.first.length
+                        }
+                        if ((line.second || captured >= 512 * 1024) && !truncationShown) {
+                            add("[output truncated at 512 KiB; process continues]")
+                            truncationShown = true
+                        }
+                    }
                 }
                 add("[exit ${p.waitFor()}]")
             } catch (e: Exception) { add("error: ${e.message}") }
