@@ -180,7 +180,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         val quick = listOf(
             CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp"))) { open(target("WhatsApp")) },
             CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots"))) { open(target("Screenshots")) },
-            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), qCount(target("Apps"))) { onApps() },
+            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"])) { onApps() },
             CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads"))) { open(target("Downloads")) },
             CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder"))) { open(target("Recorder")) },
             CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth"))) { open(target("Bluetooth")) }
