@@ -51,9 +51,6 @@ class DexRepositoryTest {
         val decoded = decodeMutf8(byteArrayOf(0xC0.toByte(), 0x80.toByte()), 0, 2)
         assertEquals("\u0000", decoded)
     }
-}
-
-
     @Test fun stringDataCannotReadPastDeclaredDexFileSize() {
         val bytes = validDex().copyOf(124)
         val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -69,3 +66,5 @@ class DexRepositoryTest {
             assertEquals("<invalid string offset>", info.strings.single())
         } finally { file.delete() }
     }
+
+}
