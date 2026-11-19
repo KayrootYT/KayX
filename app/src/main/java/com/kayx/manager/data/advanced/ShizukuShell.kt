@@ -7,16 +7,13 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.IBinder
+import android.util.Base64
 import com.kayx.manager.IUserService
 import rikka.shizuku.Shizuku
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * Shizuku backend. Uses the official Shizuku API: the user starts Shizuku (ADB / wireless debugging / root), grants KayX
- * the Shizuku permission in the system dialog, and KayX then runs shell commands through a Shizuku "user service".
- * Nothing here bypasses Android: without Shizuku running and the permission granted every call fails.
- */
+/** Official Shizuku backend. Every operation requires the user's Shizuku grant. */
 object ShizukuShell {
     const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
     private const val REQ_CODE = 7001
@@ -49,31 +46,29 @@ object ShizukuShell {
 
     fun isReady(): Boolean = runCatching { state() == State.READY }.getOrDefault(false)
 
-    /** Shows Shizuku's own permission dialog. [onResult] gets true when the user allowed it. */
     fun requestPermission(onResult: (Boolean) -> Unit) {
-        val l = object : Shizuku.OnRequestPermissionResultListener {
+        val listener = object : Shizuku.OnRequestPermissionResultListener {
             override fun onRequestPermissionResult(requestCode: Int, grantResult: Int) {
                 if (requestCode != REQ_CODE) return
                 Shizuku.removeRequestPermissionResultListener(this)
                 onResult(grantResult == PackageManager.PERMISSION_GRANTED)
             }
         }
-        Shizuku.addRequestPermissionResultListener(l)
+        Shizuku.addRequestPermissionResultListener(listener)
         runCatching { Shizuku.requestPermission(REQ_CODE) }.onFailure {
-            Shizuku.removeRequestPermissionResultListener(l); onResult(false)
+            Shizuku.removeRequestPermissionResultListener(listener)
+            onResult(false)
         }
     }
 
-    /** Calls [onChange] when the Shizuku server starts/stops. Returns a function that removes the listeners. */
     fun addStateListener(onChange: () -> Unit): () -> Unit {
-        val a = Shizuku.OnBinderReceivedListener { onChange() }
-        val b = Shizuku.OnBinderDeadListener { service = null; onChange() }
-        Shizuku.addBinderReceivedListenerSticky(a)
-        Shizuku.addBinderDeadListener(b)
-        return { Shizuku.removeBinderReceivedListener(a); Shizuku.removeBinderDeadListener(b) }
+        val received = Shizuku.OnBinderReceivedListener { onChange() }
+        val dead = Shizuku.OnBinderDeadListener { service = null; onChange() }
+        Shizuku.addBinderReceivedListenerSticky(received)
+        Shizuku.addBinderDeadListener(dead)
+        return { Shizuku.removeBinderReceivedListener(received); Shizuku.removeBinderDeadListener(dead) }
     }
 
-    /** Opens the Shizuku app if installed, otherwise its download page. */
     fun openShizuku(context: Context) {
         val launch = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
             ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/"))
@@ -89,31 +84,34 @@ object ShizukuShell {
     }
     @Volatile private var latch: CountDownLatch? = null
 
-    /** Blocking – call from a background thread only. */
     private fun ensureService(timeoutMs: Long): IUserService? {
         service?.takeIf { it.asBinder().pingBinder() }?.let { return it }
         val ctx = appContext ?: return null
         synchronized(bindLock) {
             service?.takeIf { it.asBinder().pingBinder() }?.let { return it }
-            val l = CountDownLatch(1)
-            latch = l
+            val wait = CountDownLatch(1)
+            latch = wait
             val args = Shizuku.UserServiceArgs(ComponentName(ctx.packageName, ShizukuUserService::class.java.name))
                 .processNameSuffix("shizuku")
                 .daemon(false)
                 .debuggable(false)
-                .version(1)
+                .version(2)
             runCatching { Shizuku.bindUserService(args, connection) }.onFailure { return null }
-            l.await(timeoutMs, TimeUnit.MILLISECONDS)
+            if (!wait.await(timeoutMs.coerceIn(100L, 30_000L), TimeUnit.MILLISECONDS)) return null
             return service
         }
     }
 
     fun run(cmd: String, timeoutMs: Long = 20_000): RootShell.Res {
         if (!isReady()) return RootShell.Res(-1, "", runCatching { state().label }.getOrDefault("Shizuku unavailable"))
+        val timeout = timeoutMs.coerceIn(100L, 120_000L)
         val svc = ensureService(8_000) ?: return RootShell.Res(-1, "", "Could not start the Shizuku service")
         return try {
-            val parts = svc.exec(cmd).split('\u0000', limit = 3)
-            RootShell.Res(parts.getOrNull(0)?.toIntOrNull() ?: -1, parts.getOrElse(1) { "" }, parts.getOrElse(2) { "" })
+            val fields = svc.exec(cmd, timeout).split('\n', limit = 3)
+            val code = fields.getOrNull(0)?.toIntOrNull() ?: -1
+            val out = fields.getOrNull(1)?.let { Base64.decode(it, Base64.DEFAULT).toString(Charsets.UTF_8) }.orEmpty()
+            val err = fields.getOrNull(2)?.let { Base64.decode(it, Base64.DEFAULT).toString(Charsets.UTF_8) }.orEmpty()
+            RootShell.Res(code, out, err)
         } catch (e: Exception) {
             service = null
             RootShell.Res(-1, "", e.message ?: "Shizuku call failed")
