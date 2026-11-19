@@ -74,6 +74,7 @@ object RecycleBin {
         }
     }
 
+    @Synchronized
     fun list(): List<Entry> {
         return rawEntries().mapNotNull { (id, path, ts) ->
             val f = runCatching { payload(id) }.getOrNull()?.takeIf { it.exists() } ?: return@mapNotNull null
@@ -107,6 +108,7 @@ object RecycleBin {
         }
     }
 
+    @Synchronized
     fun restore(e: Entry): Result<File> = runCatching {
         val src = payload(e.id)
         check(src.exists()) { "Item no longer in recycle bin" }
