@@ -67,8 +67,27 @@ class MainActivity : ComponentActivity() {
             .apply { isDaemon = true; start() }
     }
 
+    override fun onStop() {
+        if (privateSessionActive.value && PrivateSpace.isUnlocked()) {
+            // Require a fresh PIN immediately; vault persistence and plaintext cleanup run off the main thread.
+            privateNeedsUnlock.value = true
+            Thread({ PrivateSpace.lock(this@MainActivity) }, "kayx-private-vault-lock")
+                .apply { isDaemon = true; start() }
+        }
+        super.onStop()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(PRIVATE_SESSION_STATE, privateSessionActive.value || privateNeedsUnlock.value)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState?.getBoolean(PRIVATE_SESSION_STATE) == true) {
+            privateSessionActive.value = true
+            privateNeedsUnlock.value = true
+        }
         enableEdgeToEdge()
         val shortcutFile = intent?.getStringExtra("path")?.let { java.io.File(it) }?.takeIf { it.exists() }
         val startDir: String? = shortcutFile?.let { if (it.isDirectory) it.absolutePath else it.parent }
