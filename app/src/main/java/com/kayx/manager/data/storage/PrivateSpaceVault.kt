@@ -50,9 +50,12 @@ internal object PrivateSpaceVault {
         return root.walkTopDown().count { it.isFile && it.name.endsWith(EXT) }
     }
 
-    @Synchronized fun initialize(ctx: Context, pin: String, stage: File): Result<Unit> = runCatching {
+    @Synchronized fun initialize(ctx: Context, pin: String, stage: File): Result<Unit> {
+        var candidateKey: ByteArray? = null
+        return runCatching {
         require(pin.length in 4..8 && pin.all(Char::isDigit)) { "PIN must contain 4–8 digits" }
         val key = ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
+        candidateKey = key
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val pinKey = deriveKey(pin, salt)
         val wrappedPin = try { encryptBytes(pinKey, key) } finally { pinKey.fill(0) }
@@ -67,9 +70,16 @@ internal object PrivateSpaceVault {
         sessionKey = key
         persistStage(ctx, stage, key)
         check(sessionMarker(ctx).createNewFile() || sessionMarker(ctx).isFile) { "Could not mark private-space session" }
-    }.onFailure { sessionKey?.fill(0); sessionKey = null }
+        }.onFailure {
+            candidateKey?.fill(0)
+            sessionKey?.fill(0)
+            sessionKey = null
+        }
+    }
 
-    @Synchronized fun unlock(ctx: Context, pin: String, stage: File): Result<Unit> = runCatching {
+    @Synchronized fun unlock(ctx: Context, pin: String, stage: File): Result<Unit> {
+        var candidateKey: ByteArray? = null
+        return runCatching {
         val p = prefs(ctx)
         val salt = Base64.decode(p.getString("vault_salt", null) ?: error("Vault key metadata is missing"), Base64.DEFAULT)
         val wrapped = Base64.decode(p.getString("vault_wrapped_key", null) ?: error("Vault key is missing"), Base64.DEFAULT)
@@ -83,6 +93,7 @@ internal object PrivateSpaceVault {
             pinKey.fill(0)
         }
         require(key.size == KEY_BYTES) { "Invalid vault key" }
+        candidateKey = key
 
         val vault = vaultDir(ctx)
         if (sessionMarker(ctx).isFile && stage.isDirectory) {
@@ -106,7 +117,12 @@ internal object PrivateSpaceVault {
         }
         sessionKey?.fill(0)
         sessionKey = key
-    }.onFailure { sessionKey?.fill(0); sessionKey = null }
+        }.onFailure {
+            candidateKey?.fill(0)
+            sessionKey?.fill(0)
+            sessionKey = null
+        }
+    }
 
     /** Commit all staged edits, verify every encrypted file, then wipe the plaintext staging tree. */
     @Synchronized fun lock(ctx: Context, stage: File): Result<Unit> = runCatching {
