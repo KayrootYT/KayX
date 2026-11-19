@@ -52,3 +52,17 @@ class DexRepositoryTest {
         assertEquals("\u0000", decoded)
     }
 }
+
+
+    @Test fun stringDataCannotReadPastDeclaredDexFileSize() {
+        val bytes = validDex().copyOf(120)
+        val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        b.putInt(56, 1) // one string_id
+        b.putInt(60, 112) // points exactly past declared file_size
+        val file = File.createTempFile("kayx-bad-string-offset-", ".dex")
+        try {
+            file.writeBytes(bytes)
+            val info = DexRepository().inspect(file)
+            assertEquals("<invalid string offset>", info.strings.single())
+        } finally { file.delete() }
+    }
