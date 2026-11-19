@@ -54,9 +54,11 @@ fn push_char(output: &mut String, value: char) -> Result<(), String> {
 }
 
 fn len8(bytes: &[u8], pos: &mut usize, end: usize) -> Option<usize> {
+    if *pos >= end { return None; }
     let first = *bytes.get(*pos)?;
     *pos = pos.checked_add(1)?;
     if first & 0x80 == 0 { return Some(first as usize); }
+    if *pos >= end { return None; }
     let second = *bytes.get(*pos)?;
     *pos = pos.checked_add(1)?;
     if *pos > end { return None; }
