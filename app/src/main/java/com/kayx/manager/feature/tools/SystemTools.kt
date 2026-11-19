@@ -82,6 +82,9 @@ fun RecycleBinScreen(onBack: () -> Unit) {
                             Text(e.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(e.original, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Fg.copy(.55f))
                             Text(DateFormat.getDateTimeInstance().format(Date(e.deletedAt)), style = MaterialTheme.typography.labelSmall, color = Fg.copy(.55f))
+                            val dayMs = 24L * 60 * 60 * 1000
+                            val daysLeft = ((e.deletedAt + 30L * dayMs - System.currentTimeMillis()).coerceAtLeast(0L) + dayMs - 1) / dayMs
+                            Text("Auto-delete in $daysLeft day(s)", style = MaterialTheme.typography.labelSmall, color = if (daysLeft <= 3) RED else Fg.copy(.55f))
                         }
                     }
                 }
