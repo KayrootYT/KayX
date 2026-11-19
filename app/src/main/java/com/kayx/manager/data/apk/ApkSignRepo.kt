@@ -21,13 +21,62 @@ object ApkSignRepo {
     private fun parseKey(der: ByteArray): PrivateKey = SigningKeyUtil.parseKey(der)
     private fun pemToDer(bytes: ByteArray): ByteArray = SigningKeyUtil.pemToDer(bytes)
 
-    private fun writeSecret(target: File, bytes: ByteArray) {
-        val tmp = File(target.parentFile, target.name + ".tmp")
-        tmp.delete()
-        tmp.outputStream().use { it.write(bytes); it.flush(); it.fd.sync() }
-        tmp.setReadable(false, false); tmp.setReadable(true, true)
-        tmp.setWritable(false, false); tmp.setWritable(true, true)
-        check(tmp.renameTo(target)) { "Could not save ${target.name}" }
+    /**
+     * Stage both halves before replacing either. If either rename fails, restore the previous
+     * key/certificate pair so an interrupted import/regeneration cannot leave a mixed identity.
+     */
+    private fun writeSecretPair(keyFile: File, keyBytes: ByteArray, certFile: File, certBytes: ByteArray) {
+        val keyStage = File(keyFile.parentFile, keyFile.name + ".new")
+        val certStage = File(certFile.parentFile, certFile.name + ".new")
+        val keyBackup = File(keyFile.parentFile, keyFile.name + ".bak")
+        val certBackup = File(certFile.parentFile, certFile.name + ".bak")
+        listOf(keyStage, certStage, keyBackup, certBackup).forEach { it.delete() }
+
+        fun writeStage(file: File, bytes: ByteArray) {
+            file.outputStream().use { out ->
+                out.write(bytes)
+                out.flush()
+                out.fd.sync()
+            }
+            file.setReadable(false, false)
+            file.setReadable(true, true)
+            file.setWritable(false, false)
+            file.setWritable(true, true)
+        }
+
+        try {
+            writeStage(keyStage, keyBytes)
+            writeStage(certStage, certBytes)
+
+            val hadKey = keyFile.exists()
+            val hadCert = certFile.exists()
+            if (hadKey) check(keyFile.renameTo(keyBackup)) { "Could not stage previous signing key" }
+            if (hadCert) {
+                if (!certFile.renameTo(certBackup)) {
+                    if (hadKey) keyBackup.renameTo(keyFile)
+                    error("Could not stage previous signing certificate")
+                }
+            }
+
+            try {
+                check(keyStage.renameTo(keyFile)) { "Could not install new signing key" }
+                check(certStage.renameTo(certFile)) { "Could not install new signing certificate" }
+            } catch (t: Throwable) {
+                keyFile.delete()
+                certFile.delete()
+                if (hadKey) check(keyBackup.renameTo(keyFile)) { "Could not restore previous signing key" }
+                if (hadCert) check(certBackup.renameTo(certFile)) { "Could not restore previous signing certificate" }
+                throw t
+            }
+        } finally {
+            keyStage.delete()
+            certStage.delete()
+            // Backups are removed only after both new files are installed successfully.
+            if (keyFile.exists() && certFile.exists()) {
+                keyBackup.delete()
+                certBackup.delete()
+            }
+        }
     }
 
     data class KeyInfo(val subject: String, val sha256: String, val sha1: String, val validUntil: Date, val algo: String)
@@ -42,8 +91,8 @@ object ApkSignRepo {
     @Synchronized
     fun regenerate(ctx: Context): Result<Unit> = runCatching {
         val (keyFile, certFile) = keyFiles(ctx)
-        keyFile.delete(); certFile.delete()
-        loadOrCreate(ctx)
+        val (key, cert) = createIdentity()
+        writeSecretPair(keyFile, key.encoded, certFile, cert.encoded)
         Unit
     }
 
@@ -55,17 +104,27 @@ object ApkSignRepo {
             .generateCertificate(java.io.ByteArrayInputStream(pemToDer(certBytes))) as X509Certificate
         require(SigningKeyUtil.keyMatches(key, cert.publicKey)) { "The private key does not match the certificate" }
         val (keyFile, certFile) = keyFiles(ctx)
-        writeSecret(keyFile, keyDer)
-        writeSecret(certFile, cert.encoded)
+        writeSecretPair(keyFile, keyDer, certFile, cert.encoded)
     }
 
     fun exportTo(ctx: Context, dir: File): Result<String> = runCatching {
         loadOrCreate(ctx)
         val (keyFile, certFile) = keyFiles(ctx)
-        dir.mkdirs()
+        check(dir.exists() || dir.mkdirs()) { "Cannot create export directory" }
         keyFile.copyTo(File(dir, "kayx.pk8"), overwrite = true)
         certFile.copyTo(File(dir, "kayx.x509"), overwrite = true)
         dir.absolutePath
+    }
+
+    private fun createIdentity(): Pair<PrivateKey, X509Certificate> {
+        val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+        val name = X500Name("CN=KayX, O=KayX")
+        val now = System.currentTimeMillis()
+        val holder = JcaX509v3CertificateBuilder(
+            name, BigInteger.valueOf(now), Date(now - 86_400_000L),
+            Date(now + 30L * 365 * 86_400_000L), name, pair.public
+        ).build(JcaContentSignerBuilder("SHA256withRSA").build(pair.private))
+        return pair.private to JcaX509CertificateConverter().getCertificate(holder)
     }
 
     @Synchronized
@@ -73,6 +132,7 @@ object ApkSignRepo {
         val (keyFile, certFile) = keyFiles(ctx)
         if (keyFile.exists() || certFile.exists()) {
             try {
+                require(keyFile.isFile && certFile.isFile) { "Signing key pair is incomplete" }
                 val key = parseKey(keyFile.readBytes())
                 val certBytes = certFile.inputStream().use { it.readBytes() }
                 val cert = CertificateFactory.getInstance("X.509")
@@ -85,21 +145,15 @@ object ApkSignRepo {
                 )
             }
         }
-        val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
-        val name = X500Name("CN=KayX, O=KayX")
-        val now = System.currentTimeMillis()
-        val holder = JcaX509v3CertificateBuilder(
-            name, BigInteger.valueOf(now), Date(now - 86_400_000L),
-            Date(now + 30L * 365 * 86_400_000L), name, pair.public
-        ).build(JcaContentSignerBuilder("SHA256withRSA").build(pair.private))
-        val cert = JcaX509CertificateConverter().getCertificate(holder)
-        writeSecret(keyFile, pair.private.encoded)
-        writeSecret(certFile, cert.encoded)
-        return pair.private to cert
+        val (key, cert) = createIdentity()
+        writeSecretPair(keyFile, key.encoded, certFile, cert.encoded)
+        return key to cert
     }
 
     fun sign(ctx: Context, input: File, output: File): Result<Unit> = runCatching {
+        require(input.isFile) { "Input APK does not exist" }
         require(input.canonicalFile != output.canonicalFile) { "Output must be a different file than the input APK" }
+        output.parentFile?.let { check(it.exists() || it.mkdirs()) { "Cannot create output folder" } }
         val (key, cert) = loadOrCreate(ctx)
         val aligned = File(output.parentFile, output.name + ".aligned")
         try {
