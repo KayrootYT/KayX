@@ -124,6 +124,7 @@ object RootShell {
 
 /** Pure path guard shared with JVM tests. */
 internal fun isSafeRecursiveDeleteTarget(path: String): Boolean {
+    if (path.isBlank()) return false
     val target = runCatching { File(path).canonicalFile.path }.getOrNull() ?: return false
     val protected = setOf("/", "/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex")
     return target.isNotBlank() && target !in protected
