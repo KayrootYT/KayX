@@ -5,7 +5,9 @@ const UNITS: [&str; 6] = ["px", "dip", "sp", "pt", "in", "mm"];
 const MAX_INPUT: usize = 64 * 1024 * 1024;
 const MAX_OUTPUT: usize = 64 * 1024 * 1024;
 const MAX_STRINGS: usize = 200_000;
-const MAX_STRING_BYTES: usize = 4 * 1024 * 1024;
+const MAX_STRING_BYTES: usize = 1024 * 1024;
+const MAX_POOL_BYTES: usize = 16 * 1024 * 1024;
+const MAX_NAMESPACES: usize = 4096;
 const MAX_DEPTH: usize = 256;
 
 pub fn is_axml(bytes: &[u8]) -> bool {
@@ -95,6 +97,7 @@ fn read_pool(reader: &R, pos: usize, end: usize) -> Result<Vec<String>, String> 
     }
     let utf8 = reader.u32(pos + 16) & 0x100 != 0;
     let mut strings = Vec::with_capacity(count);
+    let mut total_string_bytes = 0usize;
 
     for index in 0..count {
         let offset_pos = offsets_start.checked_add(index.checked_mul(4).ok_or("Offset overflow")?)
@@ -120,6 +123,8 @@ fn read_pool(reader: &R, pos: usize, end: usize) -> Result<Vec<String>, String> 
                 .map(|i| reader.u16(cursor + i * 2) as u16).collect();
             String::from_utf16_lossy(&units)
         };
+        total_string_bytes = total_string_bytes.checked_add(decoded.len()).ok_or("String-pool size overflow")?;
+        if total_string_bytes > MAX_POOL_BYTES { return Err("Decoded string pool exceeds 16 MiB".into()); }
         strings.push(decoded);
     }
     Ok(strings)
@@ -160,9 +165,11 @@ pub fn decode(data: &[u8]) -> Result<String, String> {
             0x0001 => strings = read_pool(&reader, pos, end)?,
             0x0100 => {
                 if chunk_size < 24 { return Err("Truncated namespace chunk".into()); }
+                if pending.len() >= MAX_NAMESPACES { return Err("Too many pending XML namespaces".into()); }
                 let prefix = st!(reader.i32(pos + 16)).to_string();
                 let uri = st!(reader.i32(pos + 20)).to_string();
                 namespaces.retain(|(key, _)| *key != uri);
+                if namespaces.len() >= MAX_NAMESPACES { return Err("Too many XML namespaces".into()); }
                 namespaces.push((uri.clone(), prefix.clone()));
                 pending.push((prefix, uri));
             }
