@@ -107,6 +107,38 @@ class FileSearchEngine(
         FileSearchResult(sorted, index.scanned, index.truncated || matches.size >= cap)
     }
 
+    /** Content search shares the same indexed traversal, cancellation and permission handling. */
+    suspend fun searchContents(
+        request: FileSearchRequest,
+        ignoreCase: Boolean = true,
+        maxBytesPerFile: Long = 2_000_000L
+    ): FileSearchResult {
+        if (request.query.isBlank()) return FileSearchResult(emptyList(), 0, false)
+        val candidates = search(request.copy(query = "*", mode = SearchMode.CONTAINS, includeDirectories = false, maxResults = 100_000))
+        val matches = ArrayList<FileItem>()
+        val needle = request.query
+        for (item in candidates.items) {
+            currentCoroutineContext().ensureActive()
+            if (item.isDir || item.size > maxBytesPerFile) continue
+            val file = File(item.path)
+            val found = runCatching {
+                file.inputStream().use { input ->
+                    val head = ByteArray(1024)
+                    val count = input.read(head)
+                    if (count > 0 && head.take(count).any { it == 0.toByte() }) return@use false
+                    input.bufferedReader().useLines { lines ->
+                        lines.any { line ->
+                            if (ignoreCase) line.contains(needle, ignoreCase = true) else line.contains(needle)
+                        }
+                    }
+                }
+            }.getOrDefault(false)
+            if (found) matches += item
+            if (matches.size >= request.maxResults.coerceIn(1, 100_000)) break
+        }
+        return FileSearchResult(matches, candidates.scannedEntries, candidates.truncated)
+    }
+
     private suspend fun buildIndex(root: File, showHidden: Boolean, maxDepth: Int, rootPath: String): Index {
         val entries = ArrayList<FileItem>(2048)
         val queue = ArrayDeque<Pair<File, Int>>()
