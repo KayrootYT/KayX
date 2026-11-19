@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -14,7 +16,11 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -201,6 +207,10 @@ fun GlassCard(
     content: @Composable BoxScope.() -> Unit
 ) {
     val p = LocalPalette.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) .985f else 1f, animationSpec = tween(150), label = "glass-card-press")
+    val elevation by animateFloatAsState(if (pressed) 3f else 10f, animationSpec = tween(180), label = "glass-card-depth")
     // Callers pass the theme foreground (or nothing) for the neutral state and the accent when selected.
     val custom = tint != Color.Unspecified && tint != p.fg
     val fill: Brush = remember(custom, tint, p) { when {
@@ -217,10 +227,25 @@ fun GlassCard(
             Color.White.copy(alpha = .055f), p.accent2.copy(alpha = .20f)))
         else -> Brush.linearGradient(listOf(Color.Black.copy(alpha = .09f), Color.Black.copy(alpha = .04f)))
     } }
-    // background(shape)+border avoid the offscreen layer that clip() creates for every card (big scroll-lag source in long lists).
-    val base = modifier.background(fill, shape).border(1.dp, edge, shape)
+    // Translucent layered fill, fine specular edge and restrained physical lift.
+    // Avoid per-row blur/offscreen layers so long file lists remain smooth.
+    val base = modifier
+        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .shadow(elevation.dp, shape, clip = false)
+        .background(fill, shape)
+        .border(1.dp, edge, shape)
+        .drawBehind {
+            drawRoundRect(
+                Brush.verticalGradient(
+                    listOf(Color.White.copy(alpha = if (p.dark) .16f else .72f), Color.Transparent),
+                    startY = 0f, endY = size.height * .42f
+                ),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx())
+            )
+        }
     val m = if (onClick != null || onLongClick != null)
-        base.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick)
+        base.combinedClickable(interactionSource = interaction, indication = null,
+            onClick = { onClick?.invoke() }, onLongClick = onLongClick)
     else base
     Box(m, content = content)
 }
