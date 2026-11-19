@@ -304,4 +304,4 @@ internal fun filesHaveSameContent(left: File, right: File): Boolean = runCatchin
             true
         }
     }
-}
+}.getOrDefault(false)
