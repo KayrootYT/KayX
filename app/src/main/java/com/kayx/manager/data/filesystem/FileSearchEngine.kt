@@ -111,7 +111,8 @@ class FileSearchEngine(
     suspend fun searchContents(
         request: FileSearchRequest,
         ignoreCase: Boolean = true,
-        maxBytesPerFile: Long = 2_000_000L
+        maxBytesPerFile: Long = 2_000_000L,
+        isActive: () -> Boolean = { true }
     ): FileSearchResult {
         if (request.query.isBlank()) return FileSearchResult(emptyList(), 0, false)
         val candidates = search(request.copy(query = "*", mode = SearchMode.CONTAINS, includeDirectories = false, maxResults = 100_000))
@@ -119,6 +120,7 @@ class FileSearchEngine(
         val needle = request.query
         for (item in candidates.items) {
             currentCoroutineContext().ensureActive()
+            if (!isActive()) break
             if (item.isDir || item.size > maxBytesPerFile) continue
             val file = File(item.path)
             val found = runCatching {
