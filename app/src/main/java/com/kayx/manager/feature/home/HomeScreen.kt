@@ -94,21 +94,6 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             }
         }
 
-        // Local storage (collapsible)
-        var localOpen by remember { mutableStateOf(true) }
-        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
-            Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(Modifier.fillMaxWidth().clickable { localOpen = !localOpen }, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Local", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextMuted)
-                    Icon(if (localOpen) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = TextMuted)
-                }
-                if (localOpen) {
-                    StorageRow("Root Directory", Icons.Default.PhoneAndroid, "/") { onOpen("/") }
-                    StorageRow("Storage Directory", Icons.Default.SdCard, root.absolutePath) { onOpen(root.absolutePath) }
-                }
-            }
-        }
-
         val marks = SettingsStore.bookmarks
         var removeMark by remember { mutableStateOf<String?>(null) }
         if (marks.isNotEmpty()) {
@@ -194,6 +179,37 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                 (if (allQuick) quick + folders else quick).chunked(4).forEach { row ->
                     Row(Modifier.fillMaxWidth()) { row.forEach { CategoryTileView(it, Modifier.weight(1f)) }; repeat(4 - row.size) { Spacer(Modifier.weight(1f)) } }
                 }
+            }
+        }
+
+        // Storage and services section follows the category and quick-access cards.
+        var localOpen by remember { mutableStateOf(true) }
+        Text("Storage and services", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextMuted)
+        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
+            Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                StorageRow("Phone storage", Icons.Default.PieChart, root.absolutePath) { onOpen(root.absolutePath) }
+                HorizontalDivider(color = Fg.copy(.08f))
+                Row(Modifier.fillMaxWidth().clickable { onTool(Tool.FTP) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Devices, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Cross-device services", style = MaterialTheme.typography.titleSmall)
+                        Text("FTP and network file transfer", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                    }
+                    Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
+                }
+                HorizontalDivider(color = Fg.copy(.08f))
+                Row(Modifier.fillMaxWidth().clickable { onTool(Tool.RECYCLE) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.DeleteOutline, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Text("Recently deleted", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                    Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
+                }
+                Row(Modifier.fillMaxWidth().clickable { localOpen = !localOpen }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("More storage locations", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = TextMuted)
+                    Icon(if (localOpen) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = TextMuted)
+                }
+                if (localOpen) StorageRow("Root directory", Icons.Default.PhoneAndroid, "/") { onOpen("/") }
             }
         }
 
