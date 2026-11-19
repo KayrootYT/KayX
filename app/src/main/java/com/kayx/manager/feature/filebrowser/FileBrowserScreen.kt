@@ -143,7 +143,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         } else {
                             // Compact, tappable breadcrumbs replace the hard-to-read absolute path.
                             Row(
-                                Modifier.weight(1f).horizontalScroll(rememberScrollState()).animateContentSize(),
+                                Modifier.horizontalScroll(rememberScrollState()).animateContentSize(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text("⌂", Modifier.clip(RoundedCornerShape(8.dp)).clickable { vm.openActive("/") }.padding(horizontal = 6.dp, vertical = 5.dp),
