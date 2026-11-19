@@ -28,3 +28,14 @@
 Latest source hardening also adds PBKDF2-based private-space PIN storage with legacy migration and a canonical-path boundary check before cleanup deletion. JVM tests for those boundaries are included and passed in the current Gradle run.
 
 The current follow-up provisions a Java 17 / Android SDK 34 Codespace, repairs two unit-test compilation errors found during the first full Gradle run, and moves PDF/image conversion off the UI thread. Conversion bitmaps are explicitly recycled and bounded to 16 MP per render.
+
+
+## 0.4.1 source integration
+
+- Raised Android minSdk to 26 to match the supplied source's use of API 26-era Java NIO and PBKDF2 functionality.
+- Added the offline ZXing Android Embedded dependency for the source's barcode/QR scanner integration.
+- Added bounded DEX parsing with Adler-32 checksum verification and Modified UTF-8 decoding.
+- Added APK DEX replacement that preserves stored ZIP entries/alignment and removes stale v1 signature files. Patched APK output is unsigned and must be signed before installation.
+- Added the supplied `AUDIT_STATUS.md`; its NOT DONE list remains an explicit release blocker, not a claim of completed work.
+
+The archive is explicitly a partial audit. Shizuku/root command hardening, recycle-bin expiry/purge, encrypted private-space vault migration, and device-level validation remain incomplete according to that audit.
