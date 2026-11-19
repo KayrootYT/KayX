@@ -107,7 +107,7 @@ pub extern "system" fn Java_com_kayx_manager_core_NativeCore_findDuplicates<'l>(
                 Some(total) if total <= 16 * 1024 * 1024 => total,
                 _ => return null_mut(),
             };
-            if s.len() > 4096 || s.chars().any(|ch| matches!(ch, '\\u{1f}' | '\\t' | '\\n' | '\\r')) { return null_mut(); }
+            if s.len() > 4096 || s.chars().any(|ch| matches!(ch, '\u{1f}' | '\t' | '\n' | '\r')) { return null_mut(); }
             list.push(s);
         }
         let _ = env.delete_local_ref(js);
