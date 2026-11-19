@@ -139,6 +139,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                 val m = HashMap<String, Int?>()
                 Category.values().forEach { m[it.name] = MediaCounts.category(ctx, it) }
                 QuickAccess.targets.forEach { m["QA:" + it.name] = MediaCounts.folders(ctx, it.dirs) }
+                m["QA:Apps"] = runCatching { ctx.packageManager.getInstalledApplications(0).size }.getOrDefault(0)
                 m
             }
         }
@@ -151,6 +152,8 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             CatTile("Documents", Icons.Default.Description, Color(0xFFF5B82E), cnt(Category.DOCUMENTS)) { onPush(Category.DOCUMENTS.name, Tool.CATEGORY) },
             CatTile("APKs", Icons.Default.Android, Color(0xFF2ECC71), cnt(Category.APKS)) { onPush(Category.APKS.name, Tool.CATEGORY) },
             CatTile("Archives", Icons.Default.FolderZip, Color(0xFFF2B01E), cnt(Category.ARCHIVES)) { onPush(Category.ARCHIVES.name, Tool.CATEGORY) },
+            CatTile("Tags", Icons.AutoMirrored.Filled.Label, Color(0xFF4A90F5), TagStore.totalFiles().toString()) { onTool(Tool.TAGS) },
+            CatTile("Private space", Icons.Default.Shield, Color(0xFF2ECC71), PrivateSpace.fileCount(ctx).toString()) { onTool(Tool.PRIVATE) },
         )
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
             Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -176,10 +179,10 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         fun target(n: String) = QuickAccess.targets.first { it.name == n }
         val quick = listOf(
             CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp"))) { open(target("WhatsApp")) },
-            CatTile("Telegram", Icons.AutoMirrored.Filled.Send, Color(0xFF2AABEE), qCount(target("Telegram"))) { open(target("Telegram")) },
             CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots"))) { open(target("Screenshots")) },
+            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), qCount(target("Apps"))) { onApps() },
             CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads"))) { open(target("Downloads")) },
-            CatTile("Recorder", Icons.Default.Mic, Color(0xFF6B7488), qCount(target("Recorder"))) { open(target("Recorder")) },
+            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder"))) { open(target("Recorder")) },
             CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth"))) { open(target("Bluetooth")) }
         )
         val folders = listOf(
