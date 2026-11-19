@@ -80,6 +80,8 @@ fun SearchScreen(
     var includeFolders by remember { mutableStateOf(true) }
     var searchContents by remember { mutableStateOf(false) }
     var mode by remember { mutableStateOf(SettingsStore.searchMode) }
+    var minSizeBytes by remember { mutableLongStateOf(0L) }
+    var modifiedAfter by remember { mutableLongStateOf(0L) }
     val activeSearch = query.isNotBlank()
 
     fun rememberQuery(value: String) {
@@ -95,7 +97,7 @@ fun SearchScreen(
         saveList(context, RECENT_KEY, recent)
     }
 
-    LaunchedEffect(query, category, sort, showHidden, includeFolders, searchContents, mode) {
+    LaunchedEffect(query, category, sort, showHidden, includeFolders, searchContents, mode, minSizeBytes, modifiedAfter) {
         if (query.isBlank()) {
             results = emptyList()
             scanned = 0
@@ -111,6 +113,8 @@ fun SearchScreen(
                 mode = mode,
                 includeDirectories = includeFolders && !searchContents,
                 allowedExtensions = category.extensions,
+                minSizeBytes = minSizeBytes,
+                modifiedAfter = modifiedAfter,
                 sortBy = sort,
                 maxDepth = 96,
                 maxResults = 20_000
@@ -292,6 +296,12 @@ fun SearchScreen(
                             onClick = { searchContents = !searchContents; showFilter = false })
                         DropdownMenuItem(text = { Text("Match: ${mode.label}") },
                             onClick = { mode = when (mode) { SearchMode.CONTAINS -> SearchMode.EXACT; SearchMode.EXACT -> SearchMode.REGEX; SearchMode.REGEX -> SearchMode.CONTAINS }; showFilter = false })
+                        DropdownMenuItem(text = { Text(if (minSizeBytes == 0L) "Size: Any" else "Size: 100 MB+") },
+                            onClick = { minSizeBytes = if (minSizeBytes == 0L) 100L * 1024 * 1024 else 0L; showFilter = false })
+                        DropdownMenuItem(text = { Text(if (modifiedAfter == 0L) "Date: Any time" else "Date: Last 7 days") },
+                            onClick = { modifiedAfter = if (modifiedAfter == 0L) System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000 else 0L; showFilter = false })
+                        DropdownMenuItem(text = { Text("Clear all filters") },
+                            onClick = { showHidden = false; includeFolders = true; searchContents = false; mode = SearchMode.CONTAINS; minSizeBytes = 0L; modifiedAfter = 0L; showFilter = false })
                     }
                 }
                 Spacer(Modifier.weight(1f))
