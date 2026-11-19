@@ -63,13 +63,18 @@ fn read_pool(reader: &R, pos: usize, end: usize) -> Result<Vec<String>, String> 
         return Err("Truncated string-pool header".into());
     }
     let header_size = reader.u16(pos + 2) as usize;
+    if header_size < 28 || pos.checked_add(header_size).filter(|v| *v <= end).is_none() {
+        return Err("Invalid string-pool header size".into());
+    }
     let count = reader.u32(pos + 8) as usize;
     if count > MAX_STRINGS { return Err("String pool exceeds item limit".into()); }
     let offsets_start = pos.checked_add(header_size).ok_or("String-pool offset overflow")?;
     let offsets_end = checked_range(offsets_start, count, 4, end)
         .ok_or("String-pool offsets exceed chunk")?.end;
     let strings_start = pos.checked_add(reader.u32(pos + 20) as usize).ok_or("String data offset overflow")?;
-    if strings_start > end || offsets_end > end { return Err("Invalid string-pool bounds".into()); }
+    if strings_start > end || offsets_end > end || strings_start < offsets_end {
+        return Err("Invalid string-pool bounds".into());
+    }
     let utf8 = reader.u32(pos + 16) & 0x100 != 0;
     let mut strings = Vec::with_capacity(count);
 
@@ -185,7 +190,8 @@ pub fn decode(data: &[u8]) -> Result<String, String> {
             }
             0x0103 => {
                 if chunk_size < 24 { return Err("Truncated end-element chunk".into()); }
-                depth = depth.saturating_sub(1);
+                if depth == 0 { return Err("Unbalanced end-element chunk".into()); }
+                depth -= 1;
                 let name_index = reader.i32(pos + 20);
                 let name = st!(name_index);
                 let name = if name.is_empty() { format!("attr_0x{:x}", name_index) } else { name.to_string() };
@@ -262,6 +268,17 @@ mod tests {
         bytes[4..8].copy_from_slice(&16u32.to_le_bytes());
         bytes[8..10].copy_from_slice(&1u16.to_le_bytes());
         bytes[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(decode(&bytes).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_string_pool_header_size() {
+        let mut bytes = vec![0u8; 36];
+        bytes[0..4].copy_from_slice(&[3, 0, 8, 0]);
+        bytes[4..8].copy_from_slice(&36u32.to_le_bytes());
+        bytes[8..10].copy_from_slice(&1u16.to_le_bytes());
+        bytes[10..12].copy_from_slice(&8u16.to_le_bytes());
+        bytes[12..16].copy_from_slice(&28u32.to_le_bytes());
         assert!(decode(&bytes).is_err());
     }
 
