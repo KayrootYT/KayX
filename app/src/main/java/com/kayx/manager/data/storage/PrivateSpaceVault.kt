@@ -43,6 +43,12 @@ internal object PrivateSpaceVault {
     private fun vaultDir(ctx: Context) = File(ctx.filesDir, "private_space_vault")
     fun isUnlocked(): Boolean = sessionKey?.size == KEY_BYTES
 
+    fun fileCount(ctx: Context): Int {
+        val root = vaultDir(ctx)
+        if (!root.isDirectory) return 0
+        return root.walkTopDown().count { it.isFile && it.name.endsWith(EXT) }
+    }
+
     @Synchronized fun initialize(ctx: Context, pin: String, stage: File): Result<Unit> = runCatching {
         require(pin.length in 4..8 && pin.all(Char::isDigit)) { "PIN must contain 4–8 digits" }
         val key = ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
