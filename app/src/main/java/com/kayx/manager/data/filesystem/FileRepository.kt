@@ -18,14 +18,17 @@ class FileRepository {
 
     suspend fun search(
         dir: File, query: String, showHidden: Boolean = false,
-        mode: SearchMode = SearchMode.CONTAINS, maxAgeMs: Long = 0L
+        mode: SearchMode = SearchMode.CONTAINS, maxAgeMs: Long = 0L,
+        allowedExtensions: Set<String> = emptySet(), sort: SortBy = SortBy.NAME
     ): List<FileItem> = searchEngine.search(
         FileSearchRequest(
             root = dir,
             query = query,
             showHidden = showHidden,
             mode = mode,
-            modifiedAfter = if (maxAgeMs > 0L) System.currentTimeMillis() - maxAgeMs else 0L
+            modifiedAfter = if (maxAgeMs > 0L) System.currentTimeMillis() - maxAgeMs else 0L,
+            allowedExtensions = allowedExtensions,
+            sortBy = sort
         )
     ).items
 
