@@ -196,22 +196,5 @@ object FileOps {
         }
     }
 
-    /** Search inside text files (up to 2 MB each) below [dir]. */
-    fun grep(dir: File, query: String, showHidden: Boolean, ignoreCase: Boolean = true, limit: Int = 300, isActive: () -> Boolean = { true }): List<FileItem> {
-        val out = ArrayList<FileItem>()
-        if (query.isBlank()) return out
-        for (f in dir.walkTopDown().maxDepth(8).onEnter { showHidden || !it.isHidden || it == dir }) {
-            if (out.size >= limit || !isActive()) break
-            if (!f.isFile || f.length() > 2_000_000 || (!showHidden && f.isHidden)) continue
-            val hit = runCatching {
-                val binary = f.inputStream().use { ins ->
-                    val head = ByteArray(1024); val r = ins.read(head)
-                    r > 0 && head.take(r).any { it == 0.toByte() }
-                }
-                !binary && f.bufferedReader().useLines { lines -> lines.any { it.contains(query, ignoreCase) } }
-            }.getOrDefault(false)
-            if (hit) out += FileItem(f.absolutePath, f.name, false, f.length(), f.lastModified(), f.isHidden)
-        }
-        return out
-    }
+
 }
