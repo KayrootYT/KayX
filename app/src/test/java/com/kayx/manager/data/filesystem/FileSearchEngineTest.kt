@@ -38,7 +38,7 @@ class FileSearchEngineTest {
             assertFalse(engine.search(FileSearchRequest(root, ".txt")).items.any { it.name == ".secret.txt" })
             assertTrue(engine.search(FileSearchRequest(root, ".txt", showHidden = true)).items.any { it.name == ".secret.txt" })
             assertEquals(listOf("large.txt"), engine.search(FileSearchRequest(root, "*", minSizeBytes = 5)).items.map { it.name })
-            assertEquals(listOf("small.txt", "large.txt"), engine.search(FileSearchRequest(root, "*", allowedExtensions = setOf("txt"))).items.map { it.name }.sorted())
+            assertEquals(listOf("large.txt", "small.txt"), engine.search(FileSearchRequest(root, "*", allowedExtensions = setOf("txt"))).items.map { it.name }.sorted())
         } finally {
             root.deleteRecursively()
         }
