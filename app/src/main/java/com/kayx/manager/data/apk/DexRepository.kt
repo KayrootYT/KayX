@@ -79,7 +79,7 @@ class DexRepository {
         fun validTable(off: Long, count: Long, width: Int) = (count == 0L || off >= headerSize) && off + count * width <= fileSize
         require(validTable(stringOff, stringCount, 4) && validTable(typeOff, typeCount, 4) && validTable(classOff, classCount, 32)) { "DEX table is outside file bounds" }
         val sc = stringCount.toInt(); val tc = typeCount.toInt(); val cc = classCount.toInt()
-        val strings = List(sc) { readString(bytes, b.getInt(stringOff.toInt() + it * 4)) }
+        val strings = List(sc) { readString(bytes, b.getInt(stringOff.toInt() + it * 4), fileSize.toInt()) }
         val types = List(tc) { i ->
             val idx = b.getInt(typeOff.toInt() + i * 4)
             strings.getOrNull(idx) ?: "<invalid string index $idx>"
@@ -92,19 +92,19 @@ class DexRepository {
         return DexInfo(magic, "%08X".format(uint(8)), fileSize, headerSize, sc, tc, cc, strings, types, classes, checksumValid = adler == uint(8))
     }
 
-    private fun readString(bytes: ByteArray, offset: Int): String {
-        if (offset !in bytes.indices) return "<invalid string offset>"
+    private fun readString(bytes: ByteArray, offset: Int, fileSize: Int): String {
+        if (offset < 0 || offset >= fileSize || fileSize > bytes.size) return "<invalid string offset>"
         var p = offset
         var count = 0
-        while (p < bytes.size) {
+        while (p < fileSize) {
             val v = bytes[p++].toInt() and 0xff
             if (v and 0x80 == 0) break
             count++
             if (count > 5) return "<invalid string length>"
         }
         val start = p
-        while (p < bytes.size && bytes[p].toInt() != 0) p++
-        if (p >= bytes.size) return "<unterminated string>"
+        while (p < fileSize && bytes[p].toInt() != 0) p++
+        if (p >= fileSize) return "<unterminated string>"
         return decodeMutf8(bytes, start, p)
     }
 }
