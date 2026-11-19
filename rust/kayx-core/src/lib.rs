@@ -4,6 +4,7 @@ pub mod axml;
 pub mod hash;
 pub mod hexdump;
 pub mod scan;
+pub mod verify;
 
 use jni::objects::{JByteArray, JClass, JObject, JObjectArray, JString};
 use jni::sys::{jint, jlong, jobjectArray, jstring};
