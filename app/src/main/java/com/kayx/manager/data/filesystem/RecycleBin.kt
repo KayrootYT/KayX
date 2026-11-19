@@ -77,7 +77,6 @@ object RecycleBin {
     @Synchronized
     fun trash(files: List<File>): Result<Unit> = runCatching {
         val d = dir()
-        val added = ArrayList<Triple<String, String, Long>>()
         for (f in files) {
             if (!f.exists()) continue
             val safeSource = isSafeRecycleOriginal(f.absolutePath, Environment.getExternalStorageDirectory(), d)
@@ -89,12 +88,11 @@ object RecycleBin {
             val id = System.nanoTime().toString(36) + "_" + f.name.take(60)
             val record = Triple(id, f.absolutePath, deletedAt)
             // Commit intent first: after a crash the index still knows the original path.
-            writeIndex(rawEntries() + added + record)
+            writeIndex(rawEntries() + record)
             val target = payload(id)
             try {
                 move(f, target)
                 target.setLastModified(deletedAt)
-                added += record
             } catch (t: Throwable) {
                 writeIndex(rawEntries().filterNot { it.first == id })
                 throw t
