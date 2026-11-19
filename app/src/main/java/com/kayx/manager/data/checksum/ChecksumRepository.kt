@@ -9,7 +9,11 @@ data class Hashes(val md5: String, val sha1: String, val sha256: String, val crc
 class ChecksumRepository {
     fun compute(file: File): Hashes {
         NativeCore.hashes(file.absolutePath)?.let { return Hashes(it[0], it[1], it[2], it[3]) }
-        val md5 = MessageDigest.getInstance("MD5"); val sha1 = MessageDigest.getInstance("SHA-1"); val sha256 = MessageDigest.getInstance("SHA-256")
+        // MD5 and SHA-1 are retained only for compatibility with published file checksums;
+        // neither digest is used for authentication, signatures, vault keys or duplicate proof.
+        val md5 = MessageDigest.getInstance("MD5")
+        val sha1 = MessageDigest.getInstance("SHA-1")
+        val sha256 = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { i ->
             val buf = ByteArray(64 * 1024)
             while (true) {

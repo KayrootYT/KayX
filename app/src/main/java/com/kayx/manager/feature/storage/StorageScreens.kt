@@ -263,7 +263,7 @@ fun PrivateSpaceScreen(onBack: () -> Unit, onUnlocked: (String) -> Unit) {
         Column(Modifier.fillMaxSize().padding(pad).padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Default.Lock, null, tint = Accent, modifier = Modifier.size(48.dp))
             Text(if (hasPin) "Enter your PIN" else "Create a PIN for your private space", style = MaterialTheme.typography.titleMedium)
-            if (!hasPin) Text("Files moved here are stored inside KayX and hidden from other apps and the gallery. If you forget the PIN or uninstall KayX, they cannot be recovered.",
+            if (!hasPin) Text("Files are encrypted at rest with AES-256-GCM. The vault key is protected by your PIN and Android Keystore. If you forget the PIN, reset the device, or uninstall KayX, the files may be unrecoverable.",
                 color = TextMuted, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(8); error = null }, singleLine = true, label = { Text("PIN (4–8 digits)") },
                 visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
@@ -278,10 +278,10 @@ fun PrivateSpaceScreen(onBack: () -> Unit, onUnlocked: (String) -> Unit) {
                         busy = true
                         val accepted = withContext(Dispatchers.IO) {
                             if (hasPin) PrivateSpace.verify(ctx, pin)
-                            else { PrivateSpace.setPin(ctx, pin); true }
+                            else PrivateSpace.setPin(ctx, pin).isSuccess
                         }
                         busy = false
-                        if (accepted) onUnlocked(PrivateSpace.dir(ctx).absolutePath) else error = "Wrong PIN"
+                        if (accepted) onUnlocked(PrivateSpace.dir(ctx).absolutePath) else error = if (hasPin) "Wrong PIN or encrypted vault could not be opened" else "Could not create encrypted private vault"
                     }
                 }
             }, enabled = !busy) {

@@ -14,30 +14,26 @@ data class AccessStatus(
 )
 
 class AdvancedAccessRepository {
-
+    /**
+     * Status checks must be passive. Merely opening Settings must never launch a su prompt.
+     * Root authorization is requested by the actual user-initiated command through RootShell.
+     */
     suspend fun checkAccessStatus(): AccessStatus = withContext(Dispatchers.IO) {
         val hasRootSu = checkSuBinary()
-        val rootGranted = if (hasRootSu) requestRootPermission() else false
-
+        val shizukuState = runCatching { ShizukuShell.state() }.getOrNull()
         AccessStatus(
             rootAvailable = hasRootSu,
-            rootGranted = rootGranted,
-            shizukuAvailable = runCatching { ShizukuShell.state() }.getOrNull().let { it != null && it != ShizukuShell.State.NOT_INSTALLED && it != ShizukuShell.State.NOT_RUNNING && it != ShizukuShell.State.OUTDATED },
+            rootGranted = false,
+            shizukuAvailable = shizukuState != null &&
+                shizukuState != ShizukuShell.State.NOT_INSTALLED &&
+                shizukuState != ShizukuShell.State.NOT_RUNNING &&
+                shizukuState != ShizukuShell.State.OUTDATED,
             shizukuGranted = ShizukuShell.isReady()
         )
     }
 
     private fun checkSuBinary(): Boolean {
         val paths = arrayOf("/system/bin/su", "/system/xbin/su", "/sbin/su", "/system/sd/xbin/su")
-        return paths.any { File(it).exists() }
-    }
-
-    private fun requestRootPermission(): Boolean {
-        return try {
-            val process = Runtime.getRuntime().exec("su -c exit")
-            process.waitFor() == 0
-        } catch (e: Exception) {
-            false
-        }
+        return paths.any { File(it).let { f -> f.isFile && f.canExecute() } }
     }
 }

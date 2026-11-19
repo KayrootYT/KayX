@@ -82,6 +82,9 @@ fun RecycleBinScreen(onBack: () -> Unit) {
                             Text(e.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(e.original, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Fg.copy(.55f))
                             Text(DateFormat.getDateTimeInstance().format(Date(e.deletedAt)), style = MaterialTheme.typography.labelSmall, color = Fg.copy(.55f))
+                            val dayMs = 24L * 60 * 60 * 1000
+                            val daysLeft = ((e.deletedAt + 30L * dayMs - System.currentTimeMillis()).coerceAtLeast(0L) + dayMs - 1) / dayMs
+                            Text("Auto-delete in $daysLeft day(s)", style = MaterialTheme.typography.labelSmall, color = if (daysLeft <= 3) RED else Fg.copy(.55f))
                         }
                     }
                 }
@@ -114,12 +117,28 @@ fun TerminalScreen(spec: String, onBack: () -> Unit) {
     var input by remember { mutableStateOf("") }
     var running by remember { mutableStateOf(false) }
     var root by remember { mutableStateOf(false) }
+    var confirmRoot by remember { mutableStateOf(false) }
     var proc by remember { mutableStateOf<Process?>(null) }
     val history = remember { mutableListOf<String>() }
     var hIdx by remember { mutableStateOf(0) }
     val listState = rememberLazyListState()
 
     fun add(l: String) { lines.add(l); if (lines.size > 3000) lines.removeRange(0, 500) }
+
+    fun readBoundedLine(reader: java.io.BufferedReader, limit: Int): Pair<String, Boolean>? {
+        val line = StringBuilder(minOf(limit, 4096))
+        var truncated = false
+        var readAny = false
+        while (true) {
+            val ch = reader.read()
+            if (ch < 0) return if (!readAny) null else line.toString() to truncated
+            readAny = true
+            if (ch == '\n'.code) return line.toString() to truncated
+            if (ch != '\r'.code) {
+                if (line.length < limit) line.append(ch.toChar()) else truncated = true
+            }
+        }
+    }
 
     fun exec(cmd: String) {
         if (cmd.isBlank() || running) return
@@ -137,11 +156,26 @@ fun TerminalScreen(spec: String, onBack: () -> Unit) {
         running = true
         scope.launch(Dispatchers.IO) {
             try {
-                val args = if (root) listOf("su", "-c", "cd '$cwd' && $cmd") else listOf("sh", "-c", cmd)
+                val shellCommand = if (root) "cd ${com.kayx.manager.data.advanced.RootShell.q(cwd)} && $cmd" else cmd
+                val args = if (root) listOf("su", "-c", shellCommand) else listOf("sh", "-c", shellCommand)
                 val p = ProcessBuilder(args).directory(File(cwd)).redirectErrorStream(true).start()
+                runCatching { p.outputStream.close() }
                 proc = p
-                p.inputStream.bufferedReader().use { r ->
-                    while (true) { val l = r.readLine() ?: break; add(l) }
+                var captured = 0
+                var truncationShown = false
+                p.inputStream.bufferedReader().use { reader ->
+                    while (true) {
+                        val remaining = (512 * 1024 - captured).coerceAtLeast(0)
+                        val line = readBoundedLine(reader, minOf(16 * 1024, remaining)) ?: break
+                        if (remaining > 0) {
+                            add(line.first)
+                            captured += line.first.length
+                        }
+                        if ((line.second || captured >= 512 * 1024) && !truncationShown) {
+                            add("[output truncated at 512 KiB; process continues]")
+                            truncationShown = true
+                        }
+                    }
                 }
                 add("[exit ${p.waitFor()}]")
             } catch (e: Exception) { add("error: ${e.message}") }
@@ -152,8 +186,16 @@ fun TerminalScreen(spec: String, onBack: () -> Unit) {
     LaunchedEffect(lines.size) { if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex) }
     DisposableEffect(Unit) { onDispose { proc?.destroy() } }
 
+    if (confirmRoot) AlertDialog(
+        onDismissRequest = { confirmRoot = false },
+        title = { Text("Enable root terminal?") },
+        text = { Text("Commands will run with full root privileges and can permanently damage Android or erase data. Only continue with commands you understand.") },
+        confirmButton = { TextButton({ root = true; confirmRoot = false }) { Text("Enable root") } },
+        dismissButton = { TextButton({ confirmRoot = false }) { Text("Cancel") } }
+    )
+
     ToolScaffold("Terminal", onBack, actions = {
-        IconButton({ root = !root }) { Icon(Icons.Default.Security, "Root (su)", tint = if (root) Accent else Fg) }
+        IconButton({ if (root) root = false else confirmRoot = true }) { Icon(Icons.Default.Security, "Root (su)", tint = if (root) Accent else Fg) }
         IconButton({ proc?.destroy() }, enabled = running) { Icon(Icons.Default.Stop, "Stop") }
         IconButton({ lines.clear() }) { Icon(Icons.Default.DeleteSweep, "Clear") }
     }) { pad ->

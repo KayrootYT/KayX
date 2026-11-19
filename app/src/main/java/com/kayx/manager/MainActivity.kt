@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.kayx.manager.data.storage.PrivateSpace
 import com.kayx.manager.domain.model.Tool
 import com.kayx.manager.feature.filebrowser.FileBrowserScreen
 import com.kayx.manager.feature.tools.*
@@ -39,6 +40,9 @@ private val ToolStackSaver = listSaver<List<Pair<String, Tool>>, String>(
 
 class MainActivity : ComponentActivity() {
     private val granted = mutableStateOf(false)
+    private val privateNeedsUnlock = mutableStateOf(false)
+    private val privateSessionActive = mutableStateOf(false)
+    private val PRIVATE_SESSION_STATE = "kayx_private_session_active"
     private val legacyPerm = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted.value = hasAccess() }
     private val safTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) com.kayx.manager.data.filesystem.SafRepository.persistTreePermission(this, uri)
@@ -55,10 +59,35 @@ class MainActivity : ComponentActivity() {
 
     private fun requestSafTree() { safTree.launch(null) }
 
-    override fun onResume() { super.onResume(); granted.value = hasAccess() }
+    override fun onResume() {
+        super.onResume()
+        granted.value = hasAccess()
+        // Retention is enforced whenever the app returns to foreground; failures are retried next resume.
+        Thread({ com.kayx.manager.data.filesystem.RecycleBin.purgeExpired() }, "kayx-recycle-retention")
+            .apply { isDaemon = true; start() }
+    }
+
+    override fun onStop() {
+        if (privateSessionActive.value && PrivateSpace.isUnlocked()) {
+            // Require a fresh PIN immediately; vault persistence and plaintext cleanup run off the main thread.
+            privateNeedsUnlock.value = true
+            Thread({ PrivateSpace.lock(this@MainActivity) }, "kayx-private-vault-lock")
+                .apply { isDaemon = true; start() }
+        }
+        super.onStop()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(PRIVATE_SESSION_STATE, privateSessionActive.value || privateNeedsUnlock.value)
+        super.onSaveInstanceState(outState)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState?.getBoolean(PRIVATE_SESSION_STATE) == true) {
+            privateSessionActive.value = true
+            privateNeedsUnlock.value = true
+        }
         enableEdgeToEdge()
         val shortcutFile = intent?.getStringExtra("path")?.let { java.io.File(it) }?.takeIf { it.exists() }
         val startDir: String? = shortcutFile?.let { if (it.isDirectory) it.absolutePath else it.parent }
@@ -89,7 +118,12 @@ class MainActivity : ComponentActivity() {
                 } else {
                     val p = path
                     val t = stack.lastOrNull()
-                    if (t != null) {
+                    if (privateNeedsUnlock.value) {
+                        com.kayx.manager.feature.storage.PrivateSpaceScreen(
+                            onBack = { privateNeedsUnlock.value = false; privateSessionActive.value = false; path = null },
+                            onUnlocked = { dir -> privateNeedsUnlock.value = false; privateSessionActive.value = true; path = dir }
+                        )
+                    } else if (t != null) {
                         val close = { stack = stack.dropLast(1) }
                         when (t.second) {
                             Tool.TEXT -> TextEditorPro(t.first, close, push)
@@ -114,7 +148,11 @@ class MainActivity : ComponentActivity() {
                             Tool.SMALI -> SmaliRefScreen(close)
                             Tool.CATEGORY -> com.kayx.manager.feature.storage.CategoryScreen(t.first, close) { f, k -> push(f, k) }
                             Tool.TAGS -> com.kayx.manager.feature.storage.TagsScreen(close) { f, k -> push(f, k) }
-                            Tool.PRIVATE -> com.kayx.manager.feature.storage.PrivateSpaceScreen(close) { dir -> stack = stack.dropLast(1); path = dir }
+                            Tool.PRIVATE -> com.kayx.manager.feature.storage.PrivateSpaceScreen(close) { dir ->
+                                stack = stack.dropLast(1)
+                                privateSessionActive.value = true
+                                path = dir
+                            }
                             Tool.CLEANUP -> com.kayx.manager.feature.storage.CleanupScreen(close) { f, k -> push(f, k) }
                             Tool.ARSC -> ArscViewerScreen(t.first, close)
                             Tool.FTP -> FtpScreen(close)
@@ -123,7 +161,14 @@ class MainActivity : ComponentActivity() {
                     } else if (showSettings) {
                         SettingsScreen(storageGranted = granted.value, onManageStorage = ::requestAccess, onBack = { showSettings = false })
                     } else if (p != null) {
-                        FileBrowserScreen(p, onExit = { path = null }, onOpenFile = { f, k -> push(f, k) }, onSettings = { showSettings = true })
+                        FileBrowserScreen(p, onExit = {
+                            if (privateSessionActive.value && PrivateSpace.isUnlocked()) {
+                                Thread({ PrivateSpace.lock(this@MainActivity) }, "kayx-private-vault-exit-lock")
+                                    .apply { isDaemon = true; start() }
+                            }
+                            privateSessionActive.value = false
+                            path = null
+                        }, onOpenFile = { f, k -> push(f, k) }, onSettings = { showSettings = true })
                     } else com.kayx.manager.feature.main.MainShell(
                         storageGranted = granted.value, onManageStorage = ::requestAccess,
                         onOpen = { path = it },

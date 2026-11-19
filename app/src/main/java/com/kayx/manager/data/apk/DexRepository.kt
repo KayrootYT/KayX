@@ -114,16 +114,17 @@ internal fun decodeMutf8(b: ByteArray, start: Int, end: Int): String {
     var i = start
     while (i < end) {
         val a = b[i++].toInt() and 0xFF
-        when {
-            a < 0x80 -> sb.append(a.toChar())
-            (a and 0xE0) == 0xC0 && i < end ->
-                sb.append((((a and 0x1F) shl 6) or (b[i++].toInt() and 0x3F)).toChar())
-            (a and 0xF0) == 0xE0 && i + 1 < end -> {
-                val b2 = b[i++].toInt() and 0x3F
-                val b3 = b[i++].toInt() and 0x3F
-                sb.append((((a and 0x0F) shl 12) or (b2 shl 6) or b3).toChar())
-            }
-            else -> sb.append('�')
+        if (a < 0x80) {
+            sb.append(a.toChar())
+        } else if ((a and 0xE0) == 0xC0 && i < end) {
+            val second = b[i++].toInt() and 0x3F
+            sb.append((((a and 0x1F) shl 6) or second).toChar())
+        } else if ((a and 0xF0) == 0xE0 && i + 1 < end) {
+            val second = b[i++].toInt() and 0x3F
+            val third = b[i++].toInt() and 0x3F
+            sb.append((((a and 0x0F) shl 12) or (second shl 6) or third).toChar())
+        } else {
+            sb.append('�')
         }
     }
     return sb.toString()

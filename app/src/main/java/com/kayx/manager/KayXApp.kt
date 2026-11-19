@@ -10,5 +10,6 @@ class KayXApp : Application() {
         com.kayx.manager.data.advanced.ShizukuShell.init(this)
         com.kayx.manager.data.storage.TagStore.init(this)
         com.kayx.manager.data.storage.StorageScanner.init(this)
+        com.kayx.manager.data.filesystem.RecycleBinPurgeWorker.schedule(this)
     }
 }

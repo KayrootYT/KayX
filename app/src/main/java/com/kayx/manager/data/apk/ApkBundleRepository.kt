@@ -59,6 +59,7 @@ object ApkBundleRepository {
                 }
             }
             val intent = Intent(INSTALL_RESULT_ACTION).setPackage(ctx.packageName)
+            // PackageInstaller fills status extras into this callback Intent; MUTABLE is required.
             val flags = if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 else PendingIntent.FLAG_UPDATE_CURRENT
             val pending = PendingIntent.getBroadcast(ctx, sessionId, intent, flags)
