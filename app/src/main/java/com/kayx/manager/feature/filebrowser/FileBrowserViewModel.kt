@@ -293,7 +293,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             _s.update { current ->
                 if (current.dir != snapshot.dir || current.secondaryDir != snapshot.secondaryDir ||
                     current.query != snapshot.query || current.searching != snapshot.searching ||
-                    current.showHidden != snapshot.showHidden || current.grep != snapshot.grep || current.sort != snapshot.sort || current.dualPane != snapshot.dualPane) current
+                    current.showHidden != snapshot.showHidden || current.grep != snapshot.grep || current.searchCategory != snapshot.searchCategory || current.sort != snapshot.sort || current.dualPane != snapshot.dualPane) current
                 else current.copy(items = main, secondaryItems = secondary, loading = false)
             }
         }
