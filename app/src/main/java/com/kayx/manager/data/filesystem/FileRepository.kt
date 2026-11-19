@@ -71,7 +71,7 @@ class FileRepository {
         // not folders whose names happen to contain the extension text.
         val extensionQuery = needle.removePrefix("*").takeIf { it.startsWith(".") && it.length > 1 }
         val globRegex = if (extensionQuery == null && ('*' in needle || '?' in needle)) {
-            Regex("^" + Regex.escape(needle).replace("\\\\*", ".*").replace("\\\\?", ".") + "$", RegexOption.IGNORE_CASE)
+            Regex("^" + needle.map { ch -> when (ch) { '*' -> ".*"; '?' -> "."; else -> Regex.escape(ch.toString()) } }.joinToString("") + "$", RegexOption.IGNORE_CASE)
         } else null
         val regex = if (mode == SearchMode.REGEX && extensionQuery == null && globRegex == null)
             runCatching { Regex(needle, RegexOption.IGNORE_CASE) }.getOrNull() ?: return@withContext emptyList()
