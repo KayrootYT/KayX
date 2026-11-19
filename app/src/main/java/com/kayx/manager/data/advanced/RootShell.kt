@@ -67,7 +67,7 @@ object RootShell {
 
     /** True when the selected backend responds; Root mode additionally requires uid 0. */
     fun isRoot(): Boolean = run("id", 5_000).let {
-        it.code == 0 && (SettingsStore.backend == PrivilegedBackend.SHIZUKU || Regex("uid=0(?:\\(|,)").containsMatchIn(it.out))
+        it.code == 0 && Regex("uid=0(?:\\\\(|,)").containsMatchIn(it.out)
     }
 
     private val lsLine = Regex(
