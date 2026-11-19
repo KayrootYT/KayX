@@ -158,6 +158,7 @@ fun TerminalScreen(spec: String, onBack: () -> Unit) {
                 val shellCommand = if (root) "cd ${com.kayx.manager.data.advanced.RootShell.q(cwd)} && $cmd" else cmd
                 val args = if (root) listOf("su", "-c", shellCommand) else listOf("sh", "-c", shellCommand)
                 val p = ProcessBuilder(args).directory(File(cwd)).redirectErrorStream(true).start()
+                runCatching { p.outputStream.close() }
                 proc = p
                 var captured = 0
                 var truncationShown = false
