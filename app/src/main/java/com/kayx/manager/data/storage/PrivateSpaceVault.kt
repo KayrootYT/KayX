@@ -163,7 +163,7 @@ internal object PrivateSpaceVault {
         walk(source, target)
     }
 
-    private fun encryptFile(input: File, output: File, key: ByteArray) {
+    internal fun encryptFile(input: File, output: File, key: ByteArray) {
         val iv = ByteArray(IV_BYTES).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
@@ -176,7 +176,7 @@ internal object PrivateSpaceVault {
                 while (true) {
                     val n = src.read(buffer)
                     if (n < 0) break
-                    cipher.update(buffer, 0, n)?.let(dst::write)
+                    cipher.update(buffer, 0, n)?.let { encrypted -> dst.write(encrypted) }
                 }
                 dst.write(cipher.doFinal())
                 dst.fd.sync()
@@ -185,7 +185,7 @@ internal object PrivateSpaceVault {
         check(temp.renameTo(output)) { "Could not finalize encrypted file: ${input.name}" }
     }
 
-    private fun decryptFile(input: File, output: File, key: ByteArray) {
+    internal fun decryptFile(input: File, output: File, key: ByteArray) {
         val temp = File(output.parentFile, output.name + ".tmp")
         try {
             FileInputStream(input).use { src ->
