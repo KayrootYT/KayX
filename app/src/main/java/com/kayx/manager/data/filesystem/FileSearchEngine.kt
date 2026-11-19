@@ -130,8 +130,8 @@ class FileSearchEngine(
         ignoreCase: Boolean = true,
         maxBytesPerFile: Long = 2_000_000L,
         isActive: () -> Boolean = { true }
-    ): FileSearchResult {
-        if (request.query.isBlank()) return FileSearchResult(emptyList(), 0, false)
+    ): FileSearchResult = withContext(Dispatchers.IO) {
+        if (request.query.isBlank()) return@withContext FileSearchResult(emptyList(), 0, false)
         val candidates = search(request.copy(query = "*", mode = SearchMode.CONTAINS, includeDirectories = false, maxResults = 100_000))
         val matches = ArrayList<FileItem>()
         val needle = request.query
@@ -155,7 +155,7 @@ class FileSearchEngine(
             if (found) matches += item
             if (matches.size >= request.maxResults.coerceIn(1, 100_000)) break
         }
-        return FileSearchResult(matches, candidates.scannedEntries, candidates.truncated)
+        FileSearchResult(matches, candidates.scannedEntries, candidates.truncated)
     }
 
     private suspend fun buildIndex(root: File, showHidden: Boolean, maxDepth: Int, rootPath: String): Index {
