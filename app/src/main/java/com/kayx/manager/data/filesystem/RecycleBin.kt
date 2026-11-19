@@ -128,9 +128,9 @@ object RecycleBin {
     }
 
     /**
-     * Permanently removes entries after 30 days. Also cleans old orphan payloads left by a crash
-     * between moving a file and committing the index. Unknown/new payloads are never purged early.
-     * Call on app start/resume; operation is safe to repeat.
+     * Permanently removes indexed entries after 30 days and drops stale index records whose
+     * payload is already missing. Unindexed legacy payloads are retained because their mtime may
+     * be the original file's age, not its deletion time. Call on app start/resume; safe to repeat.
      */
     @Synchronized
     fun purgeExpired(now: Long = System.currentTimeMillis()): Result<Int> = runCatching {
