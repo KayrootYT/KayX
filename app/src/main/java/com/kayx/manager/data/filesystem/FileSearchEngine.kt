@@ -141,14 +141,14 @@ class FileSearchEngine(
             if (item.isDir || item.size > maxBytesPerFile) continue
             val file = File(item.path)
             val found = runCatching {
-                file.inputStream().use { input ->
+                val binary = file.inputStream().use { input ->
                     val head = ByteArray(1024)
                     val count = input.read(head)
-                    if (count > 0 && head.take(count).any { it == 0.toByte() }) return@use false
-                    input.bufferedReader().useLines { lines ->
-                        lines.any { line ->
-                            if (ignoreCase) line.contains(needle, ignoreCase = true) else line.contains(needle)
-                        }
+                    count > 0 && head.take(count).any { it == 0.toByte() }
+                }
+                if (binary) false else file.bufferedReader().useLines { lines ->
+                    lines.any { line ->
+                        if (ignoreCase) line.contains(needle, ignoreCase = true) else line.contains(needle)
                     }
                 }
             }.getOrDefault(false)
