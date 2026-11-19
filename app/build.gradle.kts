@@ -8,7 +8,7 @@ android {
     compileSdk = 34
     defaultConfig {
         applicationId = "com.kayx.manager"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 34
         versionCode = 5
         versionName = "0.4.0"
@@ -58,6 +58,8 @@ dependencies {
     // Shizuku (official API + provider) – privileged shell via a user-granted Shizuku service
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    // Offline QR / barcode scanner (Apache 2.0, no Google Play services, no network)
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
