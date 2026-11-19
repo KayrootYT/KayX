@@ -7,6 +7,17 @@ import org.junit.Test
 
 class RecycleBinSafetyTest {
     @Test
+    fun recycleEntriesExpireAtThirtyDaysButNotBefore() {
+        val day = 24L * 60 * 60 * 1000
+        val now = 2_000_000_000_000L
+        assertFalse(isRecycleExpired(now - 30 * day + 1, now))
+        assertTrue(isRecycleExpired(now - 30 * day, now))
+        assertTrue(isRecycleExpired(now - 45 * day, now))
+        assertFalse(isRecycleExpired(now + day, now))
+        assertFalse(isRecycleExpired(0L, now))
+    }
+
+    @Test
     fun rejectsTraversalAndSeparatorsInEntryIds() {
         assertTrue(isSafeRecycleEntryId("mabc123_photo.jpg"))
         assertFalse(isSafeRecycleEntryId("../private"))
