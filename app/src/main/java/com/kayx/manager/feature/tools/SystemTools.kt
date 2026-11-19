@@ -133,8 +133,8 @@ fun TerminalScreen(spec: String, onBack: () -> Unit) {
             val ch = reader.read()
             if (ch < 0) return if (!readAny) null else line.toString() to truncated
             readAny = true
-            if (ch == '\\n'.code) return line.toString() to truncated
-            if (ch != '\\r'.code) {
+            if (ch == '\n'.code) return line.toString() to truncated
+            if (ch != '\r'.code) {
                 if (line.length < limit) line.append(ch.toChar()) else truncated = true
             }
         }
