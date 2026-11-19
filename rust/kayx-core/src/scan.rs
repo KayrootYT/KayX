@@ -1,7 +1,7 @@
 //! Bounded parallel folder walk + collision-checked duplicate finder.
 use crate::{hash::md5_file, verify::files_equal};
 use rayon::prelude::*;
-use std::{collections::HashMap, fs, path::{Path, PathBuf}, sync::Mutex, time::UNIX_EPOCH};
+use std::{collections::HashMap, fs, path::{Path, PathBuf}, sync::{atomic::{AtomicUsize, Ordering}, Mutex}, time::UNIX_EPOCH};
 
 pub struct Rec {
     pub path: String,
@@ -10,6 +10,8 @@ pub struct Rec {
 }
 
 const MAX_SCAN_FILES: usize = 200_000;
+const MAX_SCAN_DIRS: usize = 200_000;
+const MAX_SCAN_ENTRIES: usize = 1_000_000;
 const MAX_DEPTH: u32 = 32;
 const PARTIAL: u64 = 64 * 1024;
 
@@ -18,8 +20,9 @@ fn dir_ok(name: &str, parent_is_root: bool) -> bool {
         !name.starts_with(".thumb") && !(parent_is_root && name == "Android")
 }
 
-fn walk(dir: &Path, root: &Path, depth: u32, out: &Mutex<Vec<Rec>>) {
-    if depth > MAX_DEPTH || out.lock().map(|v| v.len() >= MAX_SCAN_FILES).unwrap_or(true) {
+fn walk(dir: &Path, root: &Path, depth: u32, out: &Mutex<Vec<Rec>>, dirs: &AtomicUsize, entries: &AtomicUsize) {
+    if depth > MAX_DEPTH || dirs.fetch_add(1, Ordering::Relaxed) >= MAX_SCAN_DIRS ||
+        out.lock().map(|v| v.len() >= MAX_SCAN_FILES).unwrap_or(true) {
         return;
     }
     let rd = match fs::read_dir(dir) { Ok(r) => r, Err(_) => return };
@@ -27,7 +30,7 @@ fn walk(dir: &Path, root: &Path, depth: u32, out: &Mutex<Vec<Rec>>) {
     let mut subs: Vec<PathBuf> = Vec::new();
     let at_root = dir == root;
     for entry in rd.flatten() {
-        if local.len() >= MAX_SCAN_FILES { break; }
+        if local.len() >= MAX_SCAN_FILES || entries.fetch_add(1, Ordering::Relaxed) >= MAX_SCAN_ENTRIES { break; }
         let ft = match entry.file_type() { Ok(t) => t, Err(_) => continue };
         if ft.is_file() {
             if let Ok(metadata) = entry.metadata() {
@@ -52,15 +55,17 @@ fn walk(dir: &Path, root: &Path, depth: u32, out: &Mutex<Vec<Rec>>) {
         all.extend(local.into_iter().take(remaining));
     }
     if out.lock().map(|v| v.len() >= MAX_SCAN_FILES).unwrap_or(true) { return; }
-    subs.par_iter().for_each(|sub| walk(sub, root, depth + 1, out));
+    subs.par_iter().for_each(|sub| walk(sub, root, depth + 1, out, dirs, entries));
 }
 
 pub fn scan_tree(root: &Path) -> Vec<Rec> {
     if !root.is_dir() { return Vec::new(); }
     let out = Mutex::new(Vec::with_capacity(20_000));
+    let dirs = AtomicUsize::new(0);
+    let entries = AtomicUsize::new(0);
     match rayon::ThreadPoolBuilder::new().num_threads(4).build() {
-        Ok(pool) => pool.install(|| walk(root, root, 0, &out)),
-        Err(_) => walk(root, root, 0, &out),
+        Ok(pool) => pool.install(|| walk(root, root, 0, &out, &dirs, &entries)),
+        Err(_) => walk(root, root, 0, &out, &dirs, &entries),
     }
     out.into_inner().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
