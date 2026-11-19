@@ -54,14 +54,15 @@ internal object PrivateSpaceVault {
         val key = ByteArray(KEY_BYTES).also { SecureRandom().nextBytes(it) }
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val pinKey = deriveKey(pin, salt)
-        val wrappedPin = encryptBytes(pinKey, key)
+        val wrappedPin = try { encryptBytes(pinKey, key) } finally { pinKey.fill(0) }
         val wrappedKeystore = encryptWithKeystore(wrappedPin)
-        prefs(ctx).edit()
+        check(prefs(ctx).edit()
             .putString("vault_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
             .putString("vault_wrapped_key", Base64.encodeToString(wrappedKeystore, Base64.NO_WRAP))
             .putInt("vault_kdf_iterations", ITERATIONS)
             .putString("vault_cipher", "AES-256-GCM")
-            .commit()
+            .commit()) { "Could not persist encrypted vault key metadata" }
+        sessionKey?.fill(0)
         sessionKey = key
         persistStage(ctx, stage, key)
     }.onFailure { sessionKey = null }
@@ -71,9 +72,14 @@ internal object PrivateSpaceVault {
         val salt = Base64.decode(p.getString("vault_salt", null) ?: error("Vault key metadata is missing"), Base64.DEFAULT)
         val wrapped = Base64.decode(p.getString("vault_wrapped_key", null) ?: error("Vault key is missing"), Base64.DEFAULT)
         val iterations = p.getInt("vault_kdf_iterations", ITERATIONS).coerceIn(200_000, 500_000)
+        require(p.getString("vault_cipher", null) == "AES-256-GCM") { "Unsupported private vault cipher" }
         val pinKey = deriveKey(pin, salt, iterations)
-        val pinWrapped = decryptWithKeystore(wrapped)
-        val key = decryptBytes(pinKey, pinWrapped)
+        val key = try {
+            val pinWrapped = decryptWithKeystore(wrapped)
+            decryptBytes(pinKey, pinWrapped)
+        } finally {
+            pinKey.fill(0)
+        }
         require(key.size == KEY_BYTES) { "Invalid vault key" }
 
         val vault = vaultDir(ctx)
@@ -85,8 +91,9 @@ internal object PrivateSpaceVault {
             stage.mkdirs()
             decryptTree(vault, stage, key)
         }
+        sessionKey?.fill(0)
         sessionKey = key
-    }.onFailure { sessionKey = null }
+    }.onFailure { sessionKey?.fill(0); sessionKey = null }
 
     /** Commit all staged edits, verify every encrypted file, then wipe the plaintext staging tree. */
     @Synchronized fun lock(ctx: Context, stage: File): Result<Unit> = runCatching {
