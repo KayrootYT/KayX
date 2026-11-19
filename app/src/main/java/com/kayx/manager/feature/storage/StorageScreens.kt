@@ -278,10 +278,10 @@ fun PrivateSpaceScreen(onBack: () -> Unit, onUnlocked: (String) -> Unit) {
                         busy = true
                         val accepted = withContext(Dispatchers.IO) {
                             if (hasPin) PrivateSpace.verify(ctx, pin)
-                            else { PrivateSpace.setPin(ctx, pin); true }
+                            else PrivateSpace.setPin(ctx, pin).isSuccess
                         }
                         busy = false
-                        if (accepted) onUnlocked(PrivateSpace.dir(ctx).absolutePath) else error = "Wrong PIN"
+                        if (accepted) onUnlocked(PrivateSpace.dir(ctx).absolutePath) else error = if (hasPin) "Wrong PIN or encrypted vault could not be opened" else "Could not create encrypted private vault"
                     }
                 }
             }, enabled = !busy) {
