@@ -377,6 +377,7 @@ private fun formatSearchSize(size: Long): String {
     return "%.1f %s".format(Locale.US, value, units[index])
 }
 
+@Composable
 private fun searchFileTint(name: String, directory: Boolean): Color {
     if (directory) return Color(0xFFFFC247)
     return when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
