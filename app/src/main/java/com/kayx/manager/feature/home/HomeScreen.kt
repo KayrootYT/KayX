@@ -78,8 +78,8 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                     Text("Search", Modifier.weight(1f), color = TextMuted, style = MaterialTheme.typography.bodyLarge)
                 }
             }
-            IconButton(onClick = { onTool(Tool.CHECKSUM) }) {
-                Icon(Icons.Default.QrCodeScanner, "Scan", tint = Fg, modifier = Modifier.size(24.dp))
+            IconButton(onClick = { StorageScanner.invalidate(); StorageScanner.init(ctx); Toast.makeText(ctx, "Storage scan started", Toast.LENGTH_SHORT).show() }) {
+                Icon(Icons.Default.QrCodeScanner, "Scan storage", tint = Fg, modifier = Modifier.size(24.dp))
             }
             IconButton(onClick = onSettings) {
                 Icon(Icons.Default.MoreVert, "More options", tint = Fg, modifier = Modifier.size(24.dp))
