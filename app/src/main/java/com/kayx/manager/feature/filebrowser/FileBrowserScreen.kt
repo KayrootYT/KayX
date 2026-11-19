@@ -38,6 +38,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.kayx.manager.data.archive.MultiExtract
 import com.kayx.manager.data.filesystem.ExternalOps
+import com.kayx.manager.data.filesystem.FileSearchCategory
 import java.io.File
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -272,6 +273,36 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     Spacer(Modifier.width(5.dp))
                     Text(if (s.grep) "Search names" else "Search file contents")
                 }
+            }
+            if (s.searching && !s.grep) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 2.dp, start = 3.dp, end = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FileSearchCategory.values().forEach { category ->
+                        val selected = s.searchCategory == category
+                        Surface(
+                            onClick = { vm.setSearchCategory(category) },
+                            shape = RoundedCornerShape(50),
+                            color = if (selected) Accent.copy(.22f) else Fg.copy(.055f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) Accent.copy(.55f) else Fg.copy(.10f))
+                        ) {
+                            Text(
+                                category.label,
+                                Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
+                                color = if (selected) Accent else Fg.copy(.72f),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+                Text(
+                    if (s.loading) "Searching…" else "${s.items.size} files found",
+                    Modifier.padding(start = 8.dp, top = 3.dp, bottom = 2.dp),
+                    color = Fg.copy(.58f),
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
             if (!s.dualPane) Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
