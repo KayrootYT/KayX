@@ -41,6 +41,22 @@ jobs:
         run: |
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/kayx-release.jks"
           test -s "$RUNNER_TEMP/kayx-release.jks"
+      - name: Validate keystore alias and passwords
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/kayx-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KAYX_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KAYX_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KAYX_KEY_PASSWORD }}
+        run: |
+          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null || {
+            echo "::error::Keystore password or key alias is incorrect. Confirm KAYX_KEYSTORE_PASSWORD and KAYX_KEY_ALIAS (expected alias: kayx if generated with the documented command)."
+            exit 1
+          }
+          keytool -certreq -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -alias "$KEY_ALIAS" -file "$RUNNER_TEMP/kayx-signing-check.csr" >/dev/null || {
+            echo "::error::Private key password is incorrect. Set KAYX_KEY_PASSWORD to the password used for the kayx private key."
+            exit 1
+          }
+          rm -f "$RUNNER_TEMP/kayx-signing-check.csr"
       - name: Build signed release APK
         env:
           KAYX_KEYSTORE_PATH: ${{ runner.temp }}/kayx-release.jks
