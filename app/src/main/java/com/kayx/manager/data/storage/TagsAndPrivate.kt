@@ -123,7 +123,7 @@ object PrivateSpace {
             }
             if (p.getString("vault_wrapped_key", null).isNullOrEmpty()) {
                 // Existing pre-vault installs are encrypted on first successful unlock.
-                PrivateSpaceVault.initialize(ctx.applicationContext, pin, dir(ctx)).getOrThrow()
+                PrivateSpaceVault.initialize(ctx.applicationContext, pin, stagingDir(ctx)).getOrThrow()
             } else {
                 PrivateSpaceVault.unlock(ctx.applicationContext, pin, stagingDir(ctx)).getOrThrow()
             }
