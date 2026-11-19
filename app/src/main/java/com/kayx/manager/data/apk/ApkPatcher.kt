@@ -5,10 +5,8 @@ import java.io.File
 import java.util.zip.ZipFile
 
 /**
- * Replaces one DEX entry of an APK and drops the now-invalid v1 signature files.
- *
- * The rewrite keeps STORED entries and their Android alignment requirements intact.
- * The result is deliberately unsigned; sign it afterwards.
+ * Replaces one DEX entry of an APK and drops stale v1 signature files.
+ * The patched output is deliberately unsigned and must be signed before installation.
  */
 object ApkPatcher {
     fun replaceDex(sourceApk: File, dexEntryName: String, replacementDex: File, outputApk: File): File {
@@ -16,6 +14,7 @@ object ApkPatcher {
         require(DexRepository.isDexEntryName(dexEntryName)) { "Invalid DEX entry name" }
         require(replacementDex.isFile && replacementDex.length() in 112..DexRepository.MAX_DEX_BYTES) { "Replacement DEX is invalid or too large" }
         require(sourceApk.canonicalFile != outputApk.canonicalFile) { "Output APK must be a different file than the source" }
+        val replacement = replacementDex.readBytes()
         val info = DexRepository().inspect(replacementDex)
         require(info.checksumValid) { "Replacement DEX has an invalid checksum" }
 
@@ -25,20 +24,39 @@ object ApkPatcher {
         }
         outputApk.parentFile?.let { check(it.exists() || it.mkdirs()) { "Cannot create output folder" } }
         val temp = File(outputApk.parentFile, outputApk.name + ".tmp")
+        val backup = File(outputApk.parentFile, outputApk.name + ".bak")
         temp.delete()
+        backup.delete()
         try {
             sourceApk.copyTo(temp, overwrite = true)
-            ArchiveEdit.rewrite(temp, delete = signatureFiles, replace = mapOf(dexEntryName to replacementDex.readBytes())).getOrThrow()
+            ArchiveEdit.rewrite(temp, delete = signatureFiles, replace = mapOf(dexEntryName to replacement)).getOrThrow()
+
             ZipFile(temp).use { rebuilt ->
-                check(rebuilt.getEntry(dexEntryName) != null) { "Patched APK is missing the rebuilt DEX" }
+                val dex = rebuilt.getEntry(dexEntryName) ?: error("Patched APK is missing the rebuilt DEX")
                 check(rebuilt.getEntry("AndroidManifest.xml") != null) { "Patched APK is missing AndroidManifest.xml" }
+                check(rebuilt.getInputStream(dex).use { it.readBytes().contentEquals(replacement) }) {
+                    "Patched DEX bytes do not match the replacement"
+                }
+                check(signatureFiles.none { rebuilt.getEntry(it) != null }) { "Stale v1 signature entry remains in patched APK" }
             }
-            if (outputApk.exists()) check(outputApk.delete()) { "Cannot replace previous APK output" }
-            check(temp.renameTo(outputApk)) { "Cannot finalize patched APK" }
+
+            val hadOutput = outputApk.exists()
+            if (hadOutput) check(outputApk.renameTo(backup)) { "Could not preserve previous output APK" }
+            try {
+                check(temp.renameTo(outputApk)) { "Could not finalize patched APK" }
+            } catch (t: Throwable) {
+                if (hadOutput) check(backup.renameTo(outputApk)) { "Could not restore previous output APK" }
+                throw t
+            }
+            backup.delete()
             return outputApk
         } catch (t: Throwable) {
             temp.delete()
+            if (!outputApk.exists() && backup.exists()) backup.renameTo(outputApk)
             throw t
+        } finally {
+            temp.delete()
+            if (outputApk.exists()) backup.delete()
         }
     }
 
