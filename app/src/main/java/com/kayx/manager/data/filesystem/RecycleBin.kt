@@ -3,8 +3,11 @@ package com.kayx.manager.data.filesystem
 import android.os.Environment
 import java.io.File
 
-/** Simple recycle bin in /sdcard/.KayXRecycleBin with a tab-separated index (id, original path, deleted time). */
+/** Recycle bin in shared storage with a crash-recoverable TSV index and 30-day retention. */
 object RecycleBin {
+    private const val RETENTION_DAYS = 30L
+    private const val DAY_MS = 24L * 60 * 60 * 1000
+
     data class Entry(val id: String, val original: String, val deletedAt: Long, val isDir: Boolean, val size: Long) {
         val name: String get() = original.substringAfterLast('/')
     }
@@ -22,17 +25,18 @@ object RecycleBin {
 
     private fun move(src: File, dest: File) {
         if (src.renameTo(dest)) return
-        if (src.isDirectory) check(src.copyRecursively(dest, overwrite = false)) { "Copy failed: ${src.name}" } else src.copyTo(dest, overwrite = false)
+        if (src.isDirectory) check(src.copyRecursively(dest, overwrite = false)) { "Copy failed: ${src.name}" }
+        else src.copyTo(dest, overwrite = false)
         check(src.deleteRecursively()) { "Could not remove ${src.name}" }
     }
 
     private fun rawEntries(): List<Triple<String, String, Long>> {
         val f = index()
-        if (!f.exists()) return emptyList()
+        if (!f.isFile) return emptyList()
         val root = Environment.getExternalStorageDirectory()
         val bin = dir()
-        return f.readLines().mapNotNull { l ->
-            val p = l.split('\t')
+        return runCatching { f.readLines() }.getOrDefault(emptyList()).mapNotNull { line ->
+            val p = line.split('\t')
             if (p.size != 3 || !isSafeRecycleEntryId(p[0])) return@mapNotNull null
             val deletedAt = p[2].toLongOrNull() ?: return@mapNotNull null
             if (!isSafeRecycleOriginal(p[1], root, bin)) return@mapNotNull null
@@ -40,8 +44,17 @@ object RecycleBin {
         }
     }
 
-    private fun writeIndex(list: List<Triple<String, String, Long>>) {
-        index().writeText(list.joinToString("") { "${it.first}\t${it.second}\t${it.third}\n" })
+    /** Atomic replacement prevents a crash during index writing from truncating the only index. */
+    private fun writeIndex(entries: List<Triple<String, String, Long>>) {
+        val target = index()
+        val temp = File(target.parentFile, "index.tsv.tmp")
+        temp.writeText(entries.joinToString("") { "${it.first}\t${it.second}\t${it.third}\n" })
+        runCatching { temp.setLastModified(System.currentTimeMillis()) }
+        if (target.exists() && !target.delete()) {
+            temp.delete()
+            error("Could not replace recycle-bin index")
+        }
+        check(temp.renameTo(target)) { "Could not finalize recycle-bin index" }
     }
 
     fun list(): List<Entry> {
@@ -52,6 +65,7 @@ object RecycleBin {
         }.sortedByDescending { it.deletedAt }
     }
 
+    @Synchronized
     fun trash(files: List<File>): Result<Unit> = runCatching {
         val d = dir()
         val added = ArrayList<Triple<String, String, Long>>()
@@ -62,9 +76,13 @@ object RecycleBin {
             require(!f.absolutePath.contains('\t') && !f.absolutePath.contains('\n') && !f.absolutePath.contains('\r')) {
                 "File path contains unsupported control characters"
             }
+            val deletedAt = System.currentTimeMillis()
             val id = System.nanoTime().toString(36) + "_" + f.name.take(60)
-            move(f, File(d, id))
-            added += Triple(id, f.absolutePath, System.currentTimeMillis())
+            val target = payload(id)
+            move(f, target)
+            // A crash before index commit leaves an orphan whose mtime still reflects deletion time.
+            target.setLastModified(deletedAt)
+            added += Triple(id, f.absolutePath, deletedAt)
         }
         if (added.isNotEmpty()) writeIndex(rawEntries() + added)
     }
@@ -81,18 +99,53 @@ object RecycleBin {
         dest
     }
 
+    @Synchronized
     fun purge(e: Entry): Result<Unit> = runCatching {
         payload(e.id).deleteRecursively()
         writeIndex(rawEntries().filter { it.first != e.id })
     }
 
+    /**
+     * Permanently removes entries after 30 days. Also cleans old orphan payloads left by a crash
+     * between moving a file and committing the index. Unknown/new payloads are never purged early.
+     * Call on app start/resume; operation is safe to repeat.
+     */
+    @Synchronized
+    fun purgeExpired(now: Long = System.currentTimeMillis()): Result<Int> = runCatching {
+        val bin = dir().canonicalFile
+        val entries = rawEntries()
+        val expired = entries.filter { isRecycleExpired(it.third, now) }
+        var removed = 0
+        val keep = ArrayList<Triple<String, String, Long>>()
+        val indexedIds = entries.mapTo(HashSet()) { it.first }
+
+        for (entry in entries) {
+            val item = payload(entry.first)
+            if (isRecycleExpired(entry.third, now)) {
+                if (!item.exists() || item.deleteRecursively()) removed++
+                else keep += entry
+            } else if (item.exists()) keep += entry
+            // Missing payloads are stale index records and can be dropped safely.
+        }
+
+        bin.listFiles().orEmpty().forEach { item ->
+            if (item.name == "index.tsv" || item.name == "index.tsv.tmp" || item.name in indexedIds) return@forEach
+            val canonical = runCatching { item.canonicalFile }.getOrNull() ?: return@forEach
+            if (canonical.parentFile != bin || !isSafeRecycleEntryId(item.name)) return@forEach
+            if (isRecycleExpired(item.lastModified(), now) && item.deleteRecursively()) removed++
+        }
+
+        if (keep.size != entries.size || expired.isNotEmpty()) writeIndex(keep)
+        removed
+    }
+
+    @Synchronized
     fun empty(): Result<Unit> = runCatching {
         dir().listFiles()?.forEach { if (it.name != "index.tsv") it.deleteRecursively() }
         index().delete()
         Unit
     }
 }
-
 
 /** Rejects index-controlled names that could escape the recycle-bin directory. */
 internal fun isSafeRecycleEntryId(id: String): Boolean {
@@ -101,6 +154,13 @@ internal fun isSafeRecycleEntryId(id: String): Boolean {
         id.substring(0, separator).all { it in '0'..'9' || it in 'a'..'z' } &&
         !id.contains('/') && !id.contains('\\') &&
         !id.contains('\t') && !id.contains('\n') && !id.contains('\r')
+}
+
+internal fun isRecycleExpired(deletedAt: Long, now: Long, retentionDays: Long = 30L): Boolean {
+    if (deletedAt <= 0L || deletedAt > now || retentionDays <= 0L) return false
+    val age = now - deletedAt
+    val retention = runCatching { Math.multiplyExact(retentionDays, 24L * 60 * 60 * 1000) }.getOrDefault(Long.MAX_VALUE)
+    return age >= retention
 }
 
 /** Recycle-bin originals must be real paths inside shared storage, never the bin itself. */
