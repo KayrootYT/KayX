@@ -144,7 +144,8 @@ class MainActivity : ComponentActivity() {
                     } else if (p != null) {
                         FileBrowserScreen(p, onExit = {
                             if (privateSessionActive.value && PrivateSpace.isUnlocked()) {
-                                PrivateSpace.lock(this@MainActivity)
+                                Thread({ PrivateSpace.lock(this@MainActivity) }, "kayx-private-vault-exit-lock")
+                                    .apply { isDaemon = true; start() }
                             }
                             privateSessionActive.value = false
                             path = null
