@@ -83,7 +83,7 @@ class FileSearchEngine(
         } else null
 
         val rootPath = runCatching { root.canonicalPath }.getOrElse { root.absolutePath }
-        val cacheKey = "$rootPath|hidden=${request.showHidden}"
+        val cacheKey = "$rootPath|hidden=${request.showHidden}|depth=${request.maxDepth.coerceIn(1, 128)}"
         val now = System.currentTimeMillis()
         val index = synchronized(lock) { indexes[cacheKey]?.takeIf { now - it.createdAt <= indexTtlMs } }
             ?: buildIndex(root, request.showHidden, request.maxDepth.coerceIn(1, 128), rootPath).also {
