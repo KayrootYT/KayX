@@ -153,6 +153,7 @@ private fun DualHeader(
     s: BrowserState, vm: FileBrowserViewModel,
     onExit: () -> Unit, onSettings: () -> Unit, onOpenFile: (String, Tool) -> Unit, onDialog: (Dlg) -> Unit
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
     val p = LocalPalette.current
     val activePath = if (s.activePane == 1) s.secondaryDir else s.dir
     val shown = if (s.activePane == 1) s.secondaryItems else s.items
@@ -507,7 +508,6 @@ private fun ActionPopup(
     onDialog: (Dlg) -> Unit, onOpenWith: (FileItem) -> Unit, onProperties: (FileItem) -> Unit
 ) {
     val ctx = LocalContext.current
-    val keyboardController = LocalSoftwareKeyboardController.current
     val p = LocalPalette.current
     val byPath = remember(s.items, s.secondaryItems) { (s.items + s.secondaryItems).associateBy { it.path } }
     val sel = s.selected
