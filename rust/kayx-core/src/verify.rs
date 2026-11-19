@@ -70,8 +70,8 @@ mod tests {
     fn empty_files_are_equal() {
         let a = temp("empty-a");
         let b = temp("empty-b");
-        fs::write(&a, []).unwrap();
-        fs::write(&b, []).unwrap();
+        fs::write(&a, b"").unwrap();
+        fs::write(&b, b"").unwrap();
         assert!(files_equal(&a, &b).unwrap());
         fs::remove_file(a).unwrap();
         fs::remove_file(b).unwrap();
