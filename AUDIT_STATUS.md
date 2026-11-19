@@ -21,7 +21,7 @@ This status separates code changes from validation. A GitHub CI pass does not re
 - Binary `head` previews are encoded before the text transport and decoded losslessly in the caller.
 
 ### Recycle Bin
-- Added 30-day expiry calculation and automatic purge on every app foreground/resume.
+- Added 30-day expiry calculation, daily unique WorkManager purge with retry/backoff, and an app-resume fallback.
 - Added expiry countdown to the Recycle Bin UI.
 - Index writes are staged and synced; previous index is recoverable after interrupted replacement.
 - Trash intent is journaled before moving the source; missing payload records are cleaned, and old unindexed payloads are purged only after the retention window.
