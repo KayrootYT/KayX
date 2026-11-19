@@ -51,3 +51,13 @@ This status separates code changes from validation. A GitHub CI pass does not re
 - Existing file-browser/search changes.
 
 No release-ready claim is made until the fresh CI run and physical-device tests pass.
+
+
+## Static scanner findings reviewed
+
+- MD5/SHA-1 in `ChecksumRepository` are compatibility outputs for user-requested legacy checksums only; they are not used for authentication or duplicate proof.
+- `PBKDF2WithHmacSHA1` remains only to verify an existing legacy PIN before migrating the stored verifier to PBKDF2-HMAC-SHA256.
+- PackageInstaller's install-status PendingIntent is intentionally mutable on Android 12+ because the package installer fills status extras into the callback Intent.
+- Cleartext networking is limited to `127.0.0.1` and `localhost` for the in-app local preview server.
+- MobSF's task-hijacking warning must be cross-checked against the built/merged manifest: Gradle sets targetSdk 34 and MainActivity has an empty taskAffinity. Confirm this in the produced APK before release.
+- Informational MobSF checks for screenshots, root detection, TLS pinning and certificate transparency remain product-hardening decisions; they are not treated as build blockers for this offline file manager.
