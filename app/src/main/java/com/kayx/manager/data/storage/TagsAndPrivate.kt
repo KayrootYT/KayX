@@ -63,10 +63,14 @@ object PrivateSpace {
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("kayx_private", Context.MODE_PRIVATE)
 
     /** Plaintext staging is populated only during an unlocked session and wiped when the app backgrounds. */
-    fun dir(ctx: Context): File = File(ctx.applicationContext.filesDir, "private_space").apply { mkdirs() }
+    private fun stagingDir(ctx: Context): File = File(ctx.applicationContext.filesDir, "private_space").apply { mkdirs() }
+    fun dir(ctx: Context): File {
+        check(isUnlocked()) { "Unlock Private space before accessing its files" }
+        return stagingDir(ctx)
+    }
     fun hasPin(ctx: Context) = !prefs(ctx).getString("hash", null).isNullOrEmpty()
     fun isUnlocked(): Boolean = PrivateSpaceVault.isUnlocked()
-    fun fileCount(ctx: Context): Int = dir(ctx).walkTopDown().count { it.isFile }
+    fun fileCount(ctx: Context): Int = if (isUnlocked()) stagingDir(ctx).walkTopDown().count { it.isFile } else PrivateSpaceVault.fileCount(ctx)
 
     fun setPin(ctx: Context, pin: String): Result<Unit> = runCatching {
         require(pin.length in 4..8 && pin.all(Char::isDigit)) { "PIN must contain 4–8 digits" }
@@ -80,7 +84,7 @@ object PrivateSpace {
             .putInt("iterations", PIN_ITERATIONS)
             .commit()) { "Could not save private-space PIN" }
         try {
-            PrivateSpaceVault.initialize(ctx.applicationContext, pin, dir(ctx)).getOrThrow()
+            PrivateSpaceVault.initialize(ctx.applicationContext, pin, stagingDir(ctx)).getOrThrow()
         } catch (t: Throwable) {
             p.edit().remove("scheme").remove("salt").remove("hash").remove("iterations")
                 .remove("vault_salt").remove("vault_wrapped_key").remove("vault_kdf_iterations").remove("vault_cipher").commit()
@@ -121,14 +125,14 @@ object PrivateSpace {
                 // Existing pre-vault installs are encrypted on first successful unlock.
                 PrivateSpaceVault.initialize(ctx.applicationContext, pin, dir(ctx)).getOrThrow()
             } else {
-                PrivateSpaceVault.unlock(ctx.applicationContext, pin, dir(ctx)).getOrThrow()
+                PrivateSpaceVault.unlock(ctx.applicationContext, pin, stagingDir(ctx)).getOrThrow()
             }
             true
         }.getOrDefault(false)
     }
 
     /** Persist edits, authenticate the encrypted copy, then remove plaintext staging data. */
-    fun lock(ctx: Context): Result<Unit> = PrivateSpaceVault.lock(ctx.applicationContext, dir(ctx))
+    fun lock(ctx: Context): Result<Unit> = PrivateSpaceVault.lock(ctx.applicationContext, stagingDir(ctx))
 }
 
 /** Small JVM-only helper so PIN derivation and constant-time comparison can be tested. */
