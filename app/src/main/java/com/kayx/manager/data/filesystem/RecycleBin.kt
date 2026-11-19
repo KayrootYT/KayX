@@ -134,12 +134,11 @@ object RecycleBin {
      */
     @Synchronized
     fun purgeExpired(now: Long = System.currentTimeMillis()): Result<Int> = runCatching {
-        val bin = dir().canonicalFile
+        dir() // Ensure the recycle-bin directory exists before reading the index.
         val entries = rawEntries()
         val expired = entries.filter { isRecycleExpired(it.third, now) }
         var removed = 0
         val keep = ArrayList<Triple<String, String, Long>>()
-        val indexedIds = entries.mapTo(HashSet()) { it.first }
 
         for (entry in entries) {
             val item = payload(entry.first)
@@ -150,13 +149,8 @@ object RecycleBin {
             // Missing payloads are stale index records and can be dropped safely.
         }
 
-        bin.listFiles().orEmpty().forEach { item ->
-            if (item.name in setOf("index.tsv", "index.tsv.tmp", "index.tsv.bak") || item.name in indexedIds) return@forEach
-            val canonical = runCatching { item.canonicalFile }.getOrNull() ?: return@forEach
-            if (canonical.parentFile != bin || !isSafeRecycleEntryId(item.name)) return@forEach
-            if (isRecycleExpired(item.lastModified(), now) && item.deleteRecursively()) removed++
-        }
-
+        // Unindexed legacy payloads have no trustworthy deletion timestamp (mtime may be the
+        // original file's age). Keep them for manual recovery instead of risking early data loss.
         if (keep.size != entries.size || expired.isNotEmpty()) writeIndex(keep)
         removed
     }
