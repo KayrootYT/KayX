@@ -44,7 +44,6 @@ object RootShell {
         errThread.start()
         return try {
             if (!process.waitFor(timeout, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                process.descendants().forEach { runCatching { it.destroyForcibly() } }
                 process.destroyForcibly()
                 outThread.join(500)
                 errThread.join(500)
@@ -56,7 +55,6 @@ object RootShell {
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
-            process.descendants().forEach { runCatching { it.destroyForcibly() } }
             process.destroyForcibly()
             Res(-2, stdout.toString(Charsets.UTF_8.name()), "Interrupted")
         } finally {
@@ -95,16 +93,21 @@ object RootShell {
         }.toList().sortedWith(compareBy({ !it.dir }, { it.name.lowercase() }))
     }
 
+    /** Binary-safe bounded preview: encode bytes before the shell/Binder text transport. */
     fun head(path: String, bytes: Int = 65_536): Res {
-        require(bytes in 1..1_048_576) { "Read size must be between 1 byte and 1 MiB" }
-        return run("head -c $bytes -- ${q(path)}", 10_000)
+        require(bytes in 1..128 * 1024) { "Read size must be between 1 byte and 128 KiB" }
+        val result = run("head -c $bytes -- ${q(path)} | base64", 10_000)
+        if (result.code != 0) return result
+        return runCatching {
+            val raw = android.util.Base64.decode(result.out, android.util.Base64.DEFAULT).copyOf(bytes.coerceAtMost(android.util.Base64.decode(result.out, android.util.Base64.DEFAULT).size))
+            result.copy(out = String(raw, Charsets.ISO_8859_1))
+        }.getOrElse { Res(-1, "", "Could not decode binary preview: ${it.message}") }
     }
 
     /** Refuse catastrophic roots and critical mount roots; paths are still quoted and passed after --. */
     fun delete(path: String): Res {
         val target = runCatching { File(path).canonicalFile }.getOrElse { return Res(-1, "", "Invalid path") }
-        val protected = setOf("/", "/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex")
-        if (target.path in protected || target.path.isBlank()) return Res(-1, "", "Refusing to recursively delete a protected system root")
+        if (!isSafeRecursiveDeleteTarget(target.path)) return Res(-1, "", "Refusing to recursively delete a protected system root")
         return run("rm -rf -- ${q(target.path)}")
     }
 
@@ -115,4 +118,12 @@ object RootShell {
 
     fun copyOut(path: String, destDir: String): Res =
         run("mkdir -p -- ${q(destDir)} && cp -r -- ${q(path)} ${q(destDir)}/")
+}
+
+
+/** Pure path guard shared with JVM tests. */
+internal fun isSafeRecursiveDeleteTarget(path: String): Boolean {
+    val target = runCatching { File(path).canonicalFile.path }.getOrNull() ?: return false
+    val protected = setOf("/", "/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex")
+    return target.isNotBlank() && target !in protected
 }
