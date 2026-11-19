@@ -65,19 +65,25 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             .navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
-        // Compact manager-style toolbar
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            GlassCard(shape = RoundedCornerShape(13.dp), modifier = Modifier.size(42.dp)) {
-                Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Icon(Icons.Default.FolderCopy, null, tint = Accent, modifier = Modifier.size(23.dp))
+        // Reference-matched search toolbar with quick scan and settings actions.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GlassCard(
+                Modifier.weight(1f).height(54.dp),
+                shape = RoundedCornerShape(30.dp),
+                onClick = onSearch
+            ) {
+                Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(23.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Search", Modifier.weight(1f), color = TextMuted, style = MaterialTheme.typography.bodyLarge)
                 }
             }
-            Spacer(Modifier.width(11.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text("KayX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("File manager", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+            IconButton(onClick = { onTool(Tool.CHECKSUM) }) {
+                Icon(Icons.Default.QrCodeScanner, "Scan", tint = Fg, modifier = Modifier.size(24.dp))
             }
-            IconButton(onClick = { onOpen(SettingsStore.homePath.ifEmpty { root.absolutePath }) }) { Icon(Icons.Default.FolderOpen, "Browse files", tint = Fg) }
+            IconButton(onClick = onSettings) {
+                Icon(Icons.Default.MoreVert, "More options", tint = Fg, modifier = Modifier.size(24.dp))
+            }
         }
 
         // Full-screen local search entry, styled like a modern system file manager.
