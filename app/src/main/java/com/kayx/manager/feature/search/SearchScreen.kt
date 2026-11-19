@@ -227,7 +227,7 @@ fun SearchScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(searchFileIcon(file.name, file.isDirectory), null,
-                                tint = if (exists) Accent else TextMuted.copy(.35f), modifier = Modifier.size(30.dp))
+                                tint = if (exists) searchFileTint(file.name, file.isDirectory) else TextMuted.copy(.35f), modifier = Modifier.size(30.dp))
                             Spacer(Modifier.width(13.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(if (exists) file.name else "File expired", color = if (exists) Fg else TextMuted.copy(.45f),
@@ -337,7 +337,7 @@ fun SearchScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(searchFileIcon(item.name, item.isDir), null,
-                            tint = if (item.isDir) Color(0xFFFFC247) else Accent, modifier = Modifier.size(39.dp))
+                            tint = searchFileTint(item.name, item.isDir), modifier = Modifier.size(39.dp))
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(item.name, color = Fg, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -377,10 +377,22 @@ private fun formatSearchSize(size: Long): String {
     return "%.1f %s".format(Locale.US, value, units[index])
 }
 
+private fun searchFileTint(name: String, directory: Boolean): Color {
+    if (directory) return Color(0xFFFFC247)
+    return when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
+        "zip", "7z", "rar", "tar", "gz", "bz2", "xz", "apks", "xapk", "apkm" -> Color(0xFFE0B82F)
+        "apk" -> Color(0xFF36C982)
+        "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic" -> Color(0xFF4A90F5)
+        "mp3", "m4a", "wav", "ogg", "opus", "flac", "aac" -> Color(0xFF8995AA)
+        "mp4", "mkv", "webm", "mov", "avi", "3gp" -> Color(0xFFEF5B75)
+        else -> Accent
+    }
+}
+
 private fun searchFileIcon(name: String, directory: Boolean): androidx.compose.ui.graphics.vector.ImageVector {
     if (directory) return Icons.Default.Folder
     return when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
-        "zip", "7z", "rar", "tar", "gz", "bz2", "xz", "apks", "xapk", "apkm" -> Icons.Default.Archive
+        "zip", "7z", "rar", "tar", "gz", "bz2", "xz", "apks", "xapk", "apkm" -> Icons.Default.FolderZip
         "apk" -> Icons.Default.Android
         "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic" -> Icons.Default.Image
         "mp3", "m4a", "wav", "ogg", "opus", "flac", "aac" -> Icons.Default.AudioFile
