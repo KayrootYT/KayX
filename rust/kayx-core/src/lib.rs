@@ -73,10 +73,19 @@ pub extern "system" fn Java_com_kayx_manager_core_NativeCore_scanTree<'l>(
     mut env: JNIEnv<'l>, _c: JClass<'l>, root: JString<'l>,
 ) -> jobjectArray {
     let r = jstr(&mut env, &root).and_then(|p| guard(|| {
+        if p.len() > 4096 { return None; }
         let root = Path::new(&p);
         if !root.is_dir() { return None; }
-        Some(scan::scan_tree(root).into_iter()
-            .map(|r| format!("{}\t{}\t{}", r.size, r.mtime_ms, r.path)).collect::<Vec<_>>())
+        let mut rows = Vec::new();
+        let mut total = 0usize;
+        for record in scan::scan_tree(root) {
+            if record.path.len() > 4096 || record.path.chars().any(|ch| matches!(ch, '\t' | '\n' | '\r')) { continue; }
+            let row = format!("{}\t{}\t{}", record.size, record.mtime_ms, record.path);
+            total = total.checked_add(row.len())?;
+            if total > 32 * 1024 * 1024 { break; }
+            rows.push(row);
+        }
+        Some(rows)
     }));
     out_array(&mut env, r)
 }
