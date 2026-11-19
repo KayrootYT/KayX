@@ -55,7 +55,13 @@ class MainActivity : ComponentActivity() {
 
     private fun requestSafTree() { safTree.launch(null) }
 
-    override fun onResume() { super.onResume(); granted.value = hasAccess() }
+    override fun onResume() {
+        super.onResume()
+        granted.value = hasAccess()
+        // Retention is enforced whenever the app returns to foreground; failures are retried next resume.
+        Thread({ com.kayx.manager.data.filesystem.RecycleBin.purgeExpired() }, "kayx-recycle-retention")
+            .apply { isDaemon = true; start() }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
