@@ -12,18 +12,9 @@ import java.util.LinkedHashMap
 
 class FileRepository {
 
-    // Reuse a directory index while the user edits a query. A short TTL keeps results fresh
-    // when files are changed by other apps; mutations in KayX explicitly invalidate it.
-    private data class SearchIndex(val createdAt: Long, val items: List<FileItem>)
-    private val searchIndexes = object : LinkedHashMap<String, SearchIndex>(4, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SearchIndex>?): Boolean = size > 2
-    }
-    private val searchIndexLock = Any()
-    private val searchIndexTtlMs = 15_000L
-    private val searchIndexMaxItems = 50_000
-    private val searchIndexMaxDepth = 20
+    private val searchEngine = FileSearchEngine()
 
-    fun invalidateSearchCache() = synchronized(searchIndexLock) { searchIndexes.clear() }
+    fun invalidateSearchCache() = searchEngine.invalidate()
 
     suspend fun list(dir: File, showHidden: Boolean = false, sort: SortBy = SortBy.NAME): List<FileItem> = withContext(Dispatchers.IO) {
         if (!dir.exists() || !dir.isDirectory) return@withContext emptyList()
@@ -60,87 +51,38 @@ class FileRepository {
             .toList()
     }
 
+
     suspend fun search(
         dir: File, query: String, showHidden: Boolean = false,
-        mode: SearchMode = SearchMode.CONTAINS, maxAgeMs: Long = 0L
-    ): List<FileItem> = withContext(Dispatchers.IO) {
-        if (!dir.exists() || !dir.isDirectory || query.isBlank()) return@withContext emptyList()
-        val needle = query.trim()
-        if (needle.isEmpty()) return@withContext emptyList()
-        // File-manager friendly extension search: ".mp3" and "*.mp3" match files by suffix,
-        // not folders whose names happen to contain the extension text.
-        val extensionQuery = needle.removePrefix("*").takeIf { it.startsWith(".") && it.length > 1 }
-        val globRegex = if (extensionQuery == null && ('*' in needle || '?' in needle)) {
-            Regex("^" + needle.map { ch -> when (ch) { '*' -> ".*"; '?' -> "."; else -> Regex.escape(ch.toString()) } }.joinToString("") + "$", RegexOption.IGNORE_CASE)
-        } else null
-        val regex = if (mode == SearchMode.REGEX && extensionQuery == null && globRegex == null)
-            runCatching { Regex(needle, RegexOption.IGNORE_CASE) }.getOrNull() ?: return@withContext emptyList()
-        else null
-        val since = if (maxAgeMs > 0) System.currentTimeMillis() - maxAgeMs else 0L
-        val key = dir.absolutePath + "|hidden=$showHidden"
-        val now = System.currentTimeMillis()
-        val cached = synchronized(searchIndexLock) { searchIndexes[key]?.takeIf { now - it.createdAt < searchIndexTtlMs } }
-        val index = cached?.items ?: buildSearchIndex(dir, showHidden).also { built ->
-            synchronized(searchIndexLock) { searchIndexes[key] = SearchIndex(System.currentTimeMillis(), built) }
-        }
+        mode: SearchMode = SearchMode.CONTAINS, maxAgeMs: Long = 0L,
+        allowedExtensions: Set<String> = emptySet(), sort: SortBy = SortBy.NAME
+    ): List<FileItem> = searchEngine.search(
+        FileSearchRequest(
+            root = dir,
+            query = query,
+            showHidden = showHidden,
+            mode = mode,
+            modifiedAfter = if (maxAgeMs > 0L) System.currentTimeMillis() - maxAgeMs else 0L,
+            allowedExtensions = allowedExtensions,
+            sortBy = sort
+        )
+    ).items
 
-        index.asSequence()
-            .filter { since == 0L || it.modified >= since }
-            .filter {
-                when {
-                    extensionQuery != null -> !it.isDir && it.name.endsWith(extensionQuery, ignoreCase = true)
-                    globRegex != null -> globRegex.matches(it.name)
-                    mode == SearchMode.CONTAINS -> it.name.contains(needle, ignoreCase = true)
-                    mode == SearchMode.EXACT -> it.name.equals(needle, ignoreCase = true)
-                    else -> regex!!.containsMatchIn(it.name)
-                }
-            }
-            .sortedWith { a, b ->
-                if (a.isDir != b.isDir) if (a.isDir) -1 else 1
-                else a.name.compareTo(b.name, ignoreCase = true)
-            }
-            .toList()
-    }
-
-    /** One cancellable breadth-first scan builds a reusable index for all subsequent queries. */
-    private suspend fun buildSearchIndex(root: File, showHidden: Boolean): List<FileItem> {
-        val out = ArrayList<FileItem>(2048)
-        val pending = ArrayDeque<File>()
-        pending.add(root)
-        val visitedDirectories = HashSet<String>()
-        runCatching { visitedDirectories.add(root.canonicalPath) }
-        var visited = 0
-        while (pending.isNotEmpty()) {
-            currentCoroutineContext().ensureActive()
-            val dir = pending.removeFirst()
-            val depth = runCatching {
-                dir.canonicalPath.removePrefix(root.canonicalPath).trim('/').split('/').count { it.isNotBlank() }
-            }.getOrDefault(searchIndexMaxDepth)
-            if (depth > searchIndexMaxDepth) continue
-            val children = dir.listFiles() ?: continue
-            for (file in children) {
-                if (out.size >= searchIndexMaxItems) break
-                if (++visited % 128 == 0) currentCoroutineContext().ensureActive()
-                if (!showHidden && file.isHidden) continue
-                // Avoid traversing Android's virtual kernel filesystems when the user searches from '/'.
-                if (dir.absolutePath == File.separator && file.name in setOf("proc", "sys", "dev", "acct")) continue
-                val isDir = file.isDirectory
-                if (isDir) {
-                    val canonical = runCatching { file.canonicalPath }.getOrNull()
-                    if (canonical == null || !visitedDirectories.add(canonical)) continue
-                }
-                out += FileItem(
-                    path = file.absolutePath,
-                    name = file.name,
-                    isDir = isDir,
-                    size = if (isDir) 0L else file.length(),
-                    modified = file.lastModified(),
-                    hidden = file.isHidden
-                )
-                if (isDir) pending.add(file)
-            }
-        }
-        return out
+    suspend fun searchContents(
+        dir: File, query: String, showHidden: Boolean = false, maxResults: Int = 300,
+        isActive: () -> Boolean = { true }
+    ): List<FileItem> {
+        if (!isActive()) return emptyList()
+        return searchEngine.searchContents(
+            FileSearchRequest(
+                root = dir,
+                query = query,
+                showHidden = showHidden,
+                includeDirectories = false,
+                maxResults = maxResults
+            ),
+            isActive = isActive
+        ).items
     }
 
     suspend fun createFolder(parent: File, name: String): Result<Unit> = withContext(Dispatchers.IO) {

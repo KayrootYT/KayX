@@ -12,6 +12,7 @@ import com.kayx.manager.data.filesystem.ExternalOps
 import com.kayx.manager.data.filesystem.RecycleBin
 import com.kayx.manager.data.filesystem.FileOps
 import com.kayx.manager.data.filesystem.FileRepository
+import com.kayx.manager.data.filesystem.FileSearchCategory
 import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.domain.model.SortBy
@@ -47,6 +48,7 @@ data class BrowserState(
     val dualPane: Boolean = false,
     val activePane: Int = 0,
     val grep: Boolean = false,
+    val searchCategory: FileSearchCategory = FileSearchCategory.ALL,
     val conflicts: List<String> = emptyList(),
     val transferProgress: TransferProgress? = null,
     val transferControl: FileOps.TransferControl? = null,
@@ -277,8 +279,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                 val scope = this
                 suspend fun load(dir: String, pane: Int): List<FileItem> =
                     if (searchActive && searchPane == pane) {
-                        if (snapshot.grep) FileOps.grep(File(dir), snapshot.query, snapshot.showHidden, isActive = { scope.isActive })
-                        else repo.search(File(dir), snapshot.query, snapshot.showHidden, SettingsStore.searchMode, SettingsStore.searchAgeMs)
+                        if (snapshot.grep) repo.searchContents(File(dir), snapshot.query, snapshot.showHidden, isActive = { scope.isActive })
+                        else repo.search(File(dir), snapshot.query, snapshot.showHidden, SettingsStore.searchMode, SettingsStore.searchAgeMs, snapshot.searchCategory.extensions, snapshot.sort)
                     } else repo.list(File(dir), snapshot.showHidden, snapshot.sort)
                 val mainTask = async(Dispatchers.IO) { load(snapshot.dir, 0) }
                 val secondaryTask = if (snapshot.dualPane) async(Dispatchers.IO) { load(snapshot.secondaryDir, 1) } else null
@@ -291,7 +293,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             _s.update { current ->
                 if (current.dir != snapshot.dir || current.secondaryDir != snapshot.secondaryDir ||
                     current.query != snapshot.query || current.searching != snapshot.searching ||
-                    current.showHidden != snapshot.showHidden || current.grep != snapshot.grep || current.sort != snapshot.sort || current.dualPane != snapshot.dualPane) current
+                    current.showHidden != snapshot.showHidden || current.grep != snapshot.grep || current.searchCategory != snapshot.searchCategory || current.sort != snapshot.sort || current.dualPane != snapshot.dualPane) current
                 else current.copy(items = main, secondaryItems = secondary, loading = false)
             }
         }
@@ -319,7 +321,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         com.kayx.manager.data.storage.StorageScanner.invalidate()
     }
 
-    fun toggleSearch() { _s.update { it.copy(searching = !it.searching, query = "") }; reload() }
+    fun toggleSearch() { _s.update { it.copy(searching = !it.searching, query = "", searchCategory = FileSearchCategory.ALL) }; reload() }
+    fun setSearchCategory(category: FileSearchCategory) { _s.update { it.copy(searchCategory = category) }; reload() }
     fun setQuery(q: String) { _s.update { it.copy(query = q) }; reload() }
     fun toggleHidden() { _s.update { it.copy(showHidden = !it.showHidden) }; reload() }
     fun setSort(s: SortBy) { _s.update { it.copy(sort = s) }; reload() }

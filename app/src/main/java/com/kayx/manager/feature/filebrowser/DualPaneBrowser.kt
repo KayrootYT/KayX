@@ -23,6 +23,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -149,6 +153,7 @@ private fun DualHeader(
     s: BrowserState, vm: FileBrowserViewModel,
     onExit: () -> Unit, onSettings: () -> Unit, onOpenFile: (String, Tool) -> Unit, onDialog: (Dlg) -> Unit
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
     val p = LocalPalette.current
     val activePath = if (s.activePane == 1) s.secondaryDir else s.dir
     val shown = if (s.activePane == 1) s.secondaryItems else s.items
@@ -178,8 +183,17 @@ private fun DualHeader(
                 }
             }
             if (s.searching) TextField(
-                s.query, vm::setQuery, Modifier.weight(1f), singleLine = true,
+                value = s.query,
+                onValueChange = vm::setQuery,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
                 placeholder = { Text(if (s.grep) "Search text inside files" else "Search in folder") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search files") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    vm.reload()
+                    keyboardController?.hide()
+                }),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent
