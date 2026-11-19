@@ -2,8 +2,11 @@ package com.kayx.manager.data.advanced
 
 import com.kayx.manager.data.settings.PrivilegedBackend
 import com.kayx.manager.data.settings.SettingsStore
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.InputStream
 
-/** Runs commands through `su -c` (Root backend) or a Shizuku user service (Shizuku backend). Every path is single-quoted. */
+/** User-invoked commands through su or the explicitly granted Shizuku backend. */
 object RootShell {
     data class Res(val code: Int, val out: String, val err: String)
     data class Node(
@@ -11,25 +14,62 @@ object RootShell {
         val owner: String, val size: Long, val date: String, val target: String?
     )
 
+    private const val OUTPUT_LIMIT = 512 * 1024
+
+    private fun drain(stream: InputStream, target: ByteArrayOutputStream) {
+        val buffer = ByteArray(8192)
+        stream.use { input ->
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                synchronized(target) {
+                    if (target.size() < OUTPUT_LIMIT) target.write(buffer, 0, minOf(n, OUTPUT_LIMIT - target.size()))
+                }
+            }
+        }
+    }
+
     fun run(cmd: String, timeoutMs: Long = 20_000): Res {
-        if (SettingsStore.backend == PrivilegedBackend.SHIZUKU) return ShizukuShell.run(cmd, timeoutMs)
-        val p = try { ProcessBuilder("su", "-c", cmd).start() } catch (e: Exception) { return Res(-1, "", e.message ?: "su is not available") }
-        var out = ""
-        var err = ""
-        val t1 = Thread { out = runCatching { p.inputStream.bufferedReader().readText() }.getOrDefault("") }
-        val t2 = Thread { err = runCatching { p.errorStream.bufferedReader().readText() }.getOrDefault("") }
-        t1.start(); t2.start()
-        t1.join(timeoutMs); t2.join(1_000)
-        if (t1.isAlive) { p.destroy(); return Res(-2, out, "Timed out") }
-        val code = runCatching { p.waitFor() }.getOrDefault(-1)
-        return Res(code, out, err)
+        require(cmd.isNotBlank()) { "Command is empty" }
+        val timeout = timeoutMs.coerceIn(100L, 120_000L)
+        if (SettingsStore.backend == PrivilegedBackend.SHIZUKU) return ShizukuShell.run(cmd, timeout)
+        val process = try { ProcessBuilder("su", "-c", cmd).start() }
+        catch (e: Exception) { return Res(-1, "", e.message ?: "su is not available") }
+        runCatching { process.outputStream.close() }
+        val stdout = ByteArrayOutputStream()
+        val stderr = ByteArrayOutputStream()
+        val outThread = Thread({ runCatching { drain(process.inputStream, stdout) } }, "kayx-root-stdout").apply { isDaemon = true }
+        val errThread = Thread({ runCatching { drain(process.errorStream, stderr) } }, "kayx-root-stderr").apply { isDaemon = true }
+        outThread.start()
+        errThread.start()
+        return try {
+            if (!process.waitFor(timeout, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                process.descendants().forEach { runCatching { it.destroyForcibly() } }
+                process.destroyForcibly()
+                outThread.join(500)
+                errThread.join(500)
+                Res(-2, stdout.toString(Charsets.UTF_8.name()), "Timed out after ${timeout}ms")
+            } else {
+                outThread.join(1_000)
+                errThread.join(1_000)
+                Res(process.exitValue(), stdout.toString(Charsets.UTF_8.name()), stderr.toString(Charsets.UTF_8.name()))
+            }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            process.descendants().forEach { runCatching { it.destroyForcibly() } }
+            process.destroyForcibly()
+            Res(-2, stdout.toString(Charsets.UTF_8.name()), "Interrupted")
+        } finally {
+            runCatching { process.inputStream.close() }
+            runCatching { process.errorStream.close() }
+        }
     }
 
     fun q(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
-    /** True when the selected backend works: uid 0 for Root, or any working shell (uid 2000 or 0) for Shizuku. */
-    fun isRoot(): Boolean = run("id").let {
-        it.code == 0 && (SettingsStore.backend == PrivilegedBackend.SHIZUKU || it.out.contains("uid=0"))
+    /** True when the selected backend responds; Root mode additionally requires uid 0. */
+    fun isRoot(): Boolean = run("id", 5_000).let {
+        it.code == 0 && (SettingsStore.backend == PrivilegedBackend.SHIZUKU || Regex("uid=0(?:\\(|,)").containsMatchIn(it.out))
     }
 
     private val lsLine = Regex(
@@ -37,7 +77,7 @@ object RootShell {
     )
 
     fun list(path: String): Result<List<Node>> = runCatching {
-        val r = run("ls -lA ${q(path)}")
+        val r = run("ls -lA -- ${q(path)}")
         if (r.code != 0 && r.out.isBlank()) error(r.err.trim().ifBlank { "Cannot list $path (exit ${r.code})" })
         r.out.lineSequence().mapNotNull { line ->
             val m = lsLine.find(line.trimEnd()) ?: return@mapNotNull null
@@ -55,11 +95,24 @@ object RootShell {
         }.toList().sortedWith(compareBy({ !it.dir }, { it.name.lowercase() }))
     }
 
-    fun head(path: String, bytes: Int = 65_536): Res = run("head -c $bytes ${q(path)}")
-    fun delete(path: String): Res = run("rm -rf ${q(path)}")
+    fun head(path: String, bytes: Int = 65_536): Res {
+        require(bytes in 1..1_048_576) { "Read size must be between 1 byte and 1 MiB" }
+        return run("head -c $bytes -- ${q(path)}", 10_000)
+    }
+
+    /** Refuse catastrophic roots and critical mount roots; paths are still quoted and passed after --. */
+    fun delete(path: String): Res {
+        val target = runCatching { File(path).canonicalFile }.getOrElse { return Res(-1, "", "Invalid path") }
+        val protected = setOf("/", "/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex")
+        if (target.path in protected || target.path.isBlank()) return Res(-1, "", "Refusing to recursively delete a protected system root")
+        return run("rm -rf -- ${q(target.path)}")
+    }
+
     fun chmod(mode: String, path: String): Res {
         require(Regex("^[0-7]{3,4}$").matches(mode)) { "Mode must be 3-4 octal digits, e.g. 644" }
-        return run("chmod $mode ${q(path)}")
+        return run("chmod $mode -- ${q(path)}")
     }
-    fun copyOut(path: String, destDir: String): Res = run("mkdir -p ${q(destDir)} && cp -r ${q(path)} ${q(destDir)}/")
+
+    fun copyOut(path: String, destDir: String): Res =
+        run("mkdir -p -- ${q(destDir)} && cp -r -- ${q(path)} ${q(destDir)}/")
 }
