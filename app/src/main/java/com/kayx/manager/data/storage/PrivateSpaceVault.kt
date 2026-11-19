@@ -191,10 +191,10 @@ internal object PrivateSpaceVault {
         try {
             FileInputStream(input).use { src ->
                 val magic = ByteArray(MAGIC.length)
-                src.readFully(magic)
+                java.io.DataInputStream(src).readFully(magic)
                 require(String(magic, Charsets.US_ASCII) == MAGIC) { "Invalid encrypted file header" }
                 val iv = ByteArray(IV_BYTES)
-                src.readFully(iv)
+                java.io.DataInputStream(src).readFully(iv)
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                 cipher.init(Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
                 FileOutputStream(temp).use { dst ->
