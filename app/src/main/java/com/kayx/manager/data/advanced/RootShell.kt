@@ -99,7 +99,8 @@ object RootShell {
         val result = run("head -c $bytes -- ${q(path)} | base64", 10_000)
         if (result.code != 0) return result
         return runCatching {
-            val raw = android.util.Base64.decode(result.out, android.util.Base64.DEFAULT).copyOf(bytes.coerceAtMost(android.util.Base64.decode(result.out, android.util.Base64.DEFAULT).size))
+            val decoded = android.util.Base64.decode(result.out, android.util.Base64.DEFAULT)
+            val raw = decoded.copyOf(minOf(bytes, decoded.size))
             result.copy(out = String(raw, Charsets.ISO_8859_1))
         }.getOrElse { Res(-1, "", "Could not decode binary preview: ${it.message}") }
     }
