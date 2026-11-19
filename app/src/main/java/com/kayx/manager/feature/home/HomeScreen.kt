@@ -56,7 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -> Unit = {}, onPush: (String, Tool) -> Unit = { _, _ -> }, onOpen: (String) -> Unit) {
+fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -> Unit = {}, onPush: (String, Tool) -> Unit = { _, _ -> }, onOpen: (String) -> Unit, onSearch: () -> Unit = {}) {
     val ctx = LocalContext.current
     val root = Environment.getExternalStorageDirectory()
 
@@ -78,6 +78,20 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                 Text("File manager", style = MaterialTheme.typography.labelSmall, color = TextMuted)
             }
             IconButton(onClick = { onOpen(SettingsStore.homePath.ifEmpty { root.absolutePath }) }) { Icon(Icons.Default.FolderOpen, "Browse files", tint = Fg) }
+        }
+
+        // Full-screen local search entry, styled like a modern system file manager.
+        GlassCard(
+            Modifier.fillMaxWidth().height(54.dp),
+            shape = RoundedCornerShape(30.dp),
+            onClick = onSearch
+        ) {
+            Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(23.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("Search files", Modifier.weight(1f), color = TextMuted, style = MaterialTheme.typography.bodyLarge)
+                Icon(Icons.Default.Tune, null, tint = TextMuted, modifier = Modifier.size(21.dp))
+            }
         }
 
         // Local storage (collapsible)
