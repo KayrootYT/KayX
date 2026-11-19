@@ -41,7 +41,7 @@ fn walk(dir: &Path, root: &Path, depth: u32, out: &Mutex<Vec<Rec>>) {
                     mtime_ms,
                 });
             }
-        } else if ft.is_dir() && dir_ok(&entry.file_name().to_string_lossy(), at_root) {
+        } else if ft.is_dir() && subs.len() < MAX_SCAN_FILES && dir_ok(&entry.file_name().to_string_lossy(), at_root) {
             subs.push(entry.path());
         }
     }
