@@ -55,10 +55,13 @@ class DexRepositoryTest {
 
 
     @Test fun stringDataCannotReadPastDeclaredDexFileSize() {
-        val bytes = validDex().copyOf(120)
+        val bytes = validDex().copyOf(124)
         val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        b.putInt(32, 116) // declared file size
         b.putInt(56, 1) // one string_id
-        b.putInt(60, 112) // points exactly past declared file_size
+        b.putInt(60, 112) // string_id table begins at 112
+        b.putInt(112, 116) // string_data offset equals declared file_size
+        b.putInt(8, Adler32().apply { update(bytes, 12, 104) }.value.toInt())
         val file = File.createTempFile("kayx-bad-string-offset-", ".dex")
         try {
             file.writeBytes(bytes)
