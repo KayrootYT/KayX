@@ -53,7 +53,7 @@ private enum class MainTab(val label: String, val icon: ImageVector) {
  * File tools (text/hex/archive/APK/DEX/checksum...) open from a file via "Open with…".
  */
 @Composable
-fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (String) -> Unit, onPush: (String, Tool) -> Unit) {
+fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (String) -> Unit, onPush: (String, Tool) -> Unit, onOpenExternal: (String) -> Unit = {}) {
     var tab by rememberSaveable { mutableStateOf(0) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = searchOpen) { searchOpen = false }
@@ -87,7 +87,7 @@ fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (Str
                                 "txt", "md", "log", "json", "xml", "kt", "kts", "java", "js", "ts", "py", "sh", "css", "csv", "ini", "yaml", "yml", "toml", "properties" -> Tool.TEXT
                                 else -> null
                             }
-                            if (tool != null) onPush(item.path, tool) else onOpen(item.path.substringBeforeLast('/', "/"))
+                            if (tool != null) onPush(item.path, tool) else onOpenExternal(item.path)
                         }
                     )
                 } else HomeScreen(
