@@ -5,8 +5,8 @@ This status separates code changes from validation. A GitHub CI pass does not re
 ## Completed in the current follow-up (pending CI and device verification)
 
 ### Rust core
-- Added bounded byte-for-byte verification after MD5 duplicate-candidate bucketing; hash collisions can no longer produce a false duplicate result.
-- Bounded native recursive scan to 200,000 files and 32 directory levels; symlink directories are not followed.
+- Rust duplicate detection uses hashes only as candidate filters, then verifies bytes; the Kotlin fallback now uses SHA-256 and byte-for-byte comparison too.
+- Bounded native recursive scan to 200,000 files, 200,000 directories, 1,000,000 entries, 32 levels and 32 MiB serialized JNI output; symlink directories are not followed.
 - Native scans now skip `.KayXRecycleBin` as well as Android/Trash thumbnail directories.
 - Hardened AXML chunk arithmetic, declared-file bounds, string-pool offset/length checks, 256-level nesting and 64 MiB input/output limits.
 - Added JNI limits for AXML byte arrays, duplicate path count/size and hex-dump output.
