@@ -374,10 +374,9 @@ private fun UpRow(onClick: () -> Unit) {
 private fun PaneRow(f: FileItem, selected: Boolean, fresh: Boolean, onClick: () -> Unit, onLong: () -> Unit, onSwipe: () -> Unit, swipeEnabled: Boolean) {
     val haptics = LocalHapticFeedback.current
     val kind = remember(f.name, f.isDir) { kindOf(f) }
-    val fk = if (f.isDir) com.kayx.manager.ui.rememberFolderKind(f.path, f.modified, SettingsStore.folderIcons) else com.kayx.manager.ui.FolderKind.NONE
-    val smart = f.isDir && fk != com.kayx.manager.ui.FolderKind.NONE
-    val rowIcon = if (smart) fk.icon else kind.icon
-    val rowColor = if (smart) fk.color else kind.color
+    // A directory always uses a folder glyph, independent of the files it contains.
+    val rowIcon = if (f.isDir) Icons.Default.Folder else kind.icon
+    val rowColor = if (f.isDir) Color(0xFFFFB02E) else kind.color
     val meta = remember(f.size, f.modified) {
         dxDate.format(java.util.Date(f.modified)) + if (f.isDir) "" else "  " + dxSize(f.size)
     }

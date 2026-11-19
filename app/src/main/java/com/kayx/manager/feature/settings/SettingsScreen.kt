@@ -114,10 +114,7 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
                 }
                 IosDivider()
                 IosSwitchRow("3D icons", SettingsStore.icons3d, SettingsStore::updateIcons3d,
-                    icon = Icons.Default.ViewInAr, iconBg = Purple, subtitle = "Glossy extruded file & folder icons with a flip on select")
-                IosDivider()
-                IosSwitchRow("Smart folder icons", SettingsStore.folderIcons, SettingsStore::updateFolderIcons,
-                    icon = Icons.Default.Folder, iconBg = Orange, subtitle = "Folder icon matches its content: photos, music, video, documents…")
+                    icon = Icons.Default.ViewInAr, iconBg = Purple, subtitle = "Glossy dimensional icons with a subtle flip on selection. Folders always keep the folder shape.")
             }
 
             // ---------------- File manager ----------------

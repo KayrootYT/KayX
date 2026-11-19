@@ -1,6 +1,13 @@
 package com.kayx.manager.feature.main
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,11 +56,20 @@ fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (Str
     BackHandler(enabled = tab != 0) { tab = 0 }
     Column(Modifier.fillMaxSize().glassBackground()) {
         Box(Modifier.weight(1f).fillMaxWidth().consumeWindowInsets(WindowInsets.navigationBars)) {
-            when (MainTab.values()[tab]) {
+            AnimatedContent(
+                targetState = MainTab.values()[tab],
+                transitionSpec = {
+                    (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 14 }) togetherWith
+                        (fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { -it / 18 })
+                },
+                label = "main-tab-transition"
+            ) { destination ->
+            when (destination) {
                 MainTab.FILES -> HomeScreen(onSettings = { tab = 3 }, onApps = { onPush("", Tool.APPS) }, onTool = { onPush("", it) }, onPush = onPush, onOpen = onOpen)
                 MainTab.STORAGE -> StorageTab(onPush)
                 MainTab.TOOLS -> ToolsTab(onPush)
                 MainTab.SETTINGS -> SettingsScreen(storageGranted, onManageStorage, onBack = { tab = 0 }, showBack = false)
+            }
             }
         }
         NavigationBar(containerColor = Color.Transparent) {
