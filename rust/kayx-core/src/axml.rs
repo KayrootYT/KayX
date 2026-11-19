@@ -5,6 +5,7 @@ const UNITS: [&str; 6] = ["px", "dip", "sp", "pt", "in", "mm"];
 const MAX_INPUT: usize = 64 * 1024 * 1024;
 const MAX_OUTPUT: usize = 64 * 1024 * 1024;
 const MAX_STRINGS: usize = 200_000;
+const MAX_STRING_BYTES: usize = 4 * 1024 * 1024;
 const MAX_DEPTH: usize = 256;
 
 pub fn is_axml(bytes: &[u8]) -> bool {
@@ -35,6 +36,21 @@ fn checked_range(start: usize, count: usize, width: usize, end: usize) -> Option
     let bytes = count.checked_mul(width)?;
     let finish = start.checked_add(bytes)?;
     (finish <= end).then_some(start..finish)
+}
+
+fn push_out(output: &mut String, value: &str) -> Result<(), String> {
+    let new_len = output.len().checked_add(value.len()).ok_or("Decoded XML size overflow")?;
+    if new_len > MAX_OUTPUT { return Err("Decoded XML exceeds 64 MiB output limit".into()); }
+    output.push_str(value);
+    Ok(())
+}
+
+fn push_char(output: &mut String, value: char) -> Result<(), String> {
+    if output.len().checked_add(value.len_utf8()).filter(|n| *n <= MAX_OUTPUT).is_none() {
+        return Err("Decoded XML exceeds 64 MiB output limit".into());
+    }
+    output.push(value);
+    Ok(())
 }
 
 fn len8(bytes: &[u8], pos: &mut usize, end: usize) -> Option<usize> {
@@ -87,6 +103,7 @@ fn read_pool(reader: &R, pos: usize, end: usize) -> Result<Vec<String>, String> 
         let decoded = if utf8 {
             let _utf16_len = len8(reader.0, &mut cursor, end).ok_or("Invalid UTF-8 string length")?;
             let byte_len = len8(reader.0, &mut cursor, end).ok_or("Invalid UTF-8 byte length")?;
+            if byte_len > MAX_STRING_BYTES { return Err("UTF-8 string exceeds per-string limit".into()); }
             let finish = cursor.checked_add(byte_len).ok_or("String length overflow")?;
             let data = reader.0.get(cursor..finish).filter(|_| finish <= end)
                 .ok_or("UTF-8 string exceeds chunk")?;
@@ -94,6 +111,7 @@ fn read_pool(reader: &R, pos: usize, end: usize) -> Result<Vec<String>, String> 
         } else {
             let unit_len = len16(reader, &mut cursor, end).ok_or("Invalid UTF-16 string length")?;
             let byte_len = unit_len.checked_mul(2).ok_or("UTF-16 length overflow")?;
+            if byte_len > MAX_STRING_BYTES { return Err("UTF-16 string exceeds per-string limit".into()); }
             let finish = cursor.checked_add(byte_len).ok_or("UTF-16 offset overflow")?;
             if finish > end { return Err("UTF-16 string exceeds chunk".into()); }
             let units: Vec<u16> = (0..unit_len)
@@ -164,11 +182,11 @@ pub fn decode(data: &[u8]) -> Result<String, String> {
                     }
                 };
                 let indent = "    ".repeat(depth);
-                output.push_str(&indent);
-                output.push('<');
-                output.push_str(&qualified_name(reader.i32(pos + 16), reader.i32(pos + 20)));
+                push_out(&mut output, &indent)?;
+                push_char(&mut output, '<')?;
+                push_out(&mut output, &qualified_name(reader.i32(pos + 16), reader.i32(pos + 20)))?;
                 for (prefix, uri) in pending.drain(..) {
-                    output.push_str(&format!(" xmlns:{}=\"{}\"", prefix, esc(&uri)));
+                    push_out(&mut output, &format!(" xmlns:{}=\"{}\"", prefix, esc(&uri)))?;
                 }
                 let attr_start = reader.u16(pos + 24) as usize;
                 let attr_size = (reader.u16(pos + 26) as usize).max(20);
@@ -180,12 +198,12 @@ pub fn decode(data: &[u8]) -> Result<String, String> {
                     let attr = attrs.checked_add(i.checked_mul(attr_size).ok_or("Attribute offset overflow")?)
                         .ok_or("Attribute offset overflow")?;
                     let value = value(&strings, reader.i32(attr + 8), reader.u8(attr + 15), reader.i32(attr + 16));
-                    output.push('\n');
-                    output.push_str(&indent);
-                    output.push_str("    ");
-                    output.push_str(&format!("{}=\"{}\"", qualified_name(reader.i32(attr), reader.i32(attr + 4)), esc(&value)));
+                    push_char(&mut output, '\n')?;
+                    push_out(&mut output, &indent)?;
+                    push_out(&mut output, "    ")?;
+                    push_out(&mut output, &format!("{}=\"{}\"", qualified_name(reader.i32(attr), reader.i32(attr + 4)), esc(&value)))?;
                 }
-                output.push_str(">\n");
+                push_out(&mut output, ">\n")?;
                 depth += 1;
             }
             0x0103 => {
@@ -197,21 +215,20 @@ pub fn decode(data: &[u8]) -> Result<String, String> {
                 let name = if name.is_empty() { format!("attr_0x{:x}", name_index) } else { name.to_string() };
                 let uri = st!(reader.i32(pos + 16));
                 let prefix = if uri.is_empty() { None } else { namespaces.iter().find(|(key, _)| key == uri).map(|(_, prefix)| prefix.clone()) };
-                output.push_str(&"    ".repeat(depth));
+                push_out(&mut output, &"    ".repeat(depth))?;
                 match prefix {
-                    Some(prefix) if !prefix.is_empty() => output.push_str(&format!("</{}:{}>\n", prefix, name)),
-                    _ => output.push_str(&format!("</{}>\n", name)),
+                    Some(prefix) if !prefix.is_empty() => push_out(&mut output, &format!("</{}:{}>\n", prefix, name))?,
+                    _ => push_out(&mut output, &format!("</{}>\n", name))?,
                 }
             }
             0x0104 => {
                 if chunk_size < 28 { return Err("Truncated CDATA chunk".into()); }
                 output.push_str(&"    ".repeat(depth));
-                output.push_str(&esc(st!(reader.i32(pos + 16))));
-                output.push('\n');
+                push_out(&mut output, &esc(st!(reader.i32(pos + 16))))?;
+                push_char(&mut output, '\n')?;
             }
             _ => {}
         }
-        if output.len() > MAX_OUTPUT { return Err("Decoded XML exceeds 64 MiB output limit".into()); }
         pos = end;
     }
     Ok(output)
