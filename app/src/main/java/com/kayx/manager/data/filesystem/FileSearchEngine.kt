@@ -4,7 +4,6 @@ import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.domain.model.SearchMode
 import com.kayx.manager.domain.model.SortBy
 import java.io.File
-import java.nio.file.Files
 import java.util.LinkedHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -50,8 +49,7 @@ data class FileSearchResult(
 
 class FileSearchEngine(
     private val indexTtlMs: Long = 12_000L,
-    private val maxIndexedEntries: Int = 100_000,
-    private val defaultMaxDepth: Int = 64
+    private val maxIndexedEntries: Int = 100_000
 ) {
     private data class Index(val createdAt: Long, val entries: List<FileItem>, val scanned: Int, val truncated: Boolean)
 
@@ -180,7 +178,7 @@ class FileSearchEngine(
             for (child in children) {
                 if (++scanned % 128 == 0) currentCoroutineContext().ensureActive()
                 if (!showHidden && child.isHidden) continue
-                val symbolic = runCatching { Files.isSymbolicLink(child.toPath()) }.getOrDefault(false)
+                val symbolic = runCatching { child.canonicalPath != child.absolutePath }.getOrDefault(false)
                 val isDirectory = runCatching { child.isDirectory }.getOrDefault(false)
                 if (isDirectory && !symbolic) {
                     val canonical = runCatching { child.canonicalPath }.getOrNull()
