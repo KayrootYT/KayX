@@ -22,6 +22,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -94,6 +98,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     var itemMenu by remember { mutableStateOf<Pair<FileItem, Int>?>(null) }
     var infoFor by remember { mutableStateOf<FileItem?>(null) }
     val ctx = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val snack = remember { SnackbarHostState() }
     val openItem: (FileItem) -> Unit = { f ->
         val ext = f.name.substringAfterLast('.', "").lowercase()
@@ -111,6 +117,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
         }
     }
     LaunchedEffect(startPath) { vm.start(startPath) }
+    LaunchedEffect(s.searching) {
+        if (s.searching) runCatching { searchFocusRequester.requestFocus() }
+    }
     LaunchedEffect(Unit) { vm.syncDefaults() }
     LaunchedEffect(s.message) { s.message?.let { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show(); snack.showSnackbar(it); vm.consumeMessage() } }
     BackHandler { if (!vm.up()) onExit() }
@@ -128,11 +137,29 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 Row(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton({ if (!vm.up()) onExit() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                     if (s.searching) TextField(
-                        s.query, vm::setQuery, Modifier.weight(1f), singleLine = true,
+                        value = s.query,
+                        onValueChange = vm::setQuery,
+                        modifier = Modifier.weight(1f).focusRequester(searchFocusRequester),
+                        singleLine = true,
                         placeholder = { Text(if (s.grep) "Search inside files" else "Search names, .mp3 or *.mp3") },
-                        trailingIcon = { if (s.query.isNotEmpty()) IconButton({ vm.setQuery("") }) { Icon(Icons.Default.Close, "Clear query") } },
-                        colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search files") },
+                        trailingIcon = {
+                            if (s.query.isNotEmpty()) IconButton(onClick = { vm.setQuery("") }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear query")
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            vm.reload()
+                            keyboardController?.hide()
+                        }),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        )
+                    )
                     else Column(Modifier.weight(1f)) {
                         val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
                         val shownItems = if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items
