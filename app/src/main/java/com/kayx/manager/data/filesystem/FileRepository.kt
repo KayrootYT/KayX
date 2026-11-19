@@ -41,7 +41,8 @@ class FileRepository {
                 showHidden = showHidden,
                 includeDirectories = false,
                 maxResults = maxResults
-            )
+            ),
+            isActive = isActive
         ).items
     }
 
