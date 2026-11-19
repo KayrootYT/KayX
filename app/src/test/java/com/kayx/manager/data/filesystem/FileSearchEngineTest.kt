@@ -45,6 +45,29 @@ class FileSearchEngineTest {
     }
 
     @Test
+    fun appliesCategoryAndDateFilters() = runBlocking {
+        val root = createTempDir(prefix = "kayx-search-category-")
+        try {
+            val recentImage = File(root, "recent.jpg").apply { writeBytes(byteArrayOf(1, 2, 3, 4, 5)) }
+            File(root, "recent.txt").writeText("document")
+            File(root, "old.jpg").apply { writeText("old"); setLastModified(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000) }
+            val result = FileSearchEngine().search(
+                FileSearchRequest(
+                    root = root,
+                    query = "*",
+                    allowedExtensions = setOf("jpg", ".jpeg"),
+                    minSizeBytes = 4,
+                    modifiedAfter = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+                )
+            )
+            assertEquals(listOf("recent.jpg"), result.items.map { it.name })
+            assertTrue(recentImage.exists())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun searchesTextContentsWithoutReadingBinaryFiles() = runBlocking {
         val root = createTempDir(prefix = "kayx-search-content-")
         try {

@@ -56,7 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -> Unit = {}, onPush: (String, Tool) -> Unit = { _, _ -> }, onOpen: (String) -> Unit) {
+fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -> Unit = {}, onPush: (String, Tool) -> Unit = { _, _ -> }, onOpen: (String) -> Unit, onSearch: () -> Unit = {}) {
     val ctx = LocalContext.current
     val root = Environment.getExternalStorageDirectory()
 
@@ -65,33 +65,38 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             .navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
-        // Compact manager-style toolbar
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            GlassCard(shape = RoundedCornerShape(13.dp), modifier = Modifier.size(42.dp)) {
-                Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Icon(Icons.Default.FolderCopy, null, tint = Accent, modifier = Modifier.size(23.dp))
+        // Reference-matched search toolbar with quick scan and settings actions.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GlassCard(
+                Modifier.weight(1f).height(54.dp),
+                shape = RoundedCornerShape(30.dp),
+                onClick = onSearch
+            ) {
+                Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(23.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Search", Modifier.weight(1f), color = TextMuted, style = MaterialTheme.typography.bodyLarge)
                 }
             }
-            Spacer(Modifier.width(11.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text("KayX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("File manager", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+            IconButton(onClick = { StorageScanner.invalidate(); StorageScanner.init(ctx); Toast.makeText(ctx, "Storage scan started", Toast.LENGTH_SHORT).show() }) {
+                Icon(Icons.Default.QrCodeScanner, "Scan storage", tint = Fg, modifier = Modifier.size(24.dp))
             }
-            IconButton(onClick = { onOpen(SettingsStore.homePath.ifEmpty { root.absolutePath }) }) { Icon(Icons.Default.FolderOpen, "Browse files", tint = Fg) }
+            IconButton(onClick = onSettings) {
+                Icon(Icons.Default.MoreVert, "More options", tint = Fg, modifier = Modifier.size(24.dp))
+            }
         }
 
-        // Local storage (collapsible)
-        var localOpen by remember { mutableStateOf(true) }
-        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
-            Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(Modifier.fillMaxWidth().clickable { localOpen = !localOpen }, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Local", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextMuted)
-                    Icon(if (localOpen) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = TextMuted)
-                }
-                if (localOpen) {
-                    StorageRow("Root Directory", Icons.Default.PhoneAndroid, "/") { onOpen("/") }
-                    StorageRow("Storage Directory", Icons.Default.SdCard, root.absolutePath) { onOpen(root.absolutePath) }
-                }
+        // Full-screen local search entry, styled like a modern system file manager.
+        GlassCard(
+            Modifier.fillMaxWidth().height(54.dp),
+            shape = RoundedCornerShape(30.dp),
+            onClick = onSearch
+        ) {
+            Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(23.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("Search files", Modifier.weight(1f), color = TextMuted, style = MaterialTheme.typography.bodyLarge)
+                Icon(Icons.Default.Tune, null, tint = TextMuted, modifier = Modifier.size(21.dp))
             }
         }
 
@@ -125,6 +130,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                 val m = HashMap<String, Int?>()
                 Category.values().forEach { m[it.name] = MediaCounts.category(ctx, it) }
                 QuickAccess.targets.forEach { m["QA:" + it.name] = MediaCounts.folders(ctx, it.dirs) }
+                m["QA:Apps"] = runCatching { ctx.packageManager.getInstalledApplications(0).size }.getOrDefault(0)
                 m
             }
         }
@@ -137,6 +143,8 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             CatTile("Documents", Icons.Default.Description, Color(0xFFF5B82E), cnt(Category.DOCUMENTS)) { onPush(Category.DOCUMENTS.name, Tool.CATEGORY) },
             CatTile("APKs", Icons.Default.Android, Color(0xFF2ECC71), cnt(Category.APKS)) { onPush(Category.APKS.name, Tool.CATEGORY) },
             CatTile("Archives", Icons.Default.FolderZip, Color(0xFFF2B01E), cnt(Category.ARCHIVES)) { onPush(Category.ARCHIVES.name, Tool.CATEGORY) },
+            CatTile("Tags", Icons.AutoMirrored.Filled.Label, Color(0xFF4A90F5), TagStore.totalFiles().toString()) { onTool(Tool.TAGS) },
+            CatTile("Private space", Icons.Default.Shield, Color(0xFF2ECC71), PrivateSpace.fileCount(ctx).toString()) { onTool(Tool.PRIVATE) },
         )
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
             Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -162,10 +170,10 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         fun target(n: String) = QuickAccess.targets.first { it.name == n }
         val quick = listOf(
             CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp"))) { open(target("WhatsApp")) },
-            CatTile("Telegram", Icons.AutoMirrored.Filled.Send, Color(0xFF2AABEE), qCount(target("Telegram"))) { open(target("Telegram")) },
             CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots"))) { open(target("Screenshots")) },
+            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"])) { onApps() },
             CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads"))) { open(target("Downloads")) },
-            CatTile("Recorder", Icons.Default.Mic, Color(0xFF6B7488), qCount(target("Recorder"))) { open(target("Recorder")) },
+            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder"))) { open(target("Recorder")) },
             CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth"))) { open(target("Bluetooth")) }
         )
         val folders = listOf(
@@ -177,6 +185,37 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                 (if (allQuick) quick + folders else quick).chunked(4).forEach { row ->
                     Row(Modifier.fillMaxWidth()) { row.forEach { CategoryTileView(it, Modifier.weight(1f)) }; repeat(4 - row.size) { Spacer(Modifier.weight(1f)) } }
                 }
+            }
+        }
+
+        // Storage and services section follows the category and quick-access cards.
+        var localOpen by remember { mutableStateOf(true) }
+        Text("Storage and services", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextMuted)
+        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
+            Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                StorageRow("Phone storage", Icons.Default.PieChart, root.absolutePath) { onOpen(root.absolutePath) }
+                HorizontalDivider(color = Fg.copy(.08f))
+                Row(Modifier.fillMaxWidth().clickable { onTool(Tool.FTP) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Devices, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Cross-device services", style = MaterialTheme.typography.titleSmall)
+                        Text("FTP and network file transfer", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                    }
+                    Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
+                }
+                HorizontalDivider(color = Fg.copy(.08f))
+                Row(Modifier.fillMaxWidth().clickable { onTool(Tool.RECYCLE) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.DeleteOutline, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Text("Recently deleted", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                    Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
+                }
+                Row(Modifier.fillMaxWidth().clickable { localOpen = !localOpen }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("More storage locations", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = TextMuted)
+                    Icon(if (localOpen) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = TextMuted)
+                }
+                if (localOpen) StorageRow("Root directory", Icons.Default.PhoneAndroid, "/") { onOpen("/") }
             }
         }
 

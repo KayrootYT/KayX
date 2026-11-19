@@ -126,7 +126,9 @@ class MainActivity : ComponentActivity() {
                         FileBrowserScreen(p, onExit = { path = null }, onOpenFile = { f, k -> push(f, k) }, onSettings = { showSettings = true })
                     } else com.kayx.manager.feature.main.MainShell(
                         storageGranted = granted.value, onManageStorage = ::requestAccess,
-                        onOpen = { path = it }, onPush = { a, b -> push(a, b) }
+                        onOpen = { path = it },
+                        onPush = { a, b -> push(a, b) },
+                        onOpenExternal = { filePath -> com.kayx.manager.data.filesystem.ExternalOps.openWith(this, java.io.File(filePath)) }
                     )
                 }
             }
