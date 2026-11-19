@@ -315,6 +315,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
 
     fun moveToPrivate(ctx: Context) {
         if (!com.kayx.manager.data.storage.PrivateSpace.hasPin(ctx)) { notify("Open Private space on Home and create a PIN first"); return }
+        if (!com.kayx.manager.data.storage.PrivateSpace.isUnlocked()) { notify("Unlock Private space before moving files into it"); return }
         val files = _s.value.selected.map(::File)
         val dst = com.kayx.manager.data.storage.PrivateSpace.dir(ctx)
         run({ FileOps.transfer(files, dst, true, Conflict.KEEP_BOTH).map { } }, "Moved ${files.size} to Private space")
