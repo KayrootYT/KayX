@@ -2,6 +2,7 @@ package com.kayx.manager.data.filesystem
 
 import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.domain.model.SearchMode
+import com.kayx.manager.domain.model.SortBy
 import java.io.File
 import java.nio.file.Files
 import java.util.LinkedHashMap
@@ -17,6 +18,14 @@ import kotlinx.coroutines.withContext
  * file bodies), avoids symlink loops, skips unreadable directories, and reuses a short-lived
  * bounded index while the query is edited.
  */
+enum class FileSearchCategory(val label: String, val extensions: Set<String>) {
+    ALL("All", emptySet()),
+    IMAGES("Images", setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "avif", "tif", "tiff", "ico", "raw", "dng", "psd")),
+    VIDEOS("Videos", setOf("mp4", "mkv", "webm", "mov", "avi", "3gp", "m4v", "mpeg", "mpg", "ts", "mts", "m2ts", "wmv", "flv")),
+    DOCUMENTS("Documents", setOf("pdf", "doc", "docx", "docm", "dot", "dotx", "xls", "xlsx", "xlsm", "xltx", "ods", "odt", "ppt", "pptx", "pptm", "ppsx", "odp", "epub", "mobi", "txt", "md", "rtf", "csv")),
+    AUDIO("Audio", setOf("mp3", "m4a", "wav", "ogg", "oga", "opus", "flac", "aac", "wma", "aiff", "mid", "midi", "amr", "awb"))
+}
+
 data class FileSearchRequest(
     val root: File,
     val query: String,
@@ -28,6 +37,7 @@ data class FileSearchRequest(
     val maxSizeBytes: Long = Long.MAX_VALUE,
     val includeDirectories: Boolean = true,
     val allowedExtensions: Set<String> = emptySet(),
+    val sortBy: SortBy = SortBy.NAME,
     val maxDepth: Int = 64,
     val maxResults: Int = 10_000
 )
@@ -103,7 +113,16 @@ class FileSearchEngine(
                 matches += item
             }
         }
-        val sorted = matches.sortedWith(compareBy<FileItem> { !it.isDir }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        val sorted = matches.sortedWith { a, b ->
+            if (a.isDir != b.isDir) {
+                if (a.isDir) -1 else 1
+            } else when (request.sortBy) {
+                SortBy.NAME -> a.name.compareTo(b.name, ignoreCase = true)
+                SortBy.TYPE -> a.name.substringAfterLast('.', "").compareTo(b.name.substringAfterLast('.', ""), ignoreCase = true)
+                SortBy.SIZE -> b.size.compareTo(a.size)
+                SortBy.DATE -> b.modified.compareTo(a.modified)
+            }
+        }
         FileSearchResult(sorted, index.scanned, index.truncated || matches.size >= cap)
     }
 
