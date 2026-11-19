@@ -61,6 +61,8 @@ pub extern "system" fn Java_com_kayx_manager_core_NativeCore_hashFile<'l>(
 pub extern "system" fn Java_com_kayx_manager_core_NativeCore_decodeAxml<'l>(
     mut env: JNIEnv<'l>, _c: JClass<'l>, data: JByteArray<'l>,
 ) -> jstring {
+    let size = env.get_array_length(&data).unwrap_or(-1);
+    if size < 0 || size as usize > 64 * 1024 * 1024 { return null_mut(); }
     let r = env.convert_byte_array(&data).ok().and_then(|b| guard(|| axml::decode(&b).ok()));
     out_string(&mut env, r)
 }
@@ -86,11 +88,19 @@ pub extern "system" fn Java_com_kayx_manager_core_NativeCore_findDuplicates<'l>(
 ) -> jobjectArray {
     let mut list: Vec<String> = Vec::new();
     let n = env.get_array_length(&paths).unwrap_or(-1);
-    if n < 0 { return null_mut(); }
+    if n < 0 || n as usize > 200_000 { return null_mut(); }
+    let mut total_path_bytes = 0usize;
     for i in 0..n {
         let Ok(o) = env.get_object_array_element(&paths, i) else { continue };
         let js = JString::from(o);
-        if let Some(s) = jstr(&mut env, &js) { list.push(s); }
+        if let Some(s) = jstr(&mut env, &js) {
+            total_path_bytes = match total_path_bytes.checked_add(s.len()) {
+                Some(total) if total <= 16 * 1024 * 1024 => total,
+                _ => return null_mut(),
+            };
+            if s.len() > 4096 { return null_mut(); }
+            list.push(s);
+        }
         let _ = env.delete_local_ref(js);
     }
     let r = guard(|| Some(scan::find_duplicate_groups(list, 10 * 1024)
@@ -103,7 +113,7 @@ pub extern "system" fn Java_com_kayx_manager_core_NativeCore_hexDump<'l>(
     mut env: JNIEnv<'l>, _c: JClass<'l>, path: JString<'l>, offset: jlong, length: jint, per_row: jint,
 ) -> jstring {
     let r = jstr(&mut env, &path).and_then(|p| guard(|| {
-        hexdump::dump(Path::new(&p), offset.max(0) as u64, length.max(0) as usize, per_row.max(1) as usize).ok()
+        hexdump::dump(Path::new(&p), offset.max(0) as u64, length.clamp(0, 4 * 1024 * 1024) as usize, per_row.clamp(1, 64) as usize).ok()
     }));
     out_string(&mut env, r)
 }
