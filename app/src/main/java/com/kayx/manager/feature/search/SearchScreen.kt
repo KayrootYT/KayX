@@ -28,7 +28,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kayx.manager.data.filesystem.FileSearchCategory
-import com.kayx.manager.data.filesystem.FileSearchEngine
+import com.kayx.manager.data.filesystem.AndroidIndexedFileSearch
 import com.kayx.manager.data.filesystem.FileSearchRequest
 import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.domain.model.FileItem
@@ -63,7 +63,7 @@ fun SearchScreen(
 ) {
     val context = LocalContext.current
     val root = remember { android.os.Environment.getExternalStorageDirectory() }
-    val engine = remember { FileSearchEngine() }
+    val engine = remember(context) { AndroidIndexedFileSearch(context.applicationContext) }
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
     var query by remember { mutableStateOf("") }
