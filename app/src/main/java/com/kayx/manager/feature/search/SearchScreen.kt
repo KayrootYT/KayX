@@ -28,7 +28,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kayx.manager.data.filesystem.FileSearchCategory
-import com.kayx.manager.data.filesystem.FileSearchEngine
+import com.kayx.manager.data.filesystem.AndroidIndexedFileSearch
 import com.kayx.manager.data.filesystem.FileSearchRequest
 import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.domain.model.FileItem
@@ -41,6 +41,7 @@ import com.kayx.manager.ui.theme.Fg
 import com.kayx.manager.ui.theme.TextMuted
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -62,13 +63,14 @@ fun SearchScreen(
 ) {
     val context = LocalContext.current
     val root = remember { android.os.Environment.getExternalStorageDirectory() }
-    val engine = remember { FileSearchEngine() }
+    val engine = remember(context) { AndroidIndexedFileSearch(context.applicationContext) }
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
     var query by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(FileSearchCategory.ALL) }
     var results by remember { mutableStateOf<List<FileItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
+    var searchError by remember { mutableStateOf<String?>(null) }
     var scanned by remember { mutableIntStateOf(0) }
     var truncated by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(loadList(context, HISTORY_KEY)) }
@@ -104,29 +106,38 @@ fun SearchScreen(
             truncated = false
             loading = false
         } else {
-            delay(220)
             loading = true
-            val request = FileSearchRequest(
-                root = root,
-                query = query,
-                showHidden = showHidden,
-                mode = mode,
-                includeDirectories = includeFolders && !searchContents,
-                allowedExtensions = category.extensions,
-                minSizeBytes = minSizeBytes,
-                modifiedAfter = modifiedAfter,
-                sortBy = sort,
-                maxDepth = 96,
-                maxResults = 20_000
-            )
-            val found = withContext(Dispatchers.IO) {
-                if (searchContents) engine.searchContents(request.copy(includeDirectories = false))
-                else engine.search(request)
+            searchError = null
+            try {
+                delay(220)
+                val request = FileSearchRequest(
+                    root = root,
+                    query = query,
+                    showHidden = showHidden,
+                    mode = mode,
+                    includeDirectories = includeFolders && !searchContents,
+                    allowedExtensions = category.extensions,
+                    minSizeBytes = minSizeBytes,
+                    modifiedAfter = modifiedAfter,
+                    sortBy = sort,
+                    maxDepth = 96,
+                    maxResults = 20_000
+                )
+                val found = withContext(Dispatchers.IO) {
+                    if (searchContents) engine.searchContents(request.copy(includeDirectories = false))
+                    else engine.search(request)
+                }
+                results = found.items
+                scanned = found.scannedEntries
+                truncated = found.truncated
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                results = emptyList()
+                searchError = failure.message ?: failure.javaClass.simpleName
+            } finally {
+                loading = false
             }
-            results = found.items
-            scanned = found.scannedEntries
-            truncated = found.truncated
-            loading = false
         }
     }
 
@@ -313,6 +324,7 @@ fun SearchScreen(
             Text(
                 when {
                     loading -> "Searching storage…"
+                    searchError != null -> "Search failed: $searchError"
                     else -> "${results.size} files found · ${String.format(Locale.getDefault(), "%,d", scanned)} scanned"
                 },
                 Modifier.padding(start = 8.dp, bottom = 8.dp),

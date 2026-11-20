@@ -92,4 +92,33 @@ class FileSearchEngineTest {
             root.deleteRecursively()
         }
     }
+    @Test
+    fun supportsExtensionSearchWithDotAndWildcardForms() = runBlocking {
+        val root = createTempDir(prefix = "kayx-search-extension-")
+        try {
+            File(root, "track.mp3").writeText("audio")
+            File(root, "track.mp4").writeText("video")
+            File(root, "my-mp3-notes.txt").writeText("notes")
+            val engine = FileSearchEngine()
+
+            assertEquals(listOf("track.mp3"), engine.search(FileSearchRequest(root, ".mp3")).items.map { it.name })
+            assertEquals(listOf("track.mp3"), engine.search(FileSearchRequest(root, "*.mp3")).items.map { it.name })
+            assertEquals(listOf("track.mp3"),
+                engine.search(FileSearchRequest(root, "*mp3")).items.map { it.name })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun mapsMtStyleQueriesToSafeMediaStorePatterns() {
+        assertEquals("%music%", mediaStoreLikePattern("music", SearchMode.CONTAINS))
+        assertEquals("%.mp3", mediaStoreLikePattern(".mp3", SearchMode.CONTAINS))
+        assertEquals("%.mp3", mediaStoreLikePattern("*.mp3", SearchMode.CONTAINS))
+        assertEquals("%mp3", mediaStoreLikePattern("*mp3", SearchMode.CONTAINS))
+        assertEquals("track.mp3", mediaStoreLikePattern("track.mp3", SearchMode.EXACT))
+        assertEquals("%100\\%\\_done%", mediaStoreLikePattern("100%_done", SearchMode.CONTAINS))
+        assertEquals(null, mediaStoreLikePattern("[a-z]", SearchMode.REGEX))
+    }
+
 }
