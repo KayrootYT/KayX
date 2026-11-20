@@ -110,4 +110,15 @@ class FileSearchEngineTest {
         }
     }
 
+    @Test
+    fun mapsMtStyleQueriesToSafeMediaStorePatterns() {
+        assertEquals("%music%", mediaStoreLikePattern("music", SearchMode.CONTAINS))
+        assertEquals("%.mp3", mediaStoreLikePattern(".mp3", SearchMode.CONTAINS))
+        assertEquals("%.mp3", mediaStoreLikePattern("*.mp3", SearchMode.CONTAINS))
+        assertEquals("%mp3", mediaStoreLikePattern("*mp3", SearchMode.CONTAINS))
+        assertEquals("track.mp3", mediaStoreLikePattern("track.mp3", SearchMode.EXACT))
+        assertEquals("%100\\\\%_done%", mediaStoreLikePattern("100%_done", SearchMode.CONTAINS))
+        assertEquals(null, mediaStoreLikePattern("[a-z]", SearchMode.REGEX))
+    }
+
 }
