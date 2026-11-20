@@ -103,8 +103,8 @@ class FileSearchEngineTest {
 
             assertEquals(listOf("track.mp3"), engine.search(FileSearchRequest(root, ".mp3")).items.map { it.name })
             assertEquals(listOf("track.mp3"), engine.search(FileSearchRequest(root, "*.mp3")).items.map { it.name })
-            assertEquals(listOf("track.mp3", "my-mp3-notes.txt").toSet(),
-                engine.search(FileSearchRequest(root, "*mp3")).items.map { it.name }.toSet())
+            assertEquals(listOf("track.mp3"),
+                engine.search(FileSearchRequest(root, "*mp3")).items.map { it.name })
         } finally {
             root.deleteRecursively()
         }
@@ -117,7 +117,7 @@ class FileSearchEngineTest {
         assertEquals("%.mp3", mediaStoreLikePattern("*.mp3", SearchMode.CONTAINS))
         assertEquals("%mp3", mediaStoreLikePattern("*mp3", SearchMode.CONTAINS))
         assertEquals("track.mp3", mediaStoreLikePattern("track.mp3", SearchMode.EXACT))
-        assertEquals("%100\\%_done%", mediaStoreLikePattern("100%_done", SearchMode.CONTAINS))
+        assertEquals("%100\\%\\_done%", mediaStoreLikePattern("100%_done", SearchMode.CONTAINS))
         assertEquals(null, mediaStoreLikePattern("[a-z]", SearchMode.REGEX))
     }
 
