@@ -21,9 +21,9 @@ class AndroidIndexedFileSearch(private val context: Context) {
 
     suspend fun search(request: FileSearchRequest): FileSearchResult = withContext(Dispatchers.IO) {
         if (request.query.isBlank()) return@withContext FileSearchResult(emptyList(), 0, false)
+        if (request.mode == SearchMode.REGEX) return@withContext fallback.search(request)
         val indexed = queryMediaStore(request)
-        if (indexed.items.isNotEmpty() || request.mode == SearchMode.REGEX) indexed
-        else fallback.search(request)
+        if (indexed.items.isNotEmpty()) indexed else fallback.search(request)
     }
 
     suspend fun searchContents(request: FileSearchRequest): FileSearchResult =
