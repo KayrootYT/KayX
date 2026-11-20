@@ -68,20 +68,28 @@ jobs:
             exit 1
           fi
 
-          APK="$(find ./dist -maxdepth 2 -type f -name '*.apk' -print -quit)"
+          APK="$(find ./dist -type f -name '*.apk' -print -quit)"
           if [ -z "$APK" ]; then
             echo "::error::No APK found in the downloaded KayX-debug artifact."
+            find ./dist -maxdepth 4 -type f -print
+            exit 1
+          fi
+          if [ ! -r "$APK" ]; then
+            echo "::error::APK is not readable: $APK"
             exit 1
           fi
 
           APK_NAME="$(basename "$APK")"
+          echo "Uploading $APK_NAME ($(stat -c%s "$APK") bytes)"
           CAPTION="KayX APK build
           Repository: $REPOSITORY
           Branch: $BRANCH
           Commit: ${COMMIT:0:7}"
 
-          curl --fail --silent --show-error --max-time 120 \
+          RESPONSE="$(curl --fail --silent --show-error --max-time 120 \
             -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
             -F "chat_id=${TELEGRAM_CHAT_ID}" \
-            -F "document=@${APK};filename=${APK_NAME}" \
-            -F "caption=${CAPTION}"
+            -F "document=@${APK}" \
+            -F "caption=${CAPTION}")"
+          echo "$RESPONSE" | jq -e '.ok == true' >/dev/null
+          echo "Telegram accepted APK upload: $APK_NAME"
