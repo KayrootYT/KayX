@@ -542,6 +542,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
 /** Extension and wildcard expressions always search file names, even if content-search mode is selected. */
 private fun isFilenamePattern(raw: String): Boolean {
     val query = raw.trim()
+    val dot = query.lastIndexOf('.')
+    val extension = query.substringAfterLast('.', "")
     return query.startsWith(".") || '*' in query || '?' in query ||
-        Regex(".*\\\\.[A-Za-z0-9]{1,12}$").matches(query)
+        (dot > 0 && extension.length in 1..12 && extension.all { it.isLetterOrDigit() })
 }
