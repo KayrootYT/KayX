@@ -19,6 +19,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -143,74 +146,149 @@ fun SearchScreen(
 
     Column(
         Modifier.fillMaxSize().glassBackground().statusBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            GlassCard(
-                Modifier.weight(1f).height(52.dp),
-                shape = RoundedCornerShape(30.dp)
+        // Compact navigation and editorial header.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                onClick = onBack,
+                shape = CircleShape,
+                color = Fg.copy(alpha = .07f),
+                modifier = Modifier.size(44.dp)
             ) {
-                Row(Modifier.fillMaxSize().padding(horizontal = 15.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(23.dp))
-                    Spacer(Modifier.width(10.dp))
-                    TextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.weight(1f).focusRequester(focus),
-                        singleLine = true,
-                        placeholder = { Text("Search files and folders", color = TextMuted) },
-                        trailingIcon = {
-                            if (query.isNotEmpty()) IconButton(onClick = { query = "" }) {
-                                Icon(Icons.Default.Close, "Clear search")
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            rememberQuery(query)
-                            keyboard?.hide()
-                        }),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = Accent
-                        )
-                    )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.ArrowBack, "Back", tint = Fg, modifier = Modifier.size(21.dp))
                 }
             }
-            TextButton(onClick = { keyboard?.hide(); onBack() }) { Text("Cancel", color = Accent) }
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("DISCOVER", color = Accent, style = MaterialTheme.typography.labelSmall, letterSpacing = 2.sp)
+                Text("Search your space", color = Fg, style = MaterialTheme.typography.headlineSmall)
+            }
+            Surface(shape = CircleShape, color = Accent.copy(alpha = .12f)) {
+                Icon(Icons.Default.AutoAwesome, "KayX search", tint = Accent, modifier = Modifier.padding(11.dp).size(20.dp))
+            }
+        }
+
+        // High-contrast glass search field with a subtle gradient rim.
+        Box(
+            Modifier.fillMaxWidth()
+                .shadow(16.dp, RoundedCornerShape(25.dp), ambientColor = Accent.copy(.12f), spotColor = Accent.copy(.18f))
+                .background(
+                    Brush.linearGradient(listOf(Accent.copy(.24f), Color.White.copy(.10f), Color(0xFF8B7CFF).copy(.16f))),
+                    RoundedCornerShape(25.dp)
+                )
+                .padding(1.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .background(Fg.copy(alpha = .055f), RoundedCornerShape(24.dp))
+                    .padding(start = 15.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Search, null, tint = Accent, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(11.dp))
+                TextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.weight(1f).focusRequester(focus),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    placeholder = { Text("Search files, folders…", color = TextMuted.copy(alpha = .85f)) },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Default.Close, "Clear search", tint = TextMuted)
+                            }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        rememberQuery(query)
+                        keyboard?.hide()
+                    }),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = Accent
+                    )
+                )
+                if (!activeSearch) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Accent.copy(alpha = .14f),
+                        onClick = { keyboard?.hide(); focus.requestFocus() }
+                    ) {
+                        Icon(Icons.Default.Tune, "Search options", tint = Accent, modifier = Modifier.padding(10.dp).size(19.dp))
+                    }
+                }
+            }
         }
 
         if (!activeSearch) {
             LazyColumn(
                 Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 22.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                item {
+                    GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(18.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                Modifier.size(58.dp).background(
+                                    Brush.linearGradient(listOf(Accent.copy(.30f), Color(0xFF8B7CFF).copy(.18f))),
+                                    RoundedCornerShape(19.dp)
+                                ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.FolderOpen, null, tint = Accent, modifier = Modifier.size(30.dp))
+                            }
+                            Spacer(Modifier.width(15.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Find anything, instantly", color = Fg, style = MaterialTheme.typography.titleMedium)
+                                Text("Search by name, extension or file type", color = TextMuted, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
                 if (history.isNotEmpty()) {
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Search history", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = TextMuted)
+                            Column(Modifier.weight(1f)) {
+                                Text("Recent searches", color = Fg, style = MaterialTheme.typography.titleMedium)
+                                Text("Pick up where you left off", color = TextMuted, style = MaterialTheme.typography.labelSmall)
+                            }
                             IconButton(onClick = { history = emptyList(); saveList(context, HISTORY_KEY, history) }) {
                                 Icon(Icons.Default.DeleteOutline, "Clear search history", tint = TextMuted)
                             }
                         }
-                    }
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            history.chunked(4).forEach { line ->
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Spacer(Modifier.height(7.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            history.chunked(2).forEach { line ->
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     line.forEach { term ->
                                         Surface(
                                             onClick = { query = term },
-                                            shape = CircleShape,
-                                            color = Fg.copy(alpha = .09f)
+                                            shape = RoundedCornerShape(15.dp),
+                                            color = Fg.copy(alpha = .065f),
+                                            modifier = Modifier.weight(1f)
                                         ) {
-                                            Text(term, Modifier.padding(horizontal = 17.dp, vertical = 9.dp), color = Fg)
+                                            Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.History, null, tint = Accent, modifier = Modifier.size(17.dp))
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(term, color = Fg, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                                Icon(Icons.Default.NorthWest, null, tint = TextMuted, modifier = Modifier.size(14.dp))
+                                            }
                                         }
                                     }
+                                    if (line.size == 1) Spacer(Modifier.weight(1f))
                                 }
                             }
                         }
@@ -218,9 +296,11 @@ fun SearchScreen(
                 }
                 if (recent.isNotEmpty()) {
                     item {
-                        Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Recent file searches", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = TextMuted)
+                            Column(Modifier.weight(1f)) {
+                                Text("Recently opened", color = Fg, style = MaterialTheme.typography.titleMedium)
+                                Text("Your latest files and folders", color = TextMuted, style = MaterialTheme.typography.labelSmall)
+                            }
                             IconButton(onClick = { recent = emptyList(); saveList(context, RECENT_KEY, recent) }) {
                                 Icon(Icons.Default.DeleteOutline, "Clear recent files", tint = TextMuted)
                             }
@@ -229,33 +309,39 @@ fun SearchScreen(
                     items(recent, key = { it }) { path ->
                         val file = remember(path) { File(path) }
                         val exists = remember(path) { file.exists() }
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                                .clickable(enabled = exists) {
+                        GlassCard(
+                            Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            onClick = {
+                                if (exists) {
                                     val item = FileItem(path, file.name, file.isDirectory, file.length(), file.lastModified(), file.isHidden)
                                     if (file.isDirectory) onOpenDirectory(path) else onOpenFile(item)
-                                }.padding(horizontal = 4.dp, vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                }
+                            }
                         ) {
-                            Icon(searchFileIcon(file.name, file.isDirectory), null,
-                                tint = if (exists) searchFileTint(file.name, file.isDirectory) else TextMuted.copy(.35f), modifier = Modifier.size(30.dp))
-                            Spacer(Modifier.width(13.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(if (exists) file.name else "File expired", color = if (exists) Fg else TextMuted.copy(.45f),
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                if (exists) Text(file.parent ?: path, color = TextMuted, style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(45.dp).background(searchFileTint(file.name, file.isDirectory).copy(.15f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                                    Icon(searchFileIcon(file.name, file.isDirectory), null, tint = if (exists) searchFileTint(file.name, file.isDirectory) else TextMuted, modifier = Modifier.size(25.dp))
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(if (exists) file.name else "File unavailable", color = if (exists) Fg else TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(if (exists) file.parent ?: path else path, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
                             }
                         }
                     }
                 }
                 if (history.isEmpty() && recent.isEmpty()) {
                     item {
-                        Box(Modifier.fillMaxWidth().padding(top = 90.dp), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(42.dp))
-                                Text("Search your storage", color = TextMuted, style = MaterialTheme.typography.titleMedium)
-                                Text("Search history and recent files will appear here.", color = TextMuted, style = MaterialTheme.typography.bodySmall)
+                        Box(Modifier.fillMaxWidth().padding(top = 42.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                Box(Modifier.size(78.dp).background(Accent.copy(.12f), CircleShape), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Search, null, tint = Accent, modifier = Modifier.size(38.dp))
+                                }
+                                Text("Your storage, one search away", color = Fg, style = MaterialTheme.typography.titleMedium)
+                                Text("Try a filename or an extension like .mp3", color = TextMuted, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -263,107 +349,133 @@ fun SearchScreen(
             }
         } else {
             Row(
-                Modifier.fillMaxWidth().padding(top = 20.dp).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(26.dp),
-                verticalAlignment = Alignment.CenterVertically
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 RESULT_TABS.forEach { tab ->
                     val selected = category == tab
-                    Column(Modifier.clickable { category = tab }.padding(bottom = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(tab.label, color = if (selected) Fg else TextMuted, style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.height(7.dp))
-                        Box(Modifier.width(if (selected) 34.dp else 1.dp).height(3.dp)
-                            .clip(CircleShape).background(if (selected) Accent else Color.Transparent))
+                    Surface(
+                        onClick = { category = tab },
+                        shape = CircleShape,
+                        color = if (selected) Accent.copy(.20f) else Fg.copy(.055f)
+                    ) {
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(tab.label, color = if (selected) Accent else TextMuted, style = MaterialTheme.typography.labelLarge)
+                            if (selected) {
+                                Spacer(Modifier.width(6.dp))
+                                Box(Modifier.size(6.dp).background(Accent, CircleShape))
+                            }
+                        }
                     }
                 }
             }
-            Row(
-                Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    when {
+                        loading -> "SEARCHING"
+                        searchError != null -> "SEARCH ERROR"
+                        else -> "RESULTS"
+                    },
+                    color = Accent,
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 1.5.sp
+                )
+                Spacer(Modifier.weight(1f))
                 Box {
                     TextButton(onClick = { showSort = true }) {
-                        Text(if (sort == SortBy.NAME) "Default" else sort.name.lowercase().replaceFirstChar { it.uppercase() }, color = Fg)
-                        Icon(Icons.Default.UnfoldMore, null, tint = Fg)
+                        Icon(Icons.Default.Sort, null, tint = TextMuted, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(if (sort == SortBy.NAME) "Name" else sort.name.lowercase().replaceFirstChar { it.uppercase() }, color = Fg)
                     }
                     DropdownMenu(showSort, { showSort = false }) {
                         listOf(SortBy.NAME, SortBy.DATE, SortBy.SIZE, SortBy.TYPE).forEach { option ->
-                            DropdownMenuItem(text = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                                onClick = { sort = option; showSort = false })
+                            DropdownMenuItem(text = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }, onClick = { sort = option; showSort = false })
                         }
                     }
                 }
                 Box {
                     TextButton(onClick = { showFilter = true }) {
+                        Icon(Icons.Default.FilterList, null, tint = if (showHidden || !includeFolders || searchContents || minSizeBytes > 0L || modifiedAfter > 0L) Accent else TextMuted, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
                         Text("Filter", color = Fg)
-                        Icon(Icons.Default.UnfoldMore, null, tint = Fg)
                     }
                     DropdownMenu(showFilter, { showFilter = false }) {
-                        DropdownMenuItem(text = { Text(if (showHidden) "Hide hidden files" else "Show hidden files") },
-                            onClick = { showHidden = !showHidden; showFilter = false })
-                        DropdownMenuItem(text = { Text(if (includeFolders) "Hide folders" else "Include folders") },
-                            onClick = { includeFolders = !includeFolders; showFilter = false })
-                        DropdownMenuItem(text = { Text(if (searchContents) "Search file names" else "Search inside text files") },
-                            onClick = { searchContents = !searchContents; showFilter = false })
-                        DropdownMenuItem(text = { Text("Match: ${mode.label}") },
-                            onClick = { mode = when (mode) { SearchMode.CONTAINS -> SearchMode.EXACT; SearchMode.EXACT -> SearchMode.REGEX; SearchMode.REGEX -> SearchMode.CONTAINS }; showFilter = false })
-                        DropdownMenuItem(text = { Text(if (minSizeBytes == 0L) "Size: Any" else "Size: 100 MB+") },
-                            onClick = { minSizeBytes = if (minSizeBytes == 0L) 100L * 1024 * 1024 else 0L; showFilter = false })
-                        DropdownMenuItem(text = { Text(if (modifiedAfter == 0L) "Date: Any time" else "Date: Last 7 days") },
-                            onClick = { modifiedAfter = if (modifiedAfter == 0L) System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000 else 0L; showFilter = false })
-                        DropdownMenuItem(text = { Text("Clear all filters") },
-                            onClick = { showHidden = false; includeFolders = true; searchContents = false; mode = SearchMode.CONTAINS; minSizeBytes = 0L; modifiedAfter = 0L; showFilter = false })
+                        DropdownMenuItem(text = { Text(if (showHidden) "Hide hidden files" else "Show hidden files") }, onClick = { showHidden = !showHidden; showFilter = false })
+                        DropdownMenuItem(text = { Text(if (includeFolders) "Hide folders" else "Include folders") }, onClick = { includeFolders = !includeFolders; showFilter = false })
+                        DropdownMenuItem(text = { Text(if (searchContents) "Search file names" else "Search inside text files") }, onClick = { searchContents = !searchContents; showFilter = false })
+                        DropdownMenuItem(text = { Text("Match: ${mode.label}") }, onClick = { mode = when (mode) { SearchMode.CONTAINS -> SearchMode.EXACT; SearchMode.EXACT -> SearchMode.REGEX; SearchMode.REGEX -> SearchMode.CONTAINS }; showFilter = false })
+                        DropdownMenuItem(text = { Text(if (minSizeBytes == 0L) "Size: Any" else "Size: 100 MB+") }, onClick = { minSizeBytes = if (minSizeBytes == 0L) 100L * 1024 * 1024 else 0L; showFilter = false })
+                        DropdownMenuItem(text = { Text(if (modifiedAfter == 0L) "Date: Any time" else "Date: Last 7 days") }, onClick = { modifiedAfter = if (modifiedAfter == 0L) System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000 else 0L; showFilter = false })
+                        DropdownMenuItem(text = { Text("Clear all filters") }, onClick = { showHidden = false; includeFolders = true; searchContents = false; mode = SearchMode.CONTAINS; minSizeBytes = 0L; modifiedAfter = 0L; showFilter = false })
                     }
                 }
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = { includeFolders = !includeFolders }) {
-                    Icon(if (includeFolders) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
-                        if (includeFolders) "Folders included" else "Folders excluded", tint = Accent)
+            }
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Row(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            when {
+                                loading -> "Looking through your storage"
+                                searchError != null -> "Something went wrong"
+                                else -> "${String.format(Locale.getDefault(), "%,d", results.size)} matches found"
+                            },
+                            color = Fg,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text("${String.format(Locale.getDefault(), "%,d", scanned)} items scanned", color = TextMuted, style = MaterialTheme.typography.labelSmall)
+                    }
+                    if (loading) CircularProgressIndicator(Modifier.size(23.dp), color = Accent, strokeWidth = 2.dp)
+                    else Icon(Icons.Default.Bolt, null, tint = Accent, modifier = Modifier.size(22.dp))
                 }
             }
-            Text(
-                when {
-                    loading -> "Searching storage…"
-                    searchError != null -> "Search failed: $searchError"
-                    else -> "${results.size} files found · ${String.format(Locale.getDefault(), "%,d", scanned)} scanned"
-                },
-                Modifier.padding(start = 8.dp, bottom = 8.dp),
-                color = TextMuted,
-                style = MaterialTheme.typography.bodySmall
-            )
-            if (truncated) Text("Showing first results; narrow your search to find more.", Modifier.padding(start = 8.dp, bottom = 6.dp),
-                color = TextMuted, style = MaterialTheme.typography.labelSmall)
+            if (truncated) Text("Showing the first results. Add a filter to narrow your search.", color = TextMuted, style = MaterialTheme.typography.labelSmall)
             LazyColumn(
                 Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(1.dp)
+                contentPadding = PaddingValues(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 items(results, key = { it.path }) { item ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable {
+                    GlassCard(
+                        Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(19.dp),
+                        onClick = {
                             if (item.isDir) onOpenDirectory(item.path) else {
                                 rememberFile(item)
                                 onOpenFile(item)
                             }
-                        }.padding(horizontal = 8.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        }
                     ) {
-                        Icon(searchFileIcon(item.name, item.isDir), null,
-                            tint = searchFileTint(item.name, item.isDir), modifier = Modifier.size(39.dp))
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(item.name, color = Fg, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodyLarge)
-                            Text("${item.path.substringBeforeLast('/')}  ·  ${if (item.isDir) "Folder" else formatSearchSize(item.size)}  ·  ${android.text.format.DateFormat.format("MM/dd/yyyy, HH:mm", item.modified)}",
-                                color = TextMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier.size(49.dp).background(searchFileTint(item.name, item.isDir).copy(.16f), RoundedCornerShape(15.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(searchFileIcon(item.name, item.isDir), null, tint = searchFileTint(item.name, item.isDir), modifier = Modifier.size(27.dp))
+                            }
+                            Spacer(Modifier.width(13.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(item.name, color = Fg, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
+                                Text(item.path.substringBeforeLast('/').ifEmpty { "/" }, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(shape = CircleShape, color = Fg.copy(.07f)) {
+                                        Text(if (item.isDir) "FOLDER" else formatSearchSize(item.size), Modifier.padding(horizontal = 8.dp, vertical = 3.dp), color = TextMuted, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    Spacer(Modifier.width(7.dp))
+                                    Text(android.text.format.DateFormat.format("MMM dd, yyyy", item.modified).toString(), color = TextMuted.copy(.85f), style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                            Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
                         }
                     }
-                    HorizontalDivider(color = Fg.copy(.08f))
                 }
                 if (results.isEmpty() && !loading) {
                     item {
-                        Box(Modifier.fillMaxWidth().padding(top = 64.dp), contentAlignment = Alignment.Center) {
-                            Text("No files found", color = TextMuted)
+                        Box(Modifier.fillMaxWidth().padding(top = 42.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(if (searchError != null) Icons.Default.ErrorOutline else Icons.Default.SearchOff, null, tint = TextMuted, modifier = Modifier.size(40.dp))
+                                Text(if (searchError != null) "Search couldn't finish" else "No matching files", color = Fg, style = MaterialTheme.typography.titleMedium)
+                                Text(if (searchError != null) searchError.orEmpty() else "Try another name, extension or category.", color = TextMuted, style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
