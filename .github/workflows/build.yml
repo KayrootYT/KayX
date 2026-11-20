@@ -74,22 +74,25 @@ jobs:
             find ./dist -maxdepth 4 -type f -print
             exit 1
           fi
-          if [ ! -r "$APK" ]; then
-            echo "::error::APK is not readable: $APK"
+          if [ ! -s "$APK" ] || [ ! -r "$APK" ]; then
+            echo "::error::APK is empty or unreadable: $APK"
             exit 1
           fi
 
           APK_NAME="$(basename "$APK")"
-          echo "Uploading $APK_NAME ($(stat -c%s "$APK") bytes)"
+          APK_SIZE="$(stat -c%s "$APK")"
+          echo "Uploading $APK_NAME ($APK_SIZE bytes) to $TELEGRAM_CHAT_ID"
           CAPTION="KayX APK build
           Repository: $REPOSITORY
           Branch: $BRANCH
           Commit: ${COMMIT:0:7}"
 
-          RESPONSE="$(curl --fail --silent --show-error --max-time 120 \
+          # Stream the file through stdin so curl does not need to reopen
+          # a runner-local path while constructing the multipart request.
+          RESPONSE="$(curl --fail --silent --show-error --max-time 180 \
             -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
             -F "chat_id=${TELEGRAM_CHAT_ID}" \
-            -F "document=@${APK}" \
-            -F "caption=${CAPTION}")"
+            -F "document=@-;filename=${APK_NAME};type=application/vnd.android.package-archive" \
+            -F "caption=${CAPTION}" < "$APK")"
           echo "$RESPONSE" | jq -e '.ok == true' >/dev/null
           echo "Telegram accepted APK upload: $APK_NAME"
