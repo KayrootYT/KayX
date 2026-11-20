@@ -186,7 +186,6 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         }
 
         // Storage and services section follows the category and quick-access cards.
-        var localOpen by remember { mutableStateOf(true) }
         Text("Storage and services", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextMuted)
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
             Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
