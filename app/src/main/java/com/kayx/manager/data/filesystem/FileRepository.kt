@@ -1,5 +1,6 @@
 package com.kayx.manager.data.filesystem
 
+import android.content.Context
 import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.domain.model.SearchMode
 import com.kayx.manager.domain.model.SortBy
@@ -13,8 +14,15 @@ import java.util.LinkedHashMap
 class FileRepository {
 
     private val searchEngine = FileSearchEngine()
+    @Volatile private var indexedSearch: AndroidIndexedFileSearch? = null
 
-    fun invalidateSearchCache() = searchEngine.invalidate()
+    fun attachSearchContext(context: Context) {
+        if (indexedSearch == null) synchronized(this) {
+            if (indexedSearch == null) indexedSearch = AndroidIndexedFileSearch(context.applicationContext)
+        }
+    }
+
+    fun invalidateSearchCache() { searchEngine.invalidate(); indexedSearch?.invalidate() }
 
     suspend fun list(dir: File, showHidden: Boolean = false, sort: SortBy = SortBy.NAME): List<FileItem> = withContext(Dispatchers.IO) {
         if (!dir.exists() || !dir.isDirectory) return@withContext emptyList()
@@ -56,8 +64,8 @@ class FileRepository {
         dir: File, query: String, showHidden: Boolean = false,
         mode: SearchMode = SearchMode.CONTAINS, maxAgeMs: Long = 0L,
         allowedExtensions: Set<String> = emptySet(), sort: SortBy = SortBy.NAME
-    ): List<FileItem> = searchEngine.search(
-        FileSearchRequest(
+    ): List<FileItem> {
+        val request = FileSearchRequest(
             root = dir,
             query = query,
             showHidden = showHidden,
@@ -66,7 +74,8 @@ class FileRepository {
             allowedExtensions = allowedExtensions,
             sortBy = sort
         )
-    ).items
+        return indexedSearch?.search(request)?.items ?: searchEngine.search(request).items
+    }
 
     suspend fun searchContents(
         dir: File, query: String, showHidden: Boolean = false, maxResults: Int = 300,
