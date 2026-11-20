@@ -279,7 +279,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                 val scope = this
                 suspend fun load(dir: String, pane: Int): List<FileItem> =
                     if (searchActive && searchPane == pane) {
-                        if (snapshot.grep) repo.searchContents(File(dir), snapshot.query, snapshot.showHidden, isActive = { scope.isActive })
+                        if (snapshot.grep && !isFilenamePattern(snapshot.query)) repo.searchContents(File(dir), snapshot.query, snapshot.showHidden, isActive = { scope.isActive })
                         else repo.search(File(dir), snapshot.query, snapshot.showHidden, SettingsStore.searchMode, SettingsStore.searchAgeMs, snapshot.searchCategory.extensions, snapshot.sort)
                     } else repo.list(File(dir), snapshot.showHidden, snapshot.sort)
                 val mainTask = async(Dispatchers.IO) { load(snapshot.dir, 0) }
@@ -537,4 +537,13 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             reload()
         }
     }
+}
+
+/** Extension and wildcard expressions always search file names, even if content-search mode is selected. */
+private fun isFilenamePattern(raw: String): Boolean {
+    val query = raw.trim()
+    val dot = query.lastIndexOf('.')
+    val extension = query.substringAfterLast('.', "")
+    return query.startsWith(".") || '*' in query || '?' in query ||
+        (dot > 0 && extension.length in 1..12 && extension.all { it.isLetterOrDigit() })
 }
