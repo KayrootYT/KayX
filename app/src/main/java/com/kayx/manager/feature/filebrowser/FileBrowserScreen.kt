@@ -135,16 +135,36 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
         snackbarHost = { SnackbarHost(snack) },
         topBar = {
             Column(Modifier.statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            val searchGlow by animateColorAsState(
+                targetValue = if (s.searching) Accent.copy(alpha = if (s.query.isNotEmpty()) .34f else .20f) else Fg.copy(.08f),
+                label = "search-glass-glow"
+            )
+            GlassCard(
+                Modifier.fillMaxWidth().border(
+                    androidx.compose.foundation.BorderStroke(1.dp, searchGlow),
+                    RoundedCornerShape(26.dp)
+                ),
+                shape = RoundedCornerShape(26.dp),
+                tint = if (s.searching) Accent else Fg
+            ) {
+                Row(Modifier.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton({ if (!vm.up()) onExit() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                     if (s.searching) TextField(
                         value = s.query,
                         onValueChange = vm::setQuery,
                         modifier = Modifier.weight(1f).focusRequester(searchFocusRequester),
                         singleLine = true,
-                        placeholder = { Text(if (s.grep) "Search inside files" else "Search names, .mp3 or *.mp3") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search files") },
+                        placeholder = {
+                            Text(
+                                if (s.grep) "Search inside file contents" else "Search files & folders",
+                                color = Fg.copy(.46f),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = "Search files",
+                                tint = Accent, modifier = Modifier.size(24.dp))
+                        },
                         trailingIcon = {
                             if (s.query.isNotEmpty()) IconButton(onClick = { vm.setQuery("") }) {
                                 Icon(Icons.Default.Close, contentDescription = "Clear query")
@@ -159,8 +179,10 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,
                             focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
-                        )
+                            unfocusedIndicatorColor = Color.Transparent,
+                            cursorColor = Accent
+                        ),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Fg)
                     )
                     else Column(Modifier.weight(1f)) {
                         val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
@@ -286,14 +308,17 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         Surface(
                             onClick = { vm.setSearchCategory(category) },
                             shape = RoundedCornerShape(50),
-                            color = if (selected) Accent.copy(.22f) else Fg.copy(.055f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) Accent.copy(.55f) else Fg.copy(.10f))
+                            color = if (selected) Accent.copy(.24f) else Fg.copy(.045f),
+                            border = androidx.compose.foundation.BorderStroke(
+                                if (selected) 1.4.dp else 1.dp,
+                                if (selected) Accent.copy(.72f) else Fg.copy(.12f)
+                            )
                         ) {
                             Text(
                                 category.label,
-                                Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
-                                color = if (selected) Accent else Fg.copy(.72f),
-                                style = MaterialTheme.typography.labelMedium
+                                Modifier.padding(horizontal = 15.dp, vertical = 9.dp),
+                                color = if (selected) Accent else Fg.copy(.76f),
+                                style = MaterialTheme.typography.labelLarge
                             )
                         }
                     }
@@ -586,13 +611,13 @@ private fun FileRow(f: FileItem, selected: Boolean, onClick: () -> Unit, onLong:
     )
     GlassCard(
         Modifier.fillMaxWidth().animateContentSize().swipeToSelect(true) { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSwipe() },
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(11.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
         tint = if (selected) Accent else Fg,
         onClick = onClick,
         onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLong() }
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 9.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if ((selected || folder) && com.kayx.manager.data.settings.SettingsStore.icons3d) {
