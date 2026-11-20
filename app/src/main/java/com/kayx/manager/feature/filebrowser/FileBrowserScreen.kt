@@ -117,6 +117,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
             else openFor = f
         }
     }
+    LaunchedEffect(ctx) { vm.attachSearchContext(ctx.applicationContext) }
     LaunchedEffect(startPath) { vm.start(startPath) }
     LaunchedEffect(s.searching) {
         if (s.searching) runCatching { searchFocusRequester.requestFocus() }
