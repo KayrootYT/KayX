@@ -41,6 +41,9 @@ import com.kayx.manager.ui.theme.Accent2
 import com.kayx.manager.ui.theme.TextMuted
 import java.io.File
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -59,6 +62,14 @@ import kotlinx.coroutines.withContext
 fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -> Unit = {}, onPush: (String, Tool) -> Unit = { _, _ -> }, onOpen: (String) -> Unit, onSearch: () -> Unit = {}) {
     val ctx = LocalContext.current
     val root = Environment.getExternalStorageDirectory()
+    val barcodeScanner = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val scanned = result.contents
+        if (!scanned.isNullOrBlank()) {
+            val clipboard = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Scanned code", scanned))
+            Toast.makeText(ctx, "Scanned content copied", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().glassBackground().statusBarsPadding()
@@ -78,25 +89,11 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                     Text("Search", Modifier.weight(1f), color = TextMuted, style = MaterialTheme.typography.bodyLarge)
                 }
             }
-            IconButton(onClick = { StorageScanner.invalidate(); StorageScanner.init(ctx); Toast.makeText(ctx, "Storage scan started", Toast.LENGTH_SHORT).show() }) {
+            IconButton(onClick = { barcodeScanner.launch(ScanOptions().setPrompt("Scan QR code or barcode").setBeepEnabled(false).setOrientationLocked(false)) }) {
                 Icon(Icons.Default.QrCodeScanner, "Scan storage", tint = Fg, modifier = Modifier.size(24.dp))
             }
             IconButton(onClick = onSettings) {
                 Icon(Icons.Default.MoreVert, "More options", tint = Fg, modifier = Modifier.size(24.dp))
-            }
-        }
-
-        // Full-screen local search entry, styled like a modern system file manager.
-        GlassCard(
-            Modifier.fillMaxWidth().height(54.dp),
-            shape = RoundedCornerShape(30.dp),
-            onClick = onSearch
-        ) {
-            Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Search, null, tint = TextMuted, modifier = Modifier.size(23.dp))
-                Spacer(Modifier.width(12.dp))
-                Text("Search files", Modifier.weight(1f), color = TextMuted, style = MaterialTheme.typography.bodyLarge)
-                Icon(Icons.Default.Tune, null, tint = TextMuted, modifier = Modifier.size(21.dp))
             }
         }
 
@@ -195,6 +192,8 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 StorageRow("Phone storage", Icons.Default.PieChart, root.absolutePath) { onOpen(root.absolutePath) }
                 HorizontalDivider(color = Fg.copy(.08f))
+                StorageRow("Root directory", Icons.Default.PhoneAndroid, "/") { onOpen("/") }
+                HorizontalDivider(color = Fg.copy(.08f))
                 Row(Modifier.fillMaxWidth().clickable { onTool(Tool.FTP) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Devices, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
                     Spacer(Modifier.width(14.dp))
@@ -211,11 +210,6 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                     Text("Recently deleted", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                     Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
                 }
-                Row(Modifier.fillMaxWidth().clickable { localOpen = !localOpen }, verticalAlignment = Alignment.CenterVertically) {
-                    Text("More storage locations", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = TextMuted)
-                    Icon(if (localOpen) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = TextMuted)
-                }
-                if (localOpen) StorageRow("Root directory", Icons.Default.PhoneAndroid, "/") { onOpen("/") }
             }
         }
 
