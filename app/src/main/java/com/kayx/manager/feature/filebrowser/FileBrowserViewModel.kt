@@ -105,6 +105,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     private var applied = Triple(SettingsStore.showHidden, SettingsStore.defaultSort, SettingsStore.dualPane)
     val state: StateFlow<BrowserState> = _s
 
+    fun attachSearchContext(context: Context) = repo.attachSearchContext(context)
+
     /** Start a browsing session at [path] (this becomes the root). */
     fun start(path: String) {
         if (_s.value.root == path) { reload(); return }
