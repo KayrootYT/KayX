@@ -92,4 +92,22 @@ class FileSearchEngineTest {
             root.deleteRecursively()
         }
     }
+    @Test
+    fun supportsExtensionSearchWithDotAndWildcardForms() = runBlocking {
+        val root = createTempDir(prefix = "kayx-search-extension-")
+        try {
+            File(root, "track.mp3").writeText("audio")
+            File(root, "track.mp4").writeText("video")
+            File(root, "my-mp3-notes.txt").writeText("notes")
+            val engine = FileSearchEngine()
+
+            assertEquals(listOf("track.mp3"), engine.search(FileSearchRequest(root, ".mp3")).items.map { it.name })
+            assertEquals(listOf("track.mp3"), engine.search(FileSearchRequest(root, "*.mp3")).items.map { it.name })
+            assertEquals(listOf("track.mp3", "my-mp3-notes.txt").toSet(),
+                engine.search(FileSearchRequest(root, "*mp3")).items.map { it.name }.toSet())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
 }
