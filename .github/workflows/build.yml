@@ -79,6 +79,7 @@ jobs:
             exit 1
           fi
 
+          export APK_PATH="$APK"
           echo "Uploading $(basename "$APK") ($(stat -c%s "$APK") bytes) to $TELEGRAM_CHAT_ID"
           python3 - <<'PY'
           import http.client
@@ -114,8 +115,7 @@ jobs:
               ).encode()
           )
           suffix = f"\r\n--{boundary}--\r\n".encode()
-          file_size = os.path.getsize(apk)
-          content_length = len(prefix) + file_size + len(suffix)
+          content_length = len(prefix) + os.path.getsize(apk) + len(suffix)
 
           connection = http.client.HTTPSConnection("api.telegram.org", timeout=240)
           try:
@@ -132,8 +132,7 @@ jobs:
                       connection.send(chunk)
               connection.send(suffix)
               response = connection.getresponse()
-              payload = response.read()
-              result = json.loads(payload.decode("utf-8"))
+              result = json.loads(response.read().decode("utf-8"))
               if response.status != 200 or not result.get("ok"):
                   print("Telegram upload failed:", json.dumps(result), file=sys.stderr)
                   sys.exit(1)
@@ -141,5 +140,3 @@ jobs:
           finally:
               connection.close()
           PY
-        env:
-          APK_PATH: ${{ steps.download.outputs.download-path }}/app-debug.apk
