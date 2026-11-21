@@ -65,6 +65,7 @@ fun SearchScreen(
     onOpenFile: (FileItem) -> Unit
 ) {
     val context = LocalContext.current
+    val palette = com.kayx.manager.ui.theme.LocalPalette.current
     val root = remember { android.os.Environment.getExternalStorageDirectory() }
     val engine = remember(context) { AndroidIndexedFileSearch(context.applicationContext) }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -146,56 +147,53 @@ fun SearchScreen(
 
     Column(
         Modifier.fillMaxSize().glassBackground().statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        // Compact navigation and editorial header.
+        // Quiet, editorial iOS-inspired navigation header.
         Row(verticalAlignment = Alignment.CenterVertically) {
             Surface(
                 onClick = onBack,
                 shape = CircleShape,
-                color = Fg.copy(alpha = .07f),
-                modifier = Modifier.size(44.dp)
+                color = palette.surface.copy(alpha = if (palette.amoled) .92f else .78f),
+                modifier = Modifier.size(42.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, palette.separator)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.ArrowBack, "Back", tint = Fg, modifier = Modifier.size(21.dp))
+                    Icon(Icons.Default.ArrowBack, "Back", tint = Fg, modifier = Modifier.size(20.dp))
                 }
             }
-            Spacer(Modifier.width(13.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("DISCOVER", color = Accent, style = MaterialTheme.typography.labelSmall, letterSpacing = 2.sp)
-                Text("Search your space", color = Fg, style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text("LIBRARY", color = Accent, style = MaterialTheme.typography.labelSmall, letterSpacing = 1.8.sp)
+                Text("Search", color = Fg, style = MaterialTheme.typography.headlineMedium)
             }
             Surface(shape = CircleShape, color = Accent.copy(alpha = .12f)) {
-                Icon(Icons.Default.AutoAwesome, "KayX search", tint = Accent, modifier = Modifier.padding(11.dp).size(20.dp))
+                Icon(Icons.Default.AutoAwesome, "KayX search", tint = Accent, modifier = Modifier.padding(10.dp).size(19.dp))
             }
         }
 
-        // High-contrast glass search field with a subtle gradient rim.
+        // A single calm search capsule; one clear action, no competing controls.
+        val searchShape = RoundedCornerShape(23.dp)
         Box(
             Modifier.fillMaxWidth()
-                .shadow(16.dp, RoundedCornerShape(25.dp), ambientColor = Accent.copy(.12f), spotColor = Accent.copy(.18f))
-                .background(
-                    Brush.linearGradient(listOf(Accent.copy(.24f), Color.White.copy(.10f), Color(0xFF8B7CFF).copy(.16f))),
-                    RoundedCornerShape(25.dp)
-                )
-                .padding(1.dp)
+                .shadow(if (palette.amoled) 0.dp else 12.dp, searchShape,
+                    ambientColor = Accent.copy(.10f), spotColor = Accent.copy(.12f))
+                .clip(searchShape)
+                .background(palette.surface.copy(alpha = if (palette.amoled) 1f else .92f))
+                .border(1.dp, if (activeSearch) Accent.copy(.58f) else palette.separator, searchShape)
+                .padding(horizontal = 15.dp, vertical = 5.dp)
         ) {
-            Row(
-                Modifier.fillMaxWidth()
-                    .background(Fg.copy(alpha = .055f), RoundedCornerShape(24.dp))
-                    .padding(start = 15.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.Search, null, tint = Accent, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(11.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Search, null, tint = Accent, modifier = Modifier.size(23.dp))
+                Spacer(Modifier.width(10.dp))
                 TextField(
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier.weight(1f).focusRequester(focus),
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge,
-                    placeholder = { Text("Search files, folders…", color = TextMuted.copy(alpha = .85f)) },
+                    placeholder = { Text("Search", color = TextMuted.copy(alpha = .9f)) },
                     trailingIcon = {
                         if (query.isNotEmpty()) {
                             IconButton(onClick = { query = "" }) {
@@ -214,18 +212,11 @@ fun SearchScreen(
                         disabledContainerColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = Accent
+                        cursorColor = Accent,
+                        focusedTextColor = Fg,
+                        unfocusedTextColor = Fg
                     )
                 )
-                if (!activeSearch) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Accent.copy(alpha = .14f),
-                        onClick = { keyboard?.hide(); focus.requestFocus() }
-                    ) {
-                        Icon(Icons.Default.Tune, "Search options", tint = Accent, modifier = Modifier.padding(10.dp).size(19.dp))
-                    }
-                }
             }
         }
 
@@ -356,14 +347,15 @@ fun SearchScreen(
                     val selected = category == tab
                     Surface(
                         onClick = { category = tab },
-                        shape = CircleShape,
-                        color = if (selected) Accent.copy(.20f) else Fg.copy(.055f)
+                        shape = RoundedCornerShape(15.dp),
+                        color = if (selected) Accent.copy(if (palette.amoled) .22f else .13f) else palette.surface.copy(alpha = .72f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) Accent.copy(.48f) else palette.separator)
                     ) {
                         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tab.label, color = if (selected) Accent else TextMuted, style = MaterialTheme.typography.labelLarge)
+                            Text(tab.label, color = if (selected) Accent else Fg.copy(.78f), style = MaterialTheme.typography.labelLarge)
                             if (selected) {
-                                Spacer(Modifier.width(6.dp))
-                                Box(Modifier.size(6.dp).background(Accent, CircleShape))
+                                Spacer(Modifier.width(7.dp))
+                                Box(Modifier.size(5.dp).background(Accent, CircleShape))
                             }
                         }
                     }
