@@ -162,11 +162,6 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             Icon(Icons.Default.Search, contentDescription = "Search files",
                                 tint = Accent, modifier = Modifier.size(24.dp))
                         },
-                        trailingIcon = {
-                            if (s.query.isNotEmpty()) IconButton(onClick = { vm.setQuery("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear query")
-                            }
-                        },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = {
                             vm.reload()
