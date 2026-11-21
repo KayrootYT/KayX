@@ -187,7 +187,7 @@ private fun DualHeader(
                 onValueChange = vm::setQuery,
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                placeholder = { Text(if (s.grep) "Search text inside files" else "Search in folder") },
+                placeholder = { Text("Search") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search files") },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = {
@@ -206,7 +206,10 @@ private fun DualHeader(
                 )
                 Text(info, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Fg.copy(.62f))
             }
-            if (s.searching) IconButton(vm::toggleSearch) { Icon(Icons.Default.Close, "Close search") }
+            IconButton(vm::toggleSearch) {
+                Icon(if (s.searching) Icons.Default.Close else Icons.Default.Search,
+                    if (s.searching) "Close search" else "Search")
+            }
             Box {
                 IconButton({ menuOpen = true }) { Icon(Icons.Default.MoreVert, "More options") }
                 DropdownMenu(menuOpen, { menuOpen = false; sortPage = false }) {
@@ -234,7 +237,7 @@ private fun DualHeader(
                         DropdownMenuItem({ Text("Refresh") }, { menuOpen = false; vm.reload() })
                         HorizontalDivider()
                         // Select & search
-                        if (s.activePane == 0 && !s.searching) DropdownMenuItem({ Text("Search") }, { menuOpen = false; vm.toggleSearch() })
+                        if (!s.searching) DropdownMenuItem({ Text("Search") }, { menuOpen = false; vm.toggleSearch() })
                         DropdownMenuItem({ Text("Select all") }, { menuOpen = false; vm.selectAll() })
                         HorizontalDivider()
                         DropdownMenuItem({ Text("Open terminal here") }, { menuOpen = false; onOpenFile(activePath, Tool.TERMINAL) })
@@ -289,6 +292,7 @@ private fun PanePager(s: BrowserState, vm: FileBrowserViewModel, pad: PaddingVal
                 PaneList(
                     dir = if (page == 0) s.dir else s.secondaryDir,
                     items = if (page == 0) s.items else s.secondaryItems,
+                    query = if (s.searching && s.activePane == page && !s.grep) s.query else "",
                     selected = if (page == 0) s.primarySelected else s.secondarySelected,
                     recent = s.recent,
                     active = s.activePane == page,
@@ -337,7 +341,7 @@ private fun TabStrip(s: BrowserState, onPick: (Int) -> Unit, onAddTab: (String) 
 
 @Composable
 private fun PaneList(
-    dir: String, items: List<FileItem>, selected: Set<String>, recent: Set<String>,
+    dir: String, items: List<FileItem>, query: String, selected: Set<String>, recent: Set<String>,
     active: Boolean, loading: Boolean, showDivider: Boolean,
     onActivate: () -> Unit, onUp: () -> Unit, onClick: (FileItem) -> Unit, onLong: (FileItem) -> Unit,
     onSwipe: (FileItem) -> Unit, swipeEnabled: Boolean, onRefresh: () -> Unit
@@ -362,7 +366,7 @@ private fun PaneList(
                         }
                     }
                     items(items, key = { it.path }, contentType = { if (it.isDir) "folder" else "file" }) { f ->
-                        PaneRow(f, f.path in selected, f.path in recent, { onClick(f) }, { onLong(f) }, { onSwipe(f) }, swipeEnabled)
+                        PaneRow(f, f.path in selected, f.path in recent, query, { onClick(f) }, { onLong(f) }, { onSwipe(f) }, swipeEnabled)
                     }
                 }
             }
@@ -385,7 +389,7 @@ private fun UpRow(onClick: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PaneRow(f: FileItem, selected: Boolean, fresh: Boolean, onClick: () -> Unit, onLong: () -> Unit, onSwipe: () -> Unit, swipeEnabled: Boolean) {
+private fun PaneRow(f: FileItem, selected: Boolean, fresh: Boolean, query: String, onClick: () -> Unit, onLong: () -> Unit, onSwipe: () -> Unit, swipeEnabled: Boolean) {
     val haptics = LocalHapticFeedback.current
     val kind = remember(f.name, f.isDir) { kindOf(f) }
     // A directory always uses a folder glyph, independent of the files it contains.
@@ -409,10 +413,7 @@ private fun PaneRow(f: FileItem, selected: Boolean, fresh: Boolean, onClick: () 
             }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    f.name, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium, color = if (fresh) FreshGreen else Fg
-                )
+                HighlightedFileName(f.name, query, color = if (fresh) FreshGreen else Fg, maxLines = 2)
                 Text(
                     meta, maxLines = 1, style = MaterialTheme.typography.labelSmall,
                     color = if (fresh) FreshGreen.copy(alpha = .8f) else Fg.copy(.5f)
