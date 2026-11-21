@@ -219,7 +219,10 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Fg.copy(.5f))
                     }
                     if (s.selected.isEmpty()) {
-                        IconButton(vm::toggleSearch) { Icon(if (s.searching) Icons.Default.Close else Icons.Default.Search, if (s.searching) "Close search" else "Search") }
+                        // The TextField owns the single clear (X) action while search is active.
+                        if (!s.searching) IconButton(vm::toggleSearch) {
+                            Icon(Icons.Default.Search, "Search")
+                        }
                         Box {
                             IconButton({ menu = true }) { Icon(Icons.Default.MoreVert, "More options") }
                             DropdownMenu(menu, { menu = false; sortPage = false }) {
