@@ -326,7 +326,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         if (!com.kayx.manager.data.storage.PrivateSpace.isUnlocked()) { notify("Unlock Private space before moving files into it"); return }
         val files = _s.value.selected.map(::File)
         val dst = com.kayx.manager.data.storage.PrivateSpace.dir(ctx)
-        run({ FileOps.transfer(files, dst, true, Conflict.KEEP_BOTH).map { } }, "Moved ${files.size} to Private space")
+        run({ FileOps.transfer(files, dst, true, Conflict.KEEP_BOTH).map { } }, "Moved ${files.size} to Private space", FileActionSound.MOVE)
         com.kayx.manager.data.storage.StorageScanner.invalidate()
     }
 
@@ -504,12 +504,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val list = if (st.dualPane && st.activePane == 1) st.secondaryItems else st.items
         if (st.dualPane && st.activePane == 1) st.copy(secondarySelected = list.filter { rx.matches(it.name) }.map { it.path }.toSet()) else st.copy(primarySelected = list.filter { rx.matches(it.name) }.map { it.path }.toSet())
     }
-    fun duplicateSelected() { val f = _s.value.selected.map(::File); run({ FileOps.duplicate(f) }, "Duplicated ${f.size}") }
+    fun duplicateSelected() { val f = _s.value.selected.map(::File); run({ FileOps.duplicate(f) }, "Duplicated ${f.size}", FileActionSound.COPY) }
     fun batchRename(find: String, replace: String, regex: Boolean, start: Int) {
         val f = _s.value.selected.map(::File).sortedBy { it.name.lowercase() }
-        run({ FileOps.batchRename(f, find, replace, regex, start) }, "Renamed ${f.size}")
+        run({ FileOps.batchRename(f, find, replace, regex, start) }, "Renamed ${f.size}", FileActionSound.RENAME)
     }
-    fun symlink(target: String, name: String) = run({ runCatching { FileOps.symlink(File(target), File(activeDirectory(), name)) } }, "Symlink created")
+    fun symlink(target: String, name: String) = run({ runCatching { FileOps.symlink(File(target), File(activeDirectory(), name)) } }, "Symlink created", FileActionSound.CREATE)
 
     fun extractHere(path: String) {
         viewModelScope.launch {
