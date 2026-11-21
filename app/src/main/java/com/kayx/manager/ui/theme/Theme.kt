@@ -45,25 +45,25 @@ internal fun buildPalette(mode: ThemeMode, systemDark: Boolean, accent: AccentCh
     return when (resolved) {
         ThemeMode.LIGHT -> KayXPalette(
             dark = false, amoled = false,
-            bg = Color(0xFFF2F2F7), surface = Color.White, dialog = Color.White,
-            groupFill = Color.White, separator = Color(0x293C3C43),
+            bg = Color(0xFFF5F5F7), surface = Color(0xFFFFFFFF), dialog = Color(0xFFFFFFFF),
+            groupFill = Color.White, separator = Color(0x263C3C43),
             fg = Color(0xFF1C1C1E), muted = Color(0xFF6E6E73),
             accent = accent.light, accent2 = Color(0xFF5856D6),
             segTrack = Color(0x1F767680), segThumb = Color.White, switchOff = Color(0xFFE5E5EA)
         )
         ThemeMode.AMOLED -> KayXPalette(
             dark = true, amoled = true,
-            bg = Color.Black, surface = Color.Black, dialog = Color(0xFF1C1C1E),
-            groupFill = Color(0xFF1C1C1E), separator = Color(0xFF38383A),
-            fg = Color.White, muted = Color(0xFF8E8E93),
+            bg = Color(0xFF000000), surface = Color(0xFF000000), dialog = Color(0xFF171719),
+            groupFill = Color(0xFF111113), separator = Color(0xFF303034),
+            fg = Color(0xFFF5F5F7), muted = Color(0xFF98989F),
             accent = accent.dark, accent2 = Color(0xFF9B83FF),
             segTrack = Color(0xFF2C2C2E), segThumb = Color(0xFF636366), switchOff = Color(0xFF39393D)
         )
         else -> KayXPalette(
             dark = true, amoled = false,
-            bg = Color(0xFF080D18), surface = Color(0xFF111B2B), dialog = Color(0xFF1A2536),
-            groupFill = Color.White.copy(alpha = .08f), separator = Color.White.copy(alpha = .10f),
-            fg = Color(0xFFF3F7FF), muted = Color(0xFF9AAAC2),
+            bg = Color(0xFF101014), surface = Color(0xFF1C1C1E), dialog = Color(0xFF2C2C2E),
+            groupFill = Color.White.copy(alpha = .055f), separator = Color.White.copy(alpha = .11f),
+            fg = Color(0xFFF5F5F7), muted = Color(0xFF98989F),
             accent = accent.dark, accent2 = Color(0xFF9B83FF),
             segTrack = Color.White.copy(alpha = .10f), segThumb = Color(0xFF4A5A78), switchOff = Color(0xFF39455A)
         )
