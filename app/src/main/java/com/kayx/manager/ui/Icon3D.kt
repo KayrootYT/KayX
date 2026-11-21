@@ -77,7 +77,12 @@ fun Icon3D(icon: ImageVector, color: Color, size: Dp = 40.dp, flip: Boolean = fa
         if (flip) 360f else 0f,
         spring(dampingRatio = .62f, stiffness = Spring.StiffnessLow), label = "icon3d-flip"
     )
-    Tile3D(Modifier.size(size), color, corner = size * .26f, rotationY = rot) {
+    val pressScale by animateFloatAsState(
+        if (flip) .91f else 1f,
+        spring(dampingRatio = .48f, stiffness = Spring.StiffnessHigh), label = "icon3d-press-depth"
+    )
+    Tile3D(Modifier.size(size).graphicsLayer { scaleX = pressScale; scaleY = pressScale },
+        color, corner = size * .26f, rotationY = rot) {
         val g = size * .52f
         Icon(icon, null, Modifier.size(g).offset(0.dp, 1.5.dp), tint = Color.Black.copy(alpha = .28f))
         Icon(icon, contentDescription, Modifier.size(g), tint = Color.White)
