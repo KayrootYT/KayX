@@ -384,10 +384,13 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
     fun notify(msg: String) = _s.update { it.copy(message = msg) }
     fun consumeMessage() = _s.update { it.copy(message = null) }
-    fun copySelected(cut: Boolean) = _s.update { st ->
+    fun copySelected(cut: Boolean) {
+        FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else FileActionSound.COPY)
+        _s.update { st ->
         val picked = st.selected.toList()
         if (st.dualPane && st.activePane == 1) st.copy(clipboard = picked, cut = cut, secondarySelected = emptySet(), message = if (cut) "Cut ${picked.size}" else "Copied ${picked.size}")
         else st.copy(clipboard = picked, cut = cut, primarySelected = emptySet(), message = if (cut) "Cut ${picked.size}" else "Copied ${picked.size}")
+        }
     }
     fun clearClipboard() = _s.update { it.copy(clipboard = emptyList()) }
 
@@ -486,7 +489,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
     fun deleteSelected() {
         val f = _s.value.selected.map(::File)
-        if (SettingsStore.useRecycleBin) run({ withContext(Dispatchers.IO) { RecycleBin.trash(f) } }, "Moved ${f.size} to recycle bin")
+        if (SettingsStore.useRecycleBin) run({ withContext(Dispatchers.IO) { RecycleBin.trash(f) } }, "Moved ${f.size} to recycle bin", FileActionSound.DELETE)
         else run({ repo.delete(f) }, "Deleted ${f.size}", FileActionSound.DELETE)
     }
 
