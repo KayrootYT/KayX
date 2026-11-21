@@ -156,11 +156,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         modifier = Modifier.weight(1f).focusRequester(searchFocusRequester),
                         singleLine = true,
                         placeholder = {
-                            Text(
-                                if (s.grep) "Search inside file contents" else "Search files & folders",
-                                color = Fg.copy(.46f),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                            Text("Search", color = Fg.copy(.46f), style = MaterialTheme.typography.bodyLarge)
                         },
                         leadingIcon = {
                             Icon(Icons.Default.Search, contentDescription = "Search files",
@@ -464,7 +460,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
         }
     ) { pad ->
         FileListPane(
-            path = s.dir, items = s.items, selected = s.selected, active = true,
+            path = s.dir, items = s.items, selected = s.selected, query = if (s.searching && !s.grep) s.query else "", active = true,
             modifier = Modifier.fillMaxSize().padding(top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding()),
             onActivate = { vm.setActivePane(0) },
             onItemClick = { f ->
@@ -562,6 +558,7 @@ private fun FileListPane(
     path: String,
     items: List<FileItem>,
     selected: Set<String>,
+    query: String = "",
     active: Boolean,
     modifier: Modifier = Modifier,
     onActivate: () -> Unit,
@@ -594,7 +591,7 @@ private fun FileListPane(
                     }
                 }
                 items(items, key = { it.path }, contentType = { if (it.isDir) "folder" else "file" }) { f ->
-                    FileRow(f, f.path in selected, onClick = { onItemClick(f) }, onLong = { onLong(f) }, onSwipe = { onSwipe(f) })
+                    FileRow(f, f.path in selected, query, onClick = { onItemClick(f) }, onLong = { onLong(f) }, onSwipe = { onSwipe(f) })
                 }
             }
         }
@@ -602,7 +599,7 @@ private fun FileListPane(
 }
 
 @Composable
-private fun FileRow(f: FileItem, selected: Boolean, onClick: () -> Unit, onLong: () -> Unit, onSwipe: () -> Unit = {}) {
+private fun FileRow(f: FileItem, selected: Boolean, query: String, onClick: () -> Unit, onLong: () -> Unit, onSwipe: () -> Unit = {}) {
     val haptics = LocalHapticFeedback.current
     val folder = f.isDir
     val extension = f.name.substringAfterLast('.', "").lowercase()
@@ -666,8 +663,7 @@ private fun FileRow(f: FileItem, selected: Boolean, onClick: () -> Unit, onLong:
             } else com.kayx.manager.ui.FileThumb(f.path)
             Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium, color = Fg)
+                HighlightedFileName(f.name, query, color = Fg, maxLines = 1)
                 Text(
                     remember(f.size, f.modified) { (if (folder) "Folder" else fmtSize(f.size)) + "  ·  " + com.kayx.manager.ui.formatDateTime(f.modified) },
                     style = MaterialTheme.typography.labelSmall, color = Fg.copy(.53f), maxLines = 1

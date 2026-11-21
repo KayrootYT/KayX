@@ -331,7 +331,7 @@ fun CleanupScreen(onBack: () -> Unit, onOpenTool: (String, Tool) -> Unit) {
     val unused by produceState(emptyList<UnusedApp>(), usageOk, refresh) { value = if (usageOk) withContext(Dispatchers.IO) { unusedApps(ctx) } else emptyList() }
     val a = analysis
     val device = remember(refresh) { StorageScanner.deviceStorage() }
-    val reclaim = a?.let { (it.duplicates + it.oldVideos + it.whatsappJunk).distinctBy { f -> f.path } }.orEmpty()
+    val reclaim = a?.let { (it.duplicates + it.oldVideos + it.whatsappJunk + it.temporaryFiles).distinctBy { f -> f.path } }.orEmpty()
     val unusedBytes = unused.sumOf { it.size }
 
     fun ask(title: String, files: List<ScanFile>) { if (files.isEmpty()) scope.launch { snack.showSnackbar("Nothing to clean up") } else confirm = title to files }
@@ -365,6 +365,8 @@ fun CleanupScreen(onBack: () -> Unit, onOpenTool: (String, Tool) -> Unit) {
             Section("Recommended to clean up") {
                 CleanRow(Icons.Default.FileCopy, "Duplicate files", a?.duplicateBytes, onClean = { ask("Duplicate files", a?.duplicates.orEmpty()) })
                 CleanRow(Icons.Default.Movie, "Old videos", a?.oldVideoBytes, onClean = { ask("Old videos (6+ months)", a?.oldVideos.orEmpty()) })
+                CleanRow(Icons.Default.CleaningServices, "Old temporary files (30+ days)", a?.temporaryBytes,
+                    onClean = { ask("Old temporary files", a?.temporaryFiles.orEmpty()) })
                 CleanRow(Icons.Default.Apps, "Unused apps", if (usageOk) unusedBytes else null, if (usageOk) "Clean up" else "Allow access",
                     onClean = { if (usageOk) { if (unused.isEmpty()) scope.launch { snack.showSnackbar("No unused apps") } else showUnused = true } else
                         runCatching { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.parse("package:${ctx.packageName}"))) }.onFailure { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } })
@@ -403,7 +405,7 @@ fun CleanupScreen(onBack: () -> Unit, onOpenTool: (String, Tool) -> Unit) {
     confirm?.let { (title, files) ->
         AlertDialog({ confirm = null }, title = { Text(title) },
             text = { Text("Permanently delete ${files.size} file(s) (${formatBytes(files.sumOf { it.size })})? This cannot be undone." +
-                if (title.startsWith("Duplicate") || title == "Clean up all") "\nOne original copy of each duplicate is kept." else "") },
+                if (title.startsWith("Duplicate") || title == "Clean up all") "\nOne original copy of each duplicate is kept." else if (title == "Old temporary files") "\nOnly temporary/partial files older than 30 days and larger than 1 MB are included." else "") },
             confirmButton = { TextButton({
                 confirm = null
                 scope.launch {

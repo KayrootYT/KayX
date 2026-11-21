@@ -57,6 +57,8 @@ object SettingsStore {
         private set
     var confirmDelete by mutableStateOf(true)
         private set
+    var operationSounds by mutableStateOf(true)
+        private set
 
     // Tools
     var editorFontSize by mutableStateOf(13)
@@ -125,6 +127,7 @@ object SettingsStore {
         dualPane = p.getBoolean("dual_pane", false)
         dualTabs = p.getBoolean("dual_tabs", false)
         confirmDelete = p.getBoolean("confirm_delete", true)
+        operationSounds = p.getBoolean("operation_sounds", true)
         editorFontSize = p.getInt("editor_font", 13).coerceIn(10, 24)
         syntaxHighlight = p.getBoolean("syntax", true)
         editorBackup = p.getBoolean("editor_backup", true)
@@ -161,6 +164,7 @@ object SettingsStore {
     fun updateDualPane(v: Boolean) { dualPane = v; save { putBoolean("dual_pane", v) } }
     fun updateDualTabs(v: Boolean) { dualTabs = v; save { putBoolean("dual_tabs", v) } }
     fun updateConfirmDelete(v: Boolean) { confirmDelete = v; save { putBoolean("confirm_delete", v) } }
+    fun updateOperationSounds(v: Boolean) { operationSounds = v; save { putBoolean("operation_sounds", v) } }
     fun updateEditorFontSize(v: Int) { editorFontSize = v.coerceIn(10, 24); save { putInt("editor_font", editorFontSize) } }
     fun updateSyntaxHighlight(v: Boolean) { syntaxHighlight = v; save { putBoolean("syntax", v) } }
     fun updateEditorBackup(v: Boolean) { editorBackup = v; save { putBoolean("editor_backup", v) } }
