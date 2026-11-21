@@ -217,7 +217,7 @@ fun GlassCard(
         custom -> Brush.verticalGradient(listOf(tint.copy(alpha = .22f), tint.copy(alpha = .10f)))
         p.amoled -> SolidColor(p.groupFill)
         p.dark -> Brush.verticalGradient(listOf(
-            Color.White.copy(alpha = .155f), Color(0xFF17243A).copy(alpha = .20f), Color.White.copy(alpha = .055f)))
+            Color.White.copy(alpha = .155f), Color(0xFF242428).copy(alpha = .20f), Color.White.copy(alpha = .055f)))
         else -> Brush.verticalGradient(listOf(Color.White.copy(alpha = .95f), Color.White.copy(alpha = .82f)))
     } }
     val edge: Brush = remember(p) { when {
