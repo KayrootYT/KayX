@@ -11,6 +11,8 @@ import com.kayx.manager.data.filesystem.Conflict
 import com.kayx.manager.data.filesystem.ExternalOps
 import com.kayx.manager.data.filesystem.RecycleBin
 import com.kayx.manager.data.filesystem.FileOps
+import com.kayx.manager.data.filesystem.FileOperationSounds
+import com.kayx.manager.data.filesystem.FileActionSound
 import com.kayx.manager.data.filesystem.FileRepository
 import com.kayx.manager.data.filesystem.FileSearchCategory
 import com.kayx.manager.data.settings.SettingsStore
@@ -103,9 +105,13 @@ internal enum class NavMove { PUSH, BACK, FORWARD }
 class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), private val archive: ArchiveRepository = ArchiveRepository()) : ViewModel() {
     private val _s = MutableStateFlow(BrowserState(showHidden = SettingsStore.showHidden, sort = SettingsStore.defaultSort, dualPane = SettingsStore.dualPane, tabMode = SettingsStore.dualTabs))
     private var applied = Triple(SettingsStore.showHidden, SettingsStore.defaultSort, SettingsStore.dualPane)
+    private var appContext: Context? = null
     val state: StateFlow<BrowserState> = _s
 
-    fun attachSearchContext(context: Context) = repo.attachSearchContext(context)
+    fun attachSearchContext(context: Context) {
+        appContext = context.applicationContext
+        repo.attachSearchContext(context)
+    }
 
     /** Start a browsing session at [path] (this becomes the root). */
     fun start(path: String) {
@@ -385,10 +391,11 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
     fun clearClipboard() = _s.update { it.copy(clipboard = emptyList()) }
 
-    private fun run(op: suspend () -> Result<Unit>, ok: String? = null) = viewModelScope.launch {
+    private fun run(op: suspend () -> Result<Unit>, ok: String? = null, sound: FileActionSound? = null) = viewModelScope.launch {
         val initial = _s.value
         val sourcePane = if (initial.dualPane && initial.activePane == 1) 1 else 0
         val r = withContext(Dispatchers.IO) { op() }
+        if (r.isSuccess && sound != null) FileOperationSounds.play(appContext, sound)
         repo.invalidateSearchCache()
         clearPaneSelection(sourcePane)
         _s.update { it.copy(message = r.exceptionOrNull()?.message ?: ok) }
@@ -455,6 +462,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     message = result.exceptionOrNull()?.message ?: (if (cut) "Moved ${files.size}" else "Copied ${files.size}")
                 )
             }
+            if (result.isSuccess) FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else if (fromClipboard) FileActionSound.PASTE else FileActionSound.COPY)
             if (fromClipboard && cut && result.isSuccess) clearClipboard()
             reload()
         }
@@ -467,19 +475,19 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val r = _s.value.retryTransfer ?: return
         startTransfer(r.files.map(::File), File(r.dst), r.cut, r.policy, r.sourcePane, r.fromClipboard)
     }
-    fun newFolder(n: String) = run({ repo.createFolder(activeDirectory(), n) }, "Folder created: $n")
-    fun newFile(n: String) = run({ repo.createFile(activeDirectory(), n) }, "File created: $n")
-    fun rename(path: String, n: String) = run({ repo.rename(File(path), n) }, "Renamed to $n")
+    fun newFolder(n: String) = run({ repo.createFolder(activeDirectory(), n) }, "Folder created: $n", FileActionSound.CREATE)
+    fun newFile(n: String) = run({ repo.createFile(activeDirectory(), n) }, "File created: $n", FileActionSound.CREATE)
+    fun rename(path: String, n: String) = run({ repo.rename(File(path), n) }, "Renamed to $n", FileActionSound.RENAME)
     fun zipSelected(name: String) {
         val f = _s.value.selected.map(::File)
         val n = name.trim().replace('/', '_').ifEmpty { "archive" }.let { if (it.endsWith(".zip", true)) it else "$it.zip" }
         val out = File(activeDirectory(), n)
-        run({ archive.create(f, out) }, "Created $n")
+        run({ archive.create(f, out) }, "Created $n", FileActionSound.SUCCESS)
     }
     fun deleteSelected() {
         val f = _s.value.selected.map(::File)
         if (SettingsStore.useRecycleBin) run({ withContext(Dispatchers.IO) { RecycleBin.trash(f) } }, "Moved ${f.size} to recycle bin")
-        else run({ repo.delete(f) }, "Deleted ${f.size}")
+        else run({ repo.delete(f) }, "Deleted ${f.size}", FileActionSound.DELETE)
     }
 
     // ---- MT-Manager-style extras ----
@@ -504,6 +512,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         viewModelScope.launch {
             notify("Extracting…")
             val r = withContext(Dispatchers.IO) { MultiExtract.extract(File(path)) }
+            if (r.isSuccess) FileOperationSounds.play(appContext, FileActionSound.EXTRACT)
             repo.invalidateSearchCache()
             _s.update { st -> st.copy(message = r.fold({ p -> "Extracted ${p.second} file(s) → ${p.first.name}" }, { e -> e.message ?: "Extraction failed" })) }
             reload()
