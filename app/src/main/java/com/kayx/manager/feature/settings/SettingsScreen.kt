@@ -126,6 +126,9 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
                 IosSwitchRow("Dual pane: swipe tabs (full screen)", SettingsStore.dualTabs, SettingsStore::updateDualTabs, Icons.Default.ViewColumn, Indigo)
                 IosDivider(58.dp)
                 IosSwitchRow("Confirm before delete", SettingsStore.confirmDelete, SettingsStore::updateConfirmDelete, Icons.Default.Delete, Red)
+                IosDivider(58.dp)
+                IosSwitchRow("File operation sounds", SettingsStore.operationSounds, SettingsStore::updateOperationSounds,
+                    Icons.Default.VolumeUp, Purple, subtitle = "Different subtle sounds for copy, move, delete, rename and extract.")
                 IosDivider()
                 val sorts = SortBy.values()
                 IosSegmentedRow("Default sort", sorts.map { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } }, sorts.indexOf(SettingsStore.defaultSort)) {
