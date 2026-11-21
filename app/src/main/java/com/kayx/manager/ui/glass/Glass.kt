@@ -66,7 +66,7 @@ fun Modifier.glassBackground(): Modifier {
             return@drawBehind
         }
         // animated styles
-        if (p.dark && !p.amoled) drawRect(Brush.linearGradient(listOf(Color(0xFF0B1424), p.bg, Color(0xFF101027))))
+        if (p.dark && !p.amoled) drawRect(Brush.linearGradient(listOf(Color(0xFF17171B), p.bg, Color(0xFF101014))))
         val a = if (p.amoled) .62f else if (p.dark) 1f else .62f   // overall strength
         val t = phase?.value ?: 0f
         when (style) {
@@ -79,7 +79,7 @@ fun Modifier.glassBackground(): Modifier {
 
 private fun DrawScope.drawStaticGlow(dark: Boolean, bg: Color, accent: Color, accent2: Color) {
     if (dark) {
-        drawRect(Brush.linearGradient(listOf(Color(0xFF0B1424), bg, Color(0xFF101027))))
+        drawRect(Brush.linearGradient(listOf(Color(0xFF17171B), bg, Color(0xFF101014))))
         drawRect(Brush.radialGradient(listOf(accent.copy(alpha = .24f), Color.Transparent),
             center = Offset(size.width * .04f, size.height * .08f), radius = size.width * .92f))
         drawRect(Brush.radialGradient(listOf(accent2.copy(alpha = .19f), Color.Transparent),
