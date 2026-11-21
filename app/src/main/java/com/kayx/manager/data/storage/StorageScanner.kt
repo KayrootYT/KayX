@@ -56,11 +56,13 @@ internal fun isSafeSharedStorageFile(file: File, sharedRoot: File): Boolean = ru
 
 class CleanupAnalysis(
     val large: List<ScanFile>, val duplicates: List<ScanFile>, val oldVideos: List<ScanFile>,
-    val whatsappJunk: List<ScanFile>, private val byCategory: Map<Category, List<ScanFile>>
+    val whatsappJunk: List<ScanFile>, val temporaryFiles: List<ScanFile>,
+    private val byCategory: Map<Category, List<ScanFile>>
 ) {
     val duplicateBytes: Long get() = duplicates.sumOf { it.size }
     val oldVideoBytes: Long get() = oldVideos.sumOf { it.size }
     val whatsappBytes: Long get() = whatsappJunk.sumOf { it.size }
+    val temporaryBytes: Long get() = temporaryFiles.sumOf { it.size }
     fun of(c: Category): List<ScanFile> = byCategory[c].orEmpty()
 }
 
@@ -208,8 +210,18 @@ object StorageScanner {
             val p = s.path
             (p.contains("/WhatsApp/") || p.contains("/com.whatsapp/")) && (p.contains("/.Statuses/") || p.contains("/Sent/") || p.contains("/Cache/"))
         }
+        // Conservative temp cleanup: only sizeable, old partial-download/temp files.
+        // Backups, logs, app-private data and Android/data are deliberately excluded.
+        val tempExt = setOf("tmp", "temp", "part", "crdownload", "download")
+        val tempCutoff = now - 30L * 24 * 3600 * 1000
+        val temporary = scanned.filter { s ->
+            val p = s.path
+            val ext = p.substringAfterLast('.', "").lowercase(Locale.ROOT)
+            s.size >= 1024L * 1024 && s.modified in 1 until tempCutoff &&
+                ext in tempExt && !p.contains("/Android/") && !p.contains("/.")
+        }.sortedByDescending { it.size }
         val dupes = findDuplicates(scanned)
-        return CleanupAnalysis(large, dupes, old, junk, cats).also { analysis = it }
+        return CleanupAnalysis(large, dupes, old, junk, temporary, cats).also { analysis = it }
     }
 
     private fun findDuplicates(all: List<ScanFile>): List<ScanFile> {
