@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kayx.manager.data.advanced.AdvancedAccessRepository
@@ -50,6 +51,7 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
     BackHandler(onBack = onBack)
     val p = LocalPalette.current
     val ctx = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     var rootStatus by remember { mutableStateOf<String?>(null) }
     var checkingRoot by remember { mutableStateOf(false) }
@@ -67,7 +69,9 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
     }
     var showLicenses by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
-    val versionName = remember { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "—" }
+    val appInfo = remember { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0) }.getOrNull() }
+    val versionName = appInfo?.versionName ?: "—"
+    val versionCode = appInfo?.versionCode?.toString() ?: "—"
 
     Column(Modifier.fillMaxSize().glassBackground().statusBarsPadding()) {
         // iOS-style back button (hidden when Settings is a bottom-bar tab)
@@ -254,10 +258,16 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
             }
 
             // ---------------- About ----------------
-            IosSection("About") {
-                IosRow("KayX", icon = Icons.Default.FolderCopy, iconBg = Blue, subtitle = "Beyond File Management.") {
-                    Text(versionName, fontSize = 17.sp, color = p.muted)
-                }
+            IosSection("About", "Beyond File Management.") {
+                IosRow("KayX", icon = Icons.Default.FolderCopy, iconBg = Blue, subtitle = "App version $versionName · Build $versionCode")
+                IosDivider(58.dp)
+                IosRow("Developer", icon = Icons.Default.Person, iconBg = Purple, subtitle = "Kayroot")
+                IosDivider(58.dp)
+                IosRow("GitHub", icon = Icons.Default.Code, iconBg = Gray, subtitle = "github.com/KayrootYT", chevron = true,
+                    onClick = { uriHandler.openUri("https://github.com/KayrootYT") })
+                IosDivider(58.dp)
+                IosRow("Telegram channel", icon = Icons.Default.Send, iconBg = Blue, subtitle = "t.me/KayXManager", chevron = true,
+                    onClick = { uriHandler.openUri("https://t.me/KayXManager") })
                 IosDivider(58.dp)
                 IosRow("Open-source licences", icon = Icons.Default.Description, iconBg = Gray, chevron = true, onClick = { showLicenses = true })
             }
