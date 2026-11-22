@@ -3,6 +3,17 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+// Generate a monotonically increasing app version from the full Git history.
+val kayxCommitCount = runCatching {
+    val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+        .directory(rootProject.projectDir).redirectErrorStream(true).start()
+    val output = process.inputStream.bufferedReader().readText().trim()
+    check(process.waitFor() == 0)
+    output.toInt().coerceAtLeast(1)
+}.getOrDefault(6)
+val kayxVersionCode = (100_000L + kayxCommitCount).coerceAtMost(2_100_000_000L).toInt()
+val kayxVersionName = "0.4.$kayxCommitCount"
+
 android {
     namespace = "com.kayx.manager"
     compileSdk = 34
@@ -10,8 +21,8 @@ android {
         applicationId = "com.kayx.manager"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.4.0"
+        versionCode = kayxVersionCode
+        versionName = kayxVersionName
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
     signingConfigs {
