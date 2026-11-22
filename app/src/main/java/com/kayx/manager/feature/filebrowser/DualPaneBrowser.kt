@@ -189,6 +189,11 @@ private fun DualHeader(
                 singleLine = true,
                 placeholder = { Text("Search") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search files") },
+                trailingIcon = {
+                    if (s.query.isNotEmpty()) IconButton(onClick = { vm.setQuery("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear search")
+                    }
+                },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = {
                     vm.reload()
@@ -206,9 +211,9 @@ private fun DualHeader(
                 )
                 Text(info, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Fg.copy(.62f))
             }
-            IconButton(vm::toggleSearch) {
-                Icon(if (s.searching) Icons.Default.Close else Icons.Default.Search,
-                    if (s.searching) "Close search" else "Search")
+            // Keep one clear (X) inside the active search field; show search launcher only when closed.
+            if (!s.searching) IconButton(vm::toggleSearch) {
+                Icon(Icons.Default.Search, "Search")
             }
             Box {
                 IconButton({ menuOpen = true }) { Icon(Icons.Default.MoreVert, "More options") }
