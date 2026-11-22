@@ -642,12 +642,18 @@ private fun FileRow(f: FileItem, selected: Boolean, query: String, onClick: () -
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if ((selected || folder) && com.kayx.manager.data.settings.SettingsStore.icons3d) {
+            if (selected && com.kayx.manager.data.settings.SettingsStore.icons3d) {
                 com.kayx.manager.ui.Icon3D(
-                    if (selected) Icons.Default.CheckCircle else Icons.Default.Folder,
-                    if (selected) Accent else Color(0xFFFFB02E),
-                    size = 44.dp, flip = selected,
-                    contentDescription = if (selected) "Selected" else "Folder"
+                    Icons.Default.CheckCircle,
+                    Accent,
+                    size = 44.dp, flip = true,
+                    contentDescription = "Selected"
+                )
+            } else if (folder && com.kayx.manager.data.settings.SettingsStore.icons3d) {
+                com.kayx.manager.ui.FolderArtwork(
+                    path = f.path,
+                    modified = f.modified,
+                    modifier = Modifier.size(44.dp)
                 )
             } else if (selected || folder) {
             Icon(
