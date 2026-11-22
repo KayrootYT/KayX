@@ -147,7 +147,7 @@ private fun SectionTitle(text: String) =
 
 @Composable
 private fun ToolRow(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
-    GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp), onClick = onClick) {
+    GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), onClick = onClick) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = Accent, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(12.dp))
@@ -209,7 +209,7 @@ private fun ToolsTab(onPush: (String, Tool) -> Unit) {
         SectionTitle("Media")
         ToolRow("Streaming player", "Play media from a link", Icons.Default.Movie) { onPush("", Tool.STREAM) }
         SectionTitle("File tools")
-        GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)) {
+        GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Info, null, tint = Accent, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(12.dp))
