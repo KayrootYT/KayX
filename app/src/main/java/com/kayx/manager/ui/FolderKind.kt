@@ -23,22 +23,31 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /** What a folder mostly contains; drives the folder's icon (photos folder -> photo icon, music folder -> music icon …). */
-enum class FolderKind(val icon: ImageVector, val color: Color) {
-    PHOTO(Icons.Default.PhotoLibrary, Color(0xFF00ACC1)),
-    MUSIC(Icons.Default.LibraryMusic, Color(0xFFAB47BC)),
-    VIDEO(Icons.Default.VideoLibrary, Color(0xFFFF7043)),
-    DOCS(Icons.Default.Description, Color(0xFF5C6BF5)),
-    ARCHIVE(Icons.Default.FolderZip, Color(0xFFA1887F)),
-    APK(Icons.Default.Android, Color(0xFF43A047)),
-    CODE(Icons.Default.Code, Color(0xFF607D8B)),
-    NONE(Icons.Default.Folder, Color(0xFFFFB02E))
+enum class FolderKind(val icon: ImageVector, val color: Color, val spriteIndex: Int) {
+    NONE(Icons.Default.Folder, Color(0xFFFFB02E), 0),
+    MIXED(Icons.Default.Folder, Color(0xFFFFB02E), 1),
+    PHOTO(Icons.Default.PhotoLibrary, Color(0xFF00ACC1), 2),
+    MUSIC(Icons.Default.LibraryMusic, Color(0xFFAB47BC), 3),
+    VIDEO(Icons.Default.VideoLibrary, Color(0xFFFF7043), 4),
+    DOCS(Icons.Default.Description, Color(0xFF5C6BF5), 5),
+    PDF(Icons.Default.Description, Color(0xFFC62828), 6),
+    SPREADSHEET(Icons.Default.Description, Color(0xFF2E8B57), 7),
+    PRESENTATION(Icons.Default.Description, Color(0xFFE87924), 8),
+    TEXT(Icons.Default.Description, Color(0xFF607D8B), 9),
+    ARCHIVE(Icons.Default.FolderZip, Color(0xFFA1887F), 10),
+    APK(Icons.Default.Android, Color(0xFF43A047), 11),
+    CODE(Icons.Default.Code, Color(0xFF607D8B), 12)
 }
 
 object FolderKinds {
     private val IMG = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic", "heif", "avif", "tif", "tiff", "ico", "raw", "dng", "psd")
     private val AUD = setOf("mp3", "m4a", "wav", "ogg", "oga", "opus", "flac", "aac", "wma", "aiff", "mid", "midi", "amr")
     private val VID = setOf("mp4", "mkv", "webm", "mov", "avi", "3gp", "m4v", "mpeg", "mpg", "mts", "m2ts", "wmv", "flv")
-    private val DOC = setOf("pdf", "doc", "docx", "docm", "dot", "dotx", "xls", "xlsx", "xlsm", "xltx", "ods", "odt", "ppt", "pptx", "pptm", "ppsx", "odp", "epub", "mobi", "txt", "md", "rtf", "csv")
+    private val DOC = setOf("doc", "docx", "docm", "dot", "dotx", "odt", "epub", "mobi", "rtf")
+    private val PDF = setOf("pdf")
+    private val SHEET = setOf("xls", "xlsx", "xlsm", "xltx", "ods", "csv", "tsv")
+    private val PRESENTATION = setOf("ppt", "pptx", "pptm", "ppsx", "odp")
+    private val TEXT = setOf("txt", "md")
     private val ZIP = setOf("zip", "7z", "rar", "tar", "gz", "bz2", "xz", "tgz", "zst", "iso", "jar")
     private val APKS = setOf("apk", "apks", "xapk", "apkm")
     private val CODE = setOf("kt", "kts", "java", "smali", "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "c", "h", "cpp", "hpp", "cs", "php", "swift", "sh", "html", "css", "scss", "xml", "json", "toml", "gradle", "sql", "yml", "yaml")
@@ -65,14 +74,27 @@ object FolderKinds {
             val e = n.substringAfterLast('.', "").lowercase()
             if (e.isEmpty()) continue
             val k = when (e) {
-                in IMG -> FolderKind.PHOTO; in AUD -> FolderKind.MUSIC; in VID -> FolderKind.VIDEO
-                in APKS -> FolderKind.APK; in ZIP -> FolderKind.ARCHIVE; in DOC -> FolderKind.DOCS
-                in CODE -> FolderKind.CODE; else -> null
+                in IMG -> FolderKind.PHOTO
+                in AUD -> FolderKind.MUSIC
+                in VID -> FolderKind.VIDEO
+                in APKS -> FolderKind.APK
+                in ZIP -> FolderKind.ARCHIVE
+                in PDF -> FolderKind.PDF
+                in SHEET -> FolderKind.SPREADSHEET
+                in PRESENTATION -> FolderKind.PRESENTATION
+                in TEXT -> FolderKind.TEXT
+                in DOC -> FolderKind.DOCS
+                in CODE -> FolderKind.CODE
+                else -> null
             } ?: continue
             counts[k.ordinal]++
         }
+        val populatedKinds = FolderKind.values().count { it != FolderKind.NONE && it != FolderKind.MIXED && counts[it.ordinal] > 0 }
+        if (populatedKinds > 1) return FolderKind.MIXED
         var best = FolderKind.NONE; var bestN = 0
-        for (k in FolderKind.values()) if (k != FolderKind.NONE && counts[k.ordinal] > bestN) { best = k; bestN = counts[k.ordinal] }
+        for (k in FolderKind.values()) if (k != FolderKind.NONE && k != FolderKind.MIXED && counts[k.ordinal] > bestN) {
+            best = k; bestN = counts[k.ordinal]
+        }
         return best
     }
 }
