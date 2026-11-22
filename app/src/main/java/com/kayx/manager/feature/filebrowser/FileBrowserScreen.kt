@@ -396,8 +396,12 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     @Composable fun Act(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color = Color.Unspecified, enabled: Boolean = true, onClick: () -> Unit) {
                         Column(Modifier.clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 12.dp, vertical = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(icon, label, tint = if (enabled) tint else Color.Gray.copy(alpha = .5f))
-                            Text(label, style = MaterialTheme.typography.labelSmall, color = if (enabled) Color.Unspecified else Color.Gray.copy(alpha = .5f))
+                            // Never rely on Color.Unspecified here: it can resolve to a dark default
+                            // inside the selection surface and disappear on Dark / AMOLED themes.
+                            val actionColor = if (tint == Color.Unspecified) Fg else tint
+                            Icon(icon, label, tint = if (enabled) actionColor else Fg.copy(alpha = .38f))
+                            Text(label, style = MaterialTheme.typography.labelSmall,
+                                color = if (enabled) Fg else Fg.copy(alpha = .38f))
                         }
                     }
                     Act(Icons.Default.Share, "Share") { ExternalOps.share(ctx, s.selected.map(::File).filter { it.isFile }) }
