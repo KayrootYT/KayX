@@ -52,6 +52,9 @@ import com.kayx.manager.domain.model.SortBy
 import com.kayx.manager.domain.model.SearchMode
 import com.kayx.manager.domain.model.Tool
 import com.kayx.manager.ui.glass.GlassCard
+import com.kayx.manager.ui.FolderArtwork
+import com.kayx.manager.ui.FolderKind
+import com.kayx.manager.ui.rememberFolderKind
 import com.kayx.manager.ui.glass.glassBackground
 import com.kayx.manager.ui.theme.Accent
 import java.text.DateFormat
@@ -626,6 +629,7 @@ private fun FileListPane(
 private fun FileRow(f: FileItem, selected: Boolean, query: String, onClick: () -> Unit, onLong: () -> Unit, onSwipe: () -> Unit = {}) {
     val haptics = LocalHapticFeedback.current
     val folder = f.isDir
+    val folderKind = if (folder) rememberFolderKind(f.path, f.modified, enabled = true) else FolderKind.NONE
     val extension = f.name.substringAfterLast('.', "").lowercase()
     val iconTint by animateColorAsState(
         targetValue = if (selected || folder) Accent else Fg.copy(.78f),
@@ -643,12 +647,11 @@ private fun FileRow(f: FileItem, selected: Boolean, query: String, onClick: () -
             verticalAlignment = Alignment.CenterVertically
         ) {
             if ((selected || folder) && com.kayx.manager.data.settings.SettingsStore.icons3d) {
-                com.kayx.manager.ui.Icon3D(
-                    if (selected) Icons.Default.CheckCircle else Icons.Default.Folder,
-                    if (selected) Accent else Color(0xFFFFB02E),
-                    size = 44.dp, flip = selected,
-                    contentDescription = if (selected) "Selected" else "Folder"
-                )
+                if (selected) {
+                    com.kayx.manager.ui.Icon3D(Icons.Default.CheckCircle, Accent, size = 44.dp, flip = true, contentDescription = "Selected")
+                } else {
+                    FolderArtwork(folderKind, size = 44.dp, contentDescription = "${folderKind.name.lowercase()} folder")
+                }
             } else if (selected || folder) {
             Icon(
                 when {
