@@ -8,6 +8,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +26,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kayx.manager.data.settings.SettingsStore
+import com.kayx.manager.R
 import com.kayx.manager.data.storage.StorageScanner
 import com.kayx.manager.data.storage.formatBytes
 import com.kayx.manager.domain.model.Tool
@@ -37,11 +41,11 @@ import com.kayx.manager.ui.theme.Accent
 import com.kayx.manager.ui.theme.Fg
 import com.kayx.manager.ui.theme.TextMuted
 
-private enum class MainTab(val label: String, val icon: ImageVector) {
-    FILES("Files", Icons.Default.Folder),
-    STORAGE("Storage", Icons.Default.PieChart),
-    TOOLS("Tools", Icons.Default.Build),
-    SETTINGS("Settings", Icons.Default.Settings)
+private enum class MainTab(val label: String, val icon: ImageVector, val artwork: Int) {
+    FILES("Files", Icons.Default.Folder, R.drawable.home3d_nav_files),
+    STORAGE("Storage", Icons.Default.PieChart, R.drawable.home3d_nav_storage),
+    TOOLS("Tools", Icons.Default.Build, R.drawable.home3d_nav_tools),
+    SETTINGS("Settings", Icons.Default.Settings, R.drawable.home3d_nav_settings)
 }
 
 /**
@@ -108,7 +112,13 @@ fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (Str
             MainTab.values().forEachIndexed { i, t ->
                 NavigationBarItem(
                     selected = tab == i, onClick = { tab = i },
-                    icon = { Icon(t.icon, t.label) }, label = { Text(t.label) },
+                    icon = {
+                        if (SettingsStore.icons3d) {
+                            Image(painterResource(t.artwork), contentDescription = t.label, modifier = Modifier.size(30.dp))
+                        } else {
+                            Icon(t.icon, t.label)
+                        }
+                    }, label = { Text(t.label) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Accent, selectedTextColor = Accent, indicatorColor = Accent.copy(.15f),
                         unselectedIconColor = Fg.copy(.6f), unselectedTextColor = Fg.copy(.6f)

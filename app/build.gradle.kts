@@ -88,11 +88,16 @@ val cargoNdkBuild = tasks.register<Exec>("cargoNdkBuild") {
     }
 }
 val extractFolderArtworkResources = tasks.register<Copy>("extractFolderArtworkResources") {
-    val artworkZip = file("kayx-folder-icons-android-resources.zip")
-    from(zipTree(artworkZip))
-    include("drawable-nodpi/**")
+    val folderArtworkZip = file("kayx-folder-icons-android-resources.zip")
+    val homeArtworkZip = file("kayx-home-screen-icons-resources.zip")
+    from(zipTree(folderArtworkZip)) {
+        include("drawable-nodpi/**")
+    }
+    from(zipTree(homeArtworkZip)) {
+        include("drawable-nodpi/**")
+    }
     into(layout.buildDirectory.dir("generated/res/folderArtwork"))
-    onlyIf { artworkZip.isFile }
+    onlyIf { folderArtworkZip.isFile || homeArtworkZip.isFile }
 }
 tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(cargoNdkBuild, extractFolderArtworkResources)

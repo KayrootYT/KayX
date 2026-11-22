@@ -1,4 +1,6 @@
 package com.kayx.manager.feature.home
+
+import com.kayx.manager.R
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Label
@@ -134,14 +136,14 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         fun num(v: Int?) = v?.let { "%,d".format(it) } ?: "…"
         fun cnt(c: Category) = num(counts[c.name])
         val cats = listOf(
-            CatTile("Images", Icons.Default.Image, Color(0xFF4A90F5), cnt(Category.IMAGES)) { onPush(Category.IMAGES.name, Tool.CATEGORY) },
-            CatTile("Videos", Icons.Default.PlayArrow, Color(0xFFEF5B6B), cnt(Category.VIDEOS)) { onPush(Category.VIDEOS.name, Tool.CATEGORY) },
-            CatTile("Audio", Icons.Default.GraphicEq, Color(0xFF5A5F6B), cnt(Category.AUDIO)) { onPush(Category.AUDIO.name, Tool.CATEGORY) },
-            CatTile("Documents", Icons.Default.Description, Color(0xFFF5B82E), cnt(Category.DOCUMENTS)) { onPush(Category.DOCUMENTS.name, Tool.CATEGORY) },
-            CatTile("APKs", Icons.Default.Android, Color(0xFF2ECC71), cnt(Category.APKS)) { onPush(Category.APKS.name, Tool.CATEGORY) },
-            CatTile("Archives", Icons.Default.FolderZip, Color(0xFFF2B01E), cnt(Category.ARCHIVES)) { onPush(Category.ARCHIVES.name, Tool.CATEGORY) },
-            CatTile("Tags", Icons.AutoMirrored.Filled.Label, Color(0xFF4A90F5), TagStore.totalFiles().toString()) { onTool(Tool.TAGS) },
-            CatTile("Private space", Icons.Default.Shield, Color(0xFF2ECC71), PrivateSpace.fileCount(ctx).toString()) { onTool(Tool.PRIVATE) },
+            CatTile("Images", Icons.Default.Image, Color(0xFF4A90F5), cnt(Category.IMAGES), artworkRes = R.drawable.home3d_images) { onPush(Category.IMAGES.name, Tool.CATEGORY) },
+            CatTile("Videos", Icons.Default.PlayArrow, Color(0xFFEF5B6B), cnt(Category.VIDEOS), artworkRes = R.drawable.home3d_videos) { onPush(Category.VIDEOS.name, Tool.CATEGORY) },
+            CatTile("Audio", Icons.Default.GraphicEq, Color(0xFF5A5F6B), cnt(Category.AUDIO), artworkRes = R.drawable.home3d_audio) { onPush(Category.AUDIO.name, Tool.CATEGORY) },
+            CatTile("Documents", Icons.Default.Description, Color(0xFFF5B82E), cnt(Category.DOCUMENTS), artworkRes = R.drawable.home3d_documents) { onPush(Category.DOCUMENTS.name, Tool.CATEGORY) },
+            CatTile("APKs", Icons.Default.Android, Color(0xFF2ECC71), cnt(Category.APKS), artworkRes = R.drawable.home3d_apks) { onPush(Category.APKS.name, Tool.CATEGORY) },
+            CatTile("Archives", Icons.Default.FolderZip, Color(0xFFF2B01E), cnt(Category.ARCHIVES), artworkRes = R.drawable.home3d_archives) { onPush(Category.ARCHIVES.name, Tool.CATEGORY) },
+            CatTile("Tags", Icons.AutoMirrored.Filled.Label, Color(0xFF4A90F5), TagStore.totalFiles().toString(), artworkRes = R.drawable.home3d_tags) { onTool(Tool.TAGS) },
+            CatTile("Private space", Icons.Default.Shield, Color(0xFF2ECC71), PrivateSpace.fileCount(ctx).toString(), artworkRes = R.drawable.home3d_private_space) { onTool(Tool.PRIVATE) },
         )
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
             Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -166,12 +168,12 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         fun qCount(t: QuickAccess.Target) = num(counts["QA:" + t.name])
         fun target(n: String) = QuickAccess.targets.first { it.name == n }
         val quick = listOf(
-            CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp")), QuickAccess.firstExisting(target("WhatsApp"))?.absolutePath) { open(target("WhatsApp")) },
-            CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots")), QuickAccess.firstExisting(target("Screenshots"))?.absolutePath) { open(target("Screenshots")) },
-            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"])) { onApps() },
-            CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads")), QuickAccess.firstExisting(target("Downloads"))?.absolutePath) { open(target("Downloads")) },
-            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder")), QuickAccess.firstExisting(target("Recorder"))?.absolutePath) { open(target("Recorder")) },
-            CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth")), QuickAccess.firstExisting(target("Bluetooth"))?.absolutePath) { open(target("Bluetooth")) }
+            CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp")), QuickAccess.firstExisting(target("WhatsApp"))?.absolutePath, R.drawable.home3d_folder_whatsapp) { open(target("WhatsApp")) },
+            CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots")), QuickAccess.firstExisting(target("Screenshots"))?.absolutePath, R.drawable.home3d_folder_screenshots) { open(target("Screenshots")) },
+            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"]), artworkRes = R.drawable.home3d_apps) { onApps() },
+            CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads")), QuickAccess.firstExisting(target("Downloads"))?.absolutePath, R.drawable.home3d_folder_downloads) { open(target("Downloads")) },
+            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder")), QuickAccess.firstExisting(target("Recorder"))?.absolutePath, R.drawable.home3d_folder_recorder) { open(target("Recorder")) },
+            CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth")), QuickAccess.firstExisting(target("Bluetooth"))?.absolutePath, R.drawable.home3d_bluetooth) { open(target("Bluetooth")) }
         )
         val folders = listOf(
             "DCIM" to Environment.DIRECTORY_DCIM, "Documents" to Environment.DIRECTORY_DOCUMENTS, "Music" to Environment.DIRECTORY_MUSIC,
@@ -255,12 +257,19 @@ private fun QuickTile(name: String, icon: ImageVector, modifier: Modifier, onCli
     }
 }
 
-private data class CatTile(val name: String, val icon: ImageVector, val color: Color, val count: String, val folderPath: String? = null, val onClick: () -> Unit)
+private data class CatTile(val name: String, val icon: ImageVector, val color: Color, val count: String, val folderPath: String? = null, val artworkRes: Int? = null, val onClick: () -> Unit)
 
 @Composable
 private fun CategoryTileView(t: CatTile, modifier: Modifier) {
     Column(modifier.clickable(onClick = t.onClick).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        if (SettingsStore.icons3d && t.folderPath != null) {
+        if (SettingsStore.icons3d && t.artworkRes != null) {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(t.artworkRes),
+                contentDescription = t.name,
+                modifier = Modifier.size(56.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+            )
+        } else if (SettingsStore.icons3d && t.folderPath != null) {
             val folder = File(t.folderPath)
             com.kayx.manager.ui.FolderArtwork(t.folderPath, folder.lastModified(), size = 52.dp)
         } else if (SettingsStore.icons3d) {
