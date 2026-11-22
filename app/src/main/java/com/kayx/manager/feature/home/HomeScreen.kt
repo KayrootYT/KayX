@@ -145,7 +145,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             CatTile("Tags", Icons.AutoMirrored.Filled.Label, Color(0xFF4A90F5), TagStore.totalFiles().toString(), artworkRes = R.drawable.home3d_tags) { onTool(Tool.TAGS) },
             CatTile("Private space", Icons.Default.Shield, Color(0xFF2ECC71), PrivateSpace.fileCount(ctx).toString(), artworkRes = R.drawable.home3d_private_space) { onTool(Tool.PRIVATE) },
         )
-        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
+        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 cats.chunked(4).forEach { row -> Row(Modifier.fillMaxWidth()) { row.forEach { CategoryTileView(it, Modifier.weight(1f)) }; repeat(4 - row.size) { Spacer(Modifier.weight(1f)) } } }
             }
@@ -168,12 +168,12 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         fun qCount(t: QuickAccess.Target) = num(counts["QA:" + t.name])
         fun target(n: String) = QuickAccess.targets.first { it.name == n }
         val quick = listOf(
-            CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp")), QuickAccess.firstExisting(target("WhatsApp"))?.absolutePath, R.drawable.home3d_folder_whatsapp) { open(target("WhatsApp")) },
-            CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots")), QuickAccess.firstExisting(target("Screenshots"))?.absolutePath, R.drawable.home3d_folder_screenshots) { open(target("Screenshots")) },
-            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"]), artworkRes = R.drawable.home3d_apps) { onApps() },
-            CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads")), QuickAccess.firstExisting(target("Downloads"))?.absolutePath, R.drawable.home3d_folder_downloads) { open(target("Downloads")) },
-            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder")), QuickAccess.firstExisting(target("Recorder"))?.absolutePath, R.drawable.home3d_folder_recorder) { open(target("Recorder")) },
-            CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth")), QuickAccess.firstExisting(target("Bluetooth"))?.absolutePath, R.drawable.home3d_bluetooth) { open(target("Bluetooth")) }
+            CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp")), QuickAccess.firstExisting(target("WhatsApp"))?.absolutePath) { open(target("WhatsApp")) },
+            CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots")), QuickAccess.firstExisting(target("Screenshots"))?.absolutePath) { open(target("Screenshots")) },
+            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"])) { onApps() },
+            CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads")), QuickAccess.firstExisting(target("Downloads"))?.absolutePath) { open(target("Downloads")) },
+            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder")), QuickAccess.firstExisting(target("Recorder"))?.absolutePath) { open(target("Recorder")) },
+            CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth")), QuickAccess.firstExisting(target("Bluetooth"))?.absolutePath) { open(target("Bluetooth")) }
         )
         val folders = listOf(
             "DCIM" to Environment.DIRECTORY_DCIM, "Documents" to Environment.DIRECTORY_DOCUMENTS, "Music" to Environment.DIRECTORY_MUSIC,
@@ -182,7 +182,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             val folder = Environment.getExternalStoragePublicDirectory(d)
             CatTile(n, Icons.Default.Folder, Color(0xFFE0A030), "", folder.absolutePath) { folder.mkdirs(); onOpen(folder.absolutePath) }
         }
-        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
+        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 (if (allQuick) quick + folders else quick).chunked(4).forEach { row ->
                     Row(Modifier.fillMaxWidth()) { row.forEach { CategoryTileView(it, Modifier.weight(1f)) }; repeat(4 - row.size) { Spacer(Modifier.weight(1f)) } }
@@ -192,7 +192,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
 
         // Storage and services section follows the category and quick-access cards.
         Text("Storage and services", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextMuted)
-        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
+        GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 StorageRow("Phone storage", Icons.Default.PieChart, root.absolutePath) { onOpen(root.absolutePath) }
                 HorizontalDivider(color = Fg.copy(.08f))
@@ -221,7 +221,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         val recent by produceState(emptyList<RecentFiles.Item>(), ctx) { value = withContext(Dispatchers.IO) { RecentFiles.query(ctx) } }
         if (recent.isNotEmpty()) {
             Text("Recent", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(17.dp)) {
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.padding(vertical = 4.dp)) {
                     recent.forEach { r ->
                         Row(
@@ -262,18 +262,17 @@ private data class CatTile(val name: String, val icon: ImageVector, val color: C
 @Composable
 private fun CategoryTileView(t: CatTile, modifier: Modifier) {
     Column(modifier.clickable(onClick = t.onClick).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        if (SettingsStore.icons3d && t.artworkRes != null) {
+        if (SettingsStore.icons3d && t.folderPath != null) {
+            com.kayx.manager.ui.Icon3D(t.icon, t.color, size = 52.dp, contentDescription = t.name)
+        } else if (SettingsStore.icons3d && t.artworkRes != null) {
             androidx.compose.foundation.Image(
                 painter = androidx.compose.ui.res.painterResource(t.artworkRes),
                 contentDescription = t.name,
                 modifier = Modifier.size(56.dp),
                 contentScale = androidx.compose.ui.layout.ContentScale.Fit
             )
-        } else if (SettingsStore.icons3d && t.folderPath != null) {
-            val folder = File(t.folderPath)
-            com.kayx.manager.ui.FolderArtwork(t.folderPath, folder.lastModified(), size = 52.dp)
         } else if (SettingsStore.icons3d) {
-            com.kayx.manager.ui.Icon3D(t.icon, t.color, size = 48.dp, contentDescription = t.name)
+            com.kayx.manager.ui.Icon3D(t.icon, t.color, size = 52.dp, contentDescription = t.name)
         } else {
             Box(Modifier.size(44.dp).background(t.color, RoundedCornerShape(13.dp)), Alignment.Center) {
                 Icon(t.icon, null, tint = Color.White, modifier = Modifier.size(25.dp))
