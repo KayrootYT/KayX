@@ -79,12 +79,12 @@ fun FolderArtwork(
             "dark" -> R.drawable.folder3d_dark_document
             else -> R.drawable.folder3d_light_document
         }
-        FolderKind.MIXED -> when (theme) {
+        FolderKind.MIXED, FolderKind.NONE -> when (theme) {
             "amoled" -> R.drawable.folder3d_amoled_all_types_mixed
             "dark" -> R.drawable.folder3d_dark_all_types_mixed
             else -> R.drawable.folder3d_light_all_types_mixed
         }
-        FolderKind.EMPTY, FolderKind.NONE -> when (theme) {
+        FolderKind.EMPTY -> when (theme) {
             "amoled" -> R.drawable.folder3d_amoled_empty
             "dark" -> R.drawable.folder3d_dark_empty
             else -> R.drawable.folder3d_light_empty
