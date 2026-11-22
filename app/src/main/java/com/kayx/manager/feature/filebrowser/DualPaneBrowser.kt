@@ -464,11 +464,11 @@ private fun DualBottomBar(
                 TextButton(onClick = vm::retryTransfer) { Text("Retry") }
             }
             s.selected.isNotEmpty() -> Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(vm::selectAll, Modifier.weight(1f)) { Icon(Icons.Default.SelectAll, "Select all") }
-                IconButton(vm::invertSelection, Modifier.weight(1f)) { Icon(Icons.Default.FlipToFront, "Invert selection") }
-                IconButton(vm::clearSelection, Modifier.weight(1f)) { Icon(Icons.Default.Close, "Clear selection") }
-                IconButton(vm::toggleTabMode, Modifier.weight(1f)) { Icon(Icons.Default.ViewColumn, "Split / swipe tabs") }
-                IconButton({ setActionOpen(!actionOpen) }, Modifier.weight(1f)) { Icon(Icons.Default.Checklist, "Actions") }
+                IconButton(vm::selectAll, Modifier.weight(1f)) { Icon(Icons.Default.SelectAll, "Select all", tint = p.fg) }
+                IconButton(vm::invertSelection, Modifier.weight(1f)) { Icon(Icons.Default.FlipToFront, "Invert selection", tint = p.fg) }
+                IconButton(vm::clearSelection, Modifier.weight(1f)) { Icon(Icons.Default.Close, "Clear selection", tint = p.fg) }
+                IconButton(vm::toggleTabMode, Modifier.weight(1f)) { Icon(Icons.Default.ViewColumn, "Split / swipe tabs", tint = p.fg) }
+                IconButton({ setActionOpen(!actionOpen) }, Modifier.weight(1f)) { Icon(Icons.Default.Checklist, "Actions", tint = p.fg) }
             }
             s.clipboard.isNotEmpty() -> Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${s.clipboard.size} item(s) ${if (s.cut) "to move" else "to copy"}", Modifier.weight(1f))
