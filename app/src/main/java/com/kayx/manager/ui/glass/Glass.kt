@@ -234,33 +234,23 @@ fun GlassCard(
         .shadow(elevation.dp, shape, clip = false)
         .clip(shape)
         .background(fill, shape)
+        // Keep one perimeter only. The previous second white stroke and inset bottom line
+        // produced visible grey/white side bands where adjacent cards met.
         .border(1.dp, edge, shape)
         .drawBehind {
-            val radius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx())
-            // Broad top specular reflection, fading into the tinted glass body.
-            drawRoundRect(
+            // Draw the specular wash using the exact caller-provided Shape so the
+            // highlight follows the same corner geometry as the fill and border.
+            val outline = shape.createOutline(size, layoutDirection, this)
+            drawOutline(
+                outline,
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = if (p.dark) .22f else .78f),
-                        Color.White.copy(alpha = if (p.dark) .055f else .18f),
+                        Color.White.copy(alpha = if (p.dark) .16f else .34f),
+                        Color.White.copy(alpha = if (p.dark) .035f else .09f),
                         Color.Transparent
                     ),
-                    startY = 0f, endY = size.height * .48f
-                ),
-                cornerRadius = radius
-            )
-            // Fine inner bevel: bright upper edge and a restrained dark lower edge create depth
-            // without an expensive blur layer on every row in a long directory listing.
-            drawRoundRect(
-                Color.White.copy(alpha = if (p.dark) .20f else .48f),
-                cornerRadius = radius,
-                style = Stroke(width = 0.7.dp.toPx())
-            )
-            drawLine(
-                Color.Black.copy(alpha = if (p.dark) .20f else .055f),
-                start = Offset(18.dp.toPx(), size.height - 1.dp.toPx()),
-                end = Offset(size.width - 18.dp.toPx(), size.height - 1.dp.toPx()),
-                strokeWidth = 1.dp.toPx()
+                    startY = 0f, endY = size.height * .46f
+                )
             )
         }
     val m = if (onClick != null || onLongClick != null)
