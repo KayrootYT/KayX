@@ -142,7 +142,7 @@ fun FileListScreen(
             else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp, 4.dp, 12.dp, 90.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 items(list, key = { it.path }) { f ->
                     val on = f.path in selected
-                    GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(11.dp), tint = if (on) Accent else Fg,
+                    GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), tint = if (on) Accent else Fg,
                         onClick = { if (selected.isNotEmpty()) selected = if (on) selected - f.path else selected + f.path else openScanFile(ctx, f, onOpenTool) },
                         onLongClick = { selected = if (on) selected - f.path else selected + f.path }) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
