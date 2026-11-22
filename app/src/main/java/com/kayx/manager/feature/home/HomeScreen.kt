@@ -166,17 +166,20 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         fun qCount(t: QuickAccess.Target) = num(counts["QA:" + t.name])
         fun target(n: String) = QuickAccess.targets.first { it.name == n }
         val quick = listOf(
-            CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp"))) { open(target("WhatsApp")) },
-            CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots"))) { open(target("Screenshots")) },
+            CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp")), QuickAccess.firstExisting(target("WhatsApp"))?.absolutePath) { open(target("WhatsApp")) },
+            CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots")), QuickAccess.firstExisting(target("Screenshots"))?.absolutePath) { open(target("Screenshots")) },
             CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"])) { onApps() },
-            CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads"))) { open(target("Downloads")) },
-            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder"))) { open(target("Recorder")) },
-            CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth"))) { open(target("Bluetooth")) }
+            CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads")), QuickAccess.firstExisting(target("Downloads"))?.absolutePath) { open(target("Downloads")) },
+            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder")), QuickAccess.firstExisting(target("Recorder"))?.absolutePath) { open(target("Recorder")) },
+            CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth")), QuickAccess.firstExisting(target("Bluetooth"))?.absolutePath) { open(target("Bluetooth")) }
         )
         val folders = listOf(
             "DCIM" to Environment.DIRECTORY_DCIM, "Documents" to Environment.DIRECTORY_DOCUMENTS, "Music" to Environment.DIRECTORY_MUSIC,
             "Pictures" to Environment.DIRECTORY_PICTURES, "Movies" to Environment.DIRECTORY_MOVIES
-        ).map { (n, d) -> CatTile(n, Icons.Default.Folder, Color(0xFFE0A030), "") { val f = Environment.getExternalStoragePublicDirectory(d); f.mkdirs(); onOpen(f.absolutePath) } }
+        ).map { (n, d) ->
+            val folder = Environment.getExternalStoragePublicDirectory(d)
+            CatTile(n, Icons.Default.Folder, Color(0xFFE0A030), "", folder.absolutePath) { folder.mkdirs(); onOpen(folder.absolutePath) }
+        }
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(17.dp)) {
             Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 (if (allQuick) quick + folders else quick).chunked(4).forEach { row ->
@@ -252,12 +255,21 @@ private fun QuickTile(name: String, icon: ImageVector, modifier: Modifier, onCli
     }
 }
 
-private data class CatTile(val name: String, val icon: ImageVector, val color: Color, val count: String, val onClick: () -> Unit)
+private data class CatTile(val name: String, val icon: ImageVector, val color: Color, val count: String, val folderPath: String? = null, val onClick: () -> Unit)
 
 @Composable
 private fun CategoryTileView(t: CatTile, modifier: Modifier) {
     Column(modifier.clickable(onClick = t.onClick).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Box(Modifier.size(44.dp).background(t.color, RoundedCornerShape(13.dp)), Alignment.Center) { Icon(t.icon, null, tint = Color.White, modifier = Modifier.size(25.dp)) }
+        if (SettingsStore.icons3d && t.folderPath != null) {
+            val folder = File(t.folderPath)
+            com.kayx.manager.ui.FolderArtwork(t.folderPath, folder.lastModified(), size = 52.dp)
+        } else if (SettingsStore.icons3d) {
+            com.kayx.manager.ui.Icon3D(t.icon, t.color, size = 48.dp, contentDescription = t.name)
+        } else {
+            Box(Modifier.size(44.dp).background(t.color, RoundedCornerShape(13.dp)), Alignment.Center) {
+                Icon(t.icon, null, tint = Color.White, modifier = Modifier.size(25.dp))
+            }
+        }
         Text(t.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         if (t.count.isNotEmpty()) Text(t.count, style = MaterialTheme.typography.labelSmall, color = TextMuted)
     }
