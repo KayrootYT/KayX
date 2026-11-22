@@ -260,15 +260,18 @@ private fun QuickTile(name: String, icon: ImageVector, modifier: Modifier, onCli
 private data class CatTile(val name: String, val icon: ImageVector, val color: Color, val count: String, val folderPath: String? = null, val artworkRes: Int? = null, val onClick: () -> Unit)
 
 @Composable
+private val HOME_TILE_ICON_SIZE = 56.dp
+
+@Composable
 private fun CategoryTileView(t: CatTile, modifier: Modifier) {
     Column(modifier.clickable(onClick = t.onClick).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         if (SettingsStore.icons3d && t.folderPath != null) {
-            com.kayx.manager.ui.Icon3D(t.icon, t.color, size = 52.dp, contentDescription = t.name)
+            com.kayx.manager.ui.Icon3D(t.icon, t.color, size = HOME_TILE_ICON_SIZE, contentDescription = t.name)
         } else if (SettingsStore.icons3d && t.artworkRes != null) {
             androidx.compose.foundation.Image(
                 painter = androidx.compose.ui.res.painterResource(t.artworkRes),
                 contentDescription = t.name,
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(HOME_TILE_ICON_SIZE),
                 contentScale = androidx.compose.ui.layout.ContentScale.Fit
             )
         } else if (SettingsStore.icons3d) {
