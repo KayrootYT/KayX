@@ -9,9 +9,14 @@ import com.kayx.manager.ui.theme.Fg
 
 import android.os.Environment
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import android.os.StatFs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -33,6 +38,7 @@ import com.kayx.manager.data.settings.SettingsStore
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -259,12 +265,24 @@ private fun QuickTile(name: String, icon: ImageVector, modifier: Modifier, onCli
 
 private data class CatTile(val name: String, val icon: ImageVector, val color: Color, val count: String, val folderPath: String? = null, val artworkRes: Int? = null, val onClick: () -> Unit)
 
-@Composable
 private val HOME_TILE_ICON_SIZE = 56.dp
 
 @Composable
 private fun CategoryTileView(t: CatTile, modifier: Modifier) {
-    Column(modifier.clickable(onClick = t.onClick).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    val interaction = remember(t.name) { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) .94f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "home-tile-press"
+    )
+    Column(
+        modifier.graphicsLayer { scaleX = pressScale; scaleY = pressScale }
+            .clickable(interactionSource = interaction, indication = null, onClick = t.onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
         if (SettingsStore.icons3d && t.folderPath != null) {
             com.kayx.manager.ui.Icon3D(t.icon, t.color, size = HOME_TILE_ICON_SIZE, contentDescription = t.name)
         } else if (SettingsStore.icons3d && t.artworkRes != null) {
@@ -275,7 +293,7 @@ private fun CategoryTileView(t: CatTile, modifier: Modifier) {
                 contentScale = androidx.compose.ui.layout.ContentScale.Fit
             )
         } else if (SettingsStore.icons3d) {
-            com.kayx.manager.ui.Icon3D(t.icon, t.color, size = 52.dp, contentDescription = t.name)
+            com.kayx.manager.ui.Icon3D(t.icon, t.color, size = HOME_TILE_ICON_SIZE, contentDescription = t.name)
         } else {
             Box(Modifier.size(44.dp).background(t.color, RoundedCornerShape(13.dp)), Alignment.Center) {
                 Icon(t.icon, null, tint = Color.White, modifier = Modifier.size(25.dp))
