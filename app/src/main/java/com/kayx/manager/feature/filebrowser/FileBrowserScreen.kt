@@ -13,10 +13,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -394,8 +397,22 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
             } else if (s.selected.isNotEmpty()) GlassCard(Modifier.navigationBarsPadding().padding(12.dp).fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                     @Composable fun Act(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color = Color.Unspecified, enabled: Boolean = true, onClick: () -> Unit) {
-                        Column(Modifier.clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 12.dp, vertical = 4.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally) {
+                        val interaction = remember { MutableInteractionSource() }
+                        val pressed by interaction.collectIsPressedAsState()
+                        val pressScale by androidx.compose.animation.core.animateFloatAsState(
+                            targetValue = if (pressed) .88f else 1f,
+                            animationSpec = androidx.compose.animation.core.spring(
+                                dampingRatio = .58f, stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                            ),
+                            label = "selection-action-press"
+                        )
+                        Column(
+                            Modifier.graphicsLayer { scaleX = pressScale; scaleY = pressScale }
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick)
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             // Never rely on Color.Unspecified here: it can resolve to a dark default
                             // inside the selection surface and disappear on Dark / AMOLED themes.
                             val actionColor = if (tint == Color.Unspecified) Fg else tint
