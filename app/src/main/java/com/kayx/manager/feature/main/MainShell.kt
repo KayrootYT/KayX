@@ -114,7 +114,7 @@ fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (Str
                     selected = tab == i, onClick = { tab = i },
                     icon = {
                         if (SettingsStore.icons3d) {
-                            Image(painterResource(t.artwork), contentDescription = t.label, modifier = Modifier.size(30.dp))
+                            Image(painterResource(t.artwork), contentDescription = t.label, modifier = Modifier.size(38.dp))
                         } else {
                             Icon(t.icon, t.label)
                         }
