@@ -47,6 +47,9 @@ import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.domain.model.SortBy
 import com.kayx.manager.domain.model.Tool
 import com.kayx.manager.ui.glass.GlassCard
+import com.kayx.manager.ui.FolderArtwork
+import com.kayx.manager.ui.FolderKind
+import com.kayx.manager.ui.rememberFolderKind
 import com.kayx.manager.ui.glass.glassBackground
 import com.kayx.manager.ui.theme.Accent
 import com.kayx.manager.ui.theme.Fg
@@ -397,7 +400,8 @@ private fun UpRow(onClick: () -> Unit) {
 private fun PaneRow(f: FileItem, selected: Boolean, fresh: Boolean, query: String, onClick: () -> Unit, onLong: () -> Unit, onSwipe: () -> Unit, swipeEnabled: Boolean) {
     val haptics = LocalHapticFeedback.current
     val kind = remember(f.name, f.isDir) { kindOf(f) }
-    // A directory always uses a folder glyph, independent of the files it contains.
+    val folderKind = if (f.isDir) rememberFolderKind(f.path, f.modified, enabled = true) else FolderKind.NONE
+    // Directories use the supplied theme-aware 3D folder artwork; files retain their type glyph.
     val rowIcon = if (f.isDir) Icons.Default.Folder else kind.icon
     val rowColor = if (f.isDir) Color(0xFFFFB02E) else kind.color
     val meta = remember(f.size, f.modified) {
@@ -411,7 +415,9 @@ private fun PaneRow(f: FileItem, selected: Boolean, fresh: Boolean, query: Strin
         onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLong() }
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (com.kayx.manager.data.settings.SettingsStore.icons3d) {
+            if (com.kayx.manager.data.settings.SettingsStore.icons3d && f.isDir && !selected) {
+                FolderArtwork(folderKind, size = 32.dp, contentDescription = "${folderKind.name.lowercase()} folder")
+            } else if (com.kayx.manager.data.settings.SettingsStore.icons3d) {
                 com.kayx.manager.ui.Icon3D(if (selected) Icons.Default.Check else rowIcon, if (selected) Accent else rowColor, size = 32.dp, flip = selected)
             } else Box(Modifier.size(32.dp).background(if (selected) Accent else rowColor, RoundedCornerShape(7.dp)), Alignment.Center) {
                 Icon(if (selected) Icons.Default.Check else rowIcon, null, Modifier.size(19.dp), tint = Color.White)
