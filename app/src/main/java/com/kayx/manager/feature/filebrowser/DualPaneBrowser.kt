@@ -411,8 +411,12 @@ private fun PaneRow(f: FileItem, selected: Boolean, fresh: Boolean, query: Strin
         onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLong() }
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (com.kayx.manager.data.settings.SettingsStore.icons3d) {
-                com.kayx.manager.ui.Icon3D(if (selected) Icons.Default.Check else rowIcon, if (selected) Accent else rowColor, size = 32.dp, flip = selected)
+            if (com.kayx.manager.data.settings.SettingsStore.icons3d && selected) {
+                com.kayx.manager.ui.Icon3D(Icons.Default.Check, Accent, size = 32.dp, flip = true)
+            } else if (com.kayx.manager.data.settings.SettingsStore.icons3d && f.isDir) {
+                com.kayx.manager.ui.FolderArtwork(f.path, f.modified, size = 36.dp)
+            } else if (com.kayx.manager.data.settings.SettingsStore.icons3d) {
+                com.kayx.manager.ui.Icon3D(rowIcon, rowColor, size = 32.dp)
             } else Box(Modifier.size(32.dp).background(if (selected) Accent else rowColor, RoundedCornerShape(7.dp)), Alignment.Center) {
                 Icon(if (selected) Icons.Default.Check else rowIcon, null, Modifier.size(19.dp), tint = Color.White)
             }
