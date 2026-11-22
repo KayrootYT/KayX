@@ -7,6 +7,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 import com.kayx.manager.R
 import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.ui.theme.LocalPalette
@@ -92,7 +93,7 @@ fun FolderArtwork(
     Image(
         painter = painterResource(drawable),
         contentDescription = "Folder",
-        modifier = modifier.then(Modifier),
+        modifier = modifier.size(size),
         contentScale = ContentScale.Fit
     )
 }
