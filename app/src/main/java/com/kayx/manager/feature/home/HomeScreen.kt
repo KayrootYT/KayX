@@ -1,4 +1,6 @@
 package com.kayx.manager.feature.home
+
+import com.kayx.manager.R
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Label
