@@ -381,7 +381,7 @@ private fun PaneList(
 
 @Composable
 private fun UpRow(onClick: () -> Unit) {
-    GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(11.dp), onClick = onClick) {
+    GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), onClick = onClick) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(32.dp).background(Color(0xFF1E1E22), RoundedCornerShape(7.dp)), Alignment.Center) {
                 Icon(Icons.Default.Folder, null, Modifier.size(19.dp), tint = Color.White)
@@ -405,7 +405,7 @@ private fun PaneRow(f: FileItem, selected: Boolean, fresh: Boolean, query: Strin
     }
     GlassCard(
         Modifier.fillMaxWidth().swipeToSelect(swipeEnabled) { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSwipe() },
-        shape = RoundedCornerShape(11.dp),
+        shape = RoundedCornerShape(18.dp),
         tint = if (selected) Accent else Fg,
         onClick = onClick,
         onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLong() }
