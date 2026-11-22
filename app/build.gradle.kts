@@ -43,6 +43,7 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true; aidl = true }
     packaging { resources { excludes += setOf("META-INF/versions/**", "META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/INDEX.LIST") } }
+    sourceSets.getByName("main").res.srcDir(layout.buildDirectory.dir("generated/res/folderArtwork"))
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
@@ -86,7 +87,16 @@ val cargoNdkBuild = tasks.register<Exec>("cargoNdkBuild") {
         runCatching { ProcessBuilder("cargo", "ndk", "--version").redirectErrorStream(true).start().waitFor() == 0 }.getOrDefault(false)
     }
 }
-tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(cargoNdkBuild) }
+val extractFolderArtworkResources = tasks.register<Copy>("extractFolderArtworkResources") {
+    val artworkZip = file("kayx-folder-icons-android-resources.zip")
+    from(zipTree(artworkZip))
+    include("drawable-nodpi/**")
+    into(layout.buildDirectory.dir("generated/res/folderArtwork"))
+    onlyIf { artworkZip.isFile }
+}
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(cargoNdkBuild, extractFolderArtworkResources)
+}
 
 kotlin {
     compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
