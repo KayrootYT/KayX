@@ -121,7 +121,7 @@ jobs:
 
           APK="$(find ./dist -type f -name '*.apk' -print -quit)"
           if [ -z "$APK" ]; then
-            echo "::error::No APK found in the downloaded KayX-debug artifact."
+            echo "::error::No APK found in the downloaded KayX-apk artifact."
             find ./dist -maxdepth 4 -type f -print
             exit 1
           fi
