@@ -31,6 +31,12 @@ enum class FolderKind(val icon: ImageVector, val color: Color) {
     ARCHIVE(Icons.Default.FolderZip, Color(0xFFA1887F)),
     APK(Icons.Default.Android, Color(0xFF43A047)),
     CODE(Icons.Default.Code, Color(0xFF607D8B)),
+    PDF(Icons.Default.Description, Color(0xFFE35D5B)),
+    SPREADSHEET(Icons.Default.Description, Color(0xFF43A047)),
+    PRESENTATION(Icons.Default.Description, Color(0xFFFF9800)),
+    TEXT(Icons.Default.Description, Color(0xFF78909C)),
+    MIXED(Icons.Default.Folder, Color(0xFFFFB02E)),
+    EMPTY(Icons.Default.Folder, Color(0xFFFFB02E)),
     NONE(Icons.Default.Folder, Color(0xFFFFB02E))
 }
 
@@ -39,6 +45,10 @@ object FolderKinds {
     private val AUD = setOf("mp3", "m4a", "wav", "ogg", "oga", "opus", "flac", "aac", "wma", "aiff", "mid", "midi", "amr")
     private val VID = setOf("mp4", "mkv", "webm", "mov", "avi", "3gp", "m4v", "mpeg", "mpg", "mts", "m2ts", "wmv", "flv")
     private val DOC = setOf("pdf", "doc", "docx", "docm", "dot", "dotx", "xls", "xlsx", "xlsm", "xltx", "ods", "odt", "ppt", "pptx", "pptm", "ppsx", "odp", "epub", "mobi", "txt", "md", "rtf", "csv")
+    private val PDFS = setOf("pdf")
+    private val SHEETS = setOf("xls", "xlsx", "xlsm", "xltx", "ods", "csv", "tsv")
+    private val SLIDES = setOf("ppt", "pptx", "pptm", "ppsx", "odp")
+    private val TEXTS = setOf("txt", "md", "markdown", "log", "ini", "cfg", "conf", "properties", "yaml", "yml", "rtf", "srt", "ass", "vtt")
     private val ZIP = setOf("zip", "7z", "rar", "tar", "gz", "bz2", "xz", "tgz", "zst", "iso", "jar")
     private val APKS = setOf("apk", "apks", "xapk", "apkm")
     private val CODE = setOf("kt", "kts", "java", "smali", "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "c", "h", "cpp", "hpp", "cs", "php", "swift", "sh", "html", "css", "scss", "xml", "json", "toml", "gradle", "sql", "yml", "yaml")
@@ -60,20 +70,41 @@ object FolderKinds {
     /** Looks at the folder's direct files (first [SCAN_LIMIT]) and returns the most common media/document type. */
     private fun scan(path: String): FolderKind {
         val names = runCatching { File(path).list() }.getOrNull() ?: return FolderKind.NONE
+        if (names.isEmpty()) return FolderKind.EMPTY
         val counts = IntArray(FolderKind.values().size)
         for (n in names.take(SCAN_LIMIT)) {
             val e = n.substringAfterLast('.', "").lowercase()
             if (e.isEmpty()) continue
             val k = when (e) {
-                in IMG -> FolderKind.PHOTO; in AUD -> FolderKind.MUSIC; in VID -> FolderKind.VIDEO
-                in APKS -> FolderKind.APK; in ZIP -> FolderKind.ARCHIVE; in DOC -> FolderKind.DOCS
-                in CODE -> FolderKind.CODE; else -> null
+                in IMG -> FolderKind.PHOTO
+                in AUD -> FolderKind.MUSIC
+                in VID -> FolderKind.VIDEO
+                in APKS -> FolderKind.APK
+                in ZIP -> FolderKind.ARCHIVE
+                in PDFS -> FolderKind.PDF
+                in SHEETS -> FolderKind.SPREADSHEET
+                in SLIDES -> FolderKind.PRESENTATION
+                in TEXTS -> FolderKind.TEXT
+                in CODE -> FolderKind.CODE
+                in DOC -> FolderKind.DOCS
+                else -> null
             } ?: continue
             counts[k.ordinal]++
         }
-        var best = FolderKind.NONE; var bestN = 0
-        for (k in FolderKind.values()) if (k != FolderKind.NONE && counts[k.ordinal] > bestN) { best = k; bestN = counts[k.ordinal] }
-        return best
+        var best = FolderKind.NONE
+        var bestN = 0
+        var categories = 0
+        for (k in FolderKind.values()) {
+            if (k == FolderKind.NONE || k == FolderKind.EMPTY || k == FolderKind.MIXED) continue
+            val count = counts[k.ordinal]
+            if (count > 0) categories++
+            if (count > bestN) { best = k; bestN = count }
+        }
+        return when {
+            bestN == 0 -> FolderKind.EMPTY
+            categories > 1 && counts[best.ordinal] * 2 < counts.sum() -> FolderKind.MIXED
+            else -> best
+        }
     }
 }
 
