@@ -101,7 +101,7 @@ object FolderKinds {
             if (count > bestN) { best = k; bestN = count }
         }
         return when {
-            bestN == 0 -> FolderKind.EMPTY
+            bestN == 0 -> FolderKind.MIXED
             categories > 1 && counts[best.ordinal] * 2 < counts.sum() -> FolderKind.MIXED
             else -> best
         }
