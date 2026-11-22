@@ -254,7 +254,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
 
 @Composable
 private fun QuickTile(name: String, icon: ImageVector, modifier: Modifier, onClick: () -> Unit) {
-    GlassCard(modifier, shape = RoundedCornerShape(15.dp), onClick = onClick) {
+    GlassCard(modifier, shape = RoundedCornerShape(18.dp), onClick = onClick) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = Accent, modifier = Modifier.size(21.dp))
             Spacer(Modifier.width(10.dp))
