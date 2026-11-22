@@ -29,7 +29,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Shape
@@ -238,22 +237,7 @@ fun GlassCard(
         // Keep one perimeter only. The previous second white stroke and inset bottom line
         // produced visible grey/white side bands where adjacent cards met.
         .border(1.dp, edge, shape)
-        .drawBehind {
-            // Draw the specular wash using the exact caller-provided Shape so the
-            // highlight follows the same corner geometry as the fill and border.
-            val outline = shape.createOutline(size, layoutDirection, this)
-            drawOutline(
-                outline,
-                Brush.verticalGradient(
-                    listOf(
-                        Color.White.copy(alpha = if (p.dark) .16f else .34f),
-                        Color.White.copy(alpha = if (p.dark) .035f else .09f),
-                        Color.Transparent
-                    ),
-                    startY = 0f, endY = size.height * .46f
-                )
-            )
-        }
+
     val m = if (onClick != null || onLongClick != null)
         base.combinedClickable(interactionSource = interaction, indication = null,
             onClick = { onClick?.invoke() }, onLongClick = onLongClick)
