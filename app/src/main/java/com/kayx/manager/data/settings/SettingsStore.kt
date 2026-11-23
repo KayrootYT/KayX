@@ -107,6 +107,13 @@ object SettingsStore {
         private set
     var homePath by mutableStateOf("")
         private set
+    // Last public-storage browser session; private-space paths are deliberately never persisted here.
+    var browserPath by mutableStateOf("")
+        private set
+    var browserSecondaryPath by mutableStateOf("")
+        private set
+    var browserActivePane by mutableStateOf(0)
+        private set
 
     fun init(context: Context) {
         val p = context.applicationContext.getSharedPreferences("kayx_settings", Context.MODE_PRIVATE)
@@ -147,6 +154,9 @@ object SettingsStore {
         bookmarksOnTop = p.getBoolean("bookmarks_top", false)
         useRecycleBin = p.getBoolean("recycle_bin", true)
         homePath = p.getString("home_path", "") ?: ""
+        browserPath = p.getString("browser_path", "") ?: ""
+        browserSecondaryPath = p.getString("browser_secondary_path", "") ?: ""
+        browserActivePane = p.getInt("browser_active_pane", 0).coerceIn(0, 1)
     }
 
     private fun save(block: SharedPreferences.Editor.() -> Unit) {
@@ -184,6 +194,21 @@ object SettingsStore {
     fun updateSearchAge(v: Long) { searchAgeMs = v; save { putLong("search_age", v) } }
     fun updateUseRecycleBin(v: Boolean) { useRecycleBin = v; save { putBoolean("recycle_bin", v) } }
     fun updateHomePath(v: String) { homePath = v; save { putString("home_path", v) } }
+    fun updateBrowserSession(primary: String, secondary: String, activePane: Int) {
+        // Never persist app-private locations (including the decrypted private-space staging directory).
+        val privateRoot = prefs?.let { it.getString("private_stage_path", null) }.orEmpty()
+        if (primary.isBlank() || primary.startsWith("/data/") || primary.startsWith("/")) {
+            if (privateRoot.isNotBlank() && (primary == privateRoot || primary.startsWith("$privateRoot/"))) return
+        }
+        browserPath = primary
+        browserSecondaryPath = secondary
+        browserActivePane = activePane.coerceIn(0, 1)
+        save {
+            putString("browser_path", browserPath)
+            putString("browser_secondary_path", browserSecondaryPath)
+            putInt("browser_active_pane", browserActivePane)
+        }
+    }
     fun updateBookmarksOnTop(v: Boolean) { bookmarksOnTop = v; save { putBoolean("bookmarks_top", v) } }
     fun addBookmark(path: String): Boolean {
         if (path in bookmarks) return false
