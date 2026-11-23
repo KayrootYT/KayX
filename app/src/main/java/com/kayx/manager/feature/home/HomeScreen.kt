@@ -101,7 +101,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                 Icon(Icons.Default.QrCodeScanner, "Scan storage", tint = Fg, modifier = Modifier.size(24.dp))
             }
             IconButton(onClick = onSettings) {
-                Icon(Icons.Default.MoreVert, "More options", tint = Fg, modifier = Modifier.size(24.dp))
+                if (SettingsStore.icons3d) Image(painterResource(R.drawable.home3d_settings), contentDescription = "Settings", modifier = Modifier.size(30.dp)) else Icon(Icons.Default.MoreVert, "More options", tint = Fg, modifier = Modifier.size(24.dp))
             }
         }
 
@@ -179,7 +179,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"]), artworkRes = R.drawable.home3d_apps) { onApps() },
             CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads")), QuickAccess.firstExisting(target("Downloads"))?.absolutePath) { open(target("Downloads")) },
             CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder")), QuickAccess.firstExisting(target("Recorder"))?.absolutePath) { open(target("Recorder")) },
-            CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth")), QuickAccess.firstExisting(target("Bluetooth"))?.absolutePath) { open(target("Bluetooth")) }
+            CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth")), artworkRes = R.drawable.home3d_bluetooth) { open(target("Bluetooth")) }
         )
         val folders = listOf(
             "DCIM" to Environment.DIRECTORY_DCIM, "Documents" to Environment.DIRECTORY_DOCUMENTS, "Music" to Environment.DIRECTORY_MUSIC,
@@ -200,12 +200,12 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         Text("Storage and services", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextMuted)
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                StorageRow("Phone storage", Icons.Default.PieChart, root.absolutePath) { onOpen(root.absolutePath) }
+                StorageRow("Phone storage", Icons.Default.PieChart, root.absolutePath, R.drawable.home3d_storage) { onOpen(root.absolutePath) }
                 HorizontalDivider(color = Fg.copy(.08f))
-                StorageRow("Root directory", Icons.Default.PhoneAndroid, "/") { onOpen("/") }
+                StorageRow("Root directory", Icons.Default.PhoneAndroid, "/", R.drawable.home3d_files) { onOpen("/") }
                 HorizontalDivider(color = Fg.copy(.08f))
                 Row(Modifier.fillMaxWidth().clickable { onTool(Tool.FTP) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Devices, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
+                    if (SettingsStore.icons3d) Image(painterResource(R.drawable.home3d_tools), contentDescription = null, modifier = Modifier.size(32.dp)) else Icon(Icons.Default.Devices, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Cross-device services", style = MaterialTheme.typography.titleSmall)
@@ -305,7 +305,7 @@ private fun CategoryTileView(t: CatTile, modifier: Modifier) {
 }
 
 @Composable
-private fun StorageRow(title: String, icon: ImageVector, path: String, onClick: () -> Unit) {
+private fun StorageRow(title: String, icon: ImageVector, path: String, artworkRes: Int? = null, onClick: () -> Unit) {
     val stat = remember(path) { runCatching { StatFs(path) }.getOrNull() }
     val total = stat?.totalBytes ?: 0L
     val avail = stat?.availableBytes ?: 0L
@@ -313,7 +313,7 @@ private fun StorageRow(title: String, icon: ImageVector, path: String, onClick: 
     val frac = if (total > 0) (used.toFloat() / total).coerceIn(0f, 1f) else 0f
     val systemRoot = path == "/" // read-only system partition: free space is always 0, so a usage bar would be misleading
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(46.dp).background(Fg.copy(.08f), CircleShape), Alignment.Center) { Icon(icon, null, tint = Fg.copy(.85f)) }
+        if (SettingsStore.icons3d && artworkRes != null) Image(painterResource(artworkRes), contentDescription = title, modifier = Modifier.size(40.dp)) else Box(Modifier.size(46.dp).background(Fg.copy(.08f), CircleShape), Alignment.Center) { Icon(icon, null, tint = Fg.copy(.85f)) }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
