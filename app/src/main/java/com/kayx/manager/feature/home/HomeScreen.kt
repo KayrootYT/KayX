@@ -144,10 +144,10 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         fun num(v: Int?) = v?.let { "%,d".format(it) } ?: "…"
         fun cnt(c: Category) = num(counts[c.name])
         val cats = listOf(
-            CatTile("Images", Icons.Default.Image, Color(0xFF4A90F5), cnt(Category.IMAGES), artworkRes = R.drawable.home3d_images) { onPush(Category.IMAGES.name, Tool.CATEGORY) },
+            CatTile("Images", Icons.Default.Image, Color(0xFF4A90F5), cnt(Category.IMAGES), artworkRes = R.drawable.kayx_extra_pictures) { onPush(Category.IMAGES.name, Tool.CATEGORY) },
             CatTile("Videos", Icons.Default.PlayArrow, Color(0xFFEF5B6B), cnt(Category.VIDEOS), artworkRes = R.drawable.home3d_videos) { onPush(Category.VIDEOS.name, Tool.CATEGORY) },
-            CatTile("Audio", Icons.Default.GraphicEq, Color(0xFF5A5F6B), cnt(Category.AUDIO), artworkRes = R.drawable.home3d_audio) { onPush(Category.AUDIO.name, Tool.CATEGORY) },
-            CatTile("Documents", Icons.Default.Description, Color(0xFFF5B82E), cnt(Category.DOCUMENTS), artworkRes = R.drawable.home3d_documents) { onPush(Category.DOCUMENTS.name, Tool.CATEGORY) },
+            CatTile("Audio", Icons.Default.GraphicEq, Color(0xFF5A5F6B), cnt(Category.AUDIO), artworkRes = R.drawable.kayx_extra_music) { onPush(Category.AUDIO.name, Tool.CATEGORY) },
+            CatTile("Documents", Icons.Default.Description, Color(0xFFF5B82E), cnt(Category.DOCUMENTS), artworkRes = R.drawable.kayx_extra_documents_folder) { onPush(Category.DOCUMENTS.name, Tool.CATEGORY) },
             CatTile("APKs", Icons.Default.Android, Color(0xFF2ECC71), cnt(Category.APKS), artworkRes = R.drawable.home3d_apks) { onPush(Category.APKS.name, Tool.CATEGORY) },
             CatTile("Archives", Icons.Default.FolderZip, Color(0xFFF2B01E), cnt(Category.ARCHIVES), artworkRes = R.drawable.home3d_archives) { onPush(Category.ARCHIVES.name, Tool.CATEGORY) },
             CatTile("Tags", Icons.AutoMirrored.Filled.Label, Color(0xFF4A90F5), TagStore.totalFiles().toString(), artworkRes = R.drawable.home3d_tags) { onTool(Tool.TAGS) },
@@ -176,11 +176,11 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         fun qCount(t: QuickAccess.Target) = num(counts["QA:" + t.name])
         fun target(n: String) = QuickAccess.targets.first { it.name == n }
         val quick = listOf(
-            CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp")), QuickAccess.firstExisting(target("WhatsApp"))?.absolutePath) { open(target("WhatsApp")) },
-            CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots")), QuickAccess.firstExisting(target("Screenshots"))?.absolutePath) { open(target("Screenshots")) },
+            CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp")), artworkRes = R.drawable.kayx_extra_whatsapp) { open(target("WhatsApp")) },
+            CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots")), artworkRes = R.drawable.kayx_extra_screenshots) { open(target("Screenshots")) },
             CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"]), artworkRes = R.drawable.home3d_apps) { onApps() },
-            CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads")), QuickAccess.firstExisting(target("Downloads"))?.absolutePath) { open(target("Downloads")) },
-            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder")), QuickAccess.firstExisting(target("Recorder"))?.absolutePath) { open(target("Recorder")) },
+            CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads")), artworkRes = R.drawable.kayx_extra_downloads) { open(target("Downloads")) },
+            CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder")), artworkRes = R.drawable.kayx_extra_recorder) { open(target("Recorder")) },
             CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth")), artworkRes = R.drawable.home3d_bluetooth) { open(target("Bluetooth")) }
         )
         val folders = listOf(
