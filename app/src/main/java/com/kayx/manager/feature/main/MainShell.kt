@@ -9,6 +9,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -111,26 +113,32 @@ fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (Str
             }
             }
         }
-        if (!searchOpen) NavigationBar(containerColor = Color.Transparent) {
+        if (!searchOpen) Row(
+            Modifier.fillMaxWidth().navigationBarsPadding().height(66.dp).padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             MainTab.values().forEachIndexed { i, t ->
-                NavigationBarItem(
-                    selected = tab == i, onClick = { tab = i },
-                    icon = {
-                        if (SettingsStore.icons3d) {
-                            Image(
-                                painterResource(if (amoledTheme) t.amoledArtwork else if (darkTheme) t.darkArtwork else t.lightArtwork),
-                                contentDescription = t.label,
-                                modifier = Modifier.size(38.dp)
-                            )
-                        } else {
-                            Icon(t.icon, t.label)
-                        }
-                    }, label = { Text(t.label) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Accent, selectedTextColor = Accent, indicatorColor = Color.Transparent,
-                        unselectedIconColor = Fg.copy(.6f), unselectedTextColor = Fg.copy(.6f)
-                    )
-                )
+                val selected = tab == i
+                Column(
+                    Modifier.weight(1f).fillMaxHeight()
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { tab = i }
+                        .padding(vertical = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (SettingsStore.icons3d) {
+                        Image(
+                            painterResource(if (amoledTheme) t.amoledArtwork else if (darkTheme) t.darkArtwork else t.lightArtwork),
+                            contentDescription = t.label,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    } else {
+                        Icon(t.icon, t.label, tint = if (selected) Accent else Fg.copy(.6f), modifier = Modifier.size(25.dp))
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(t.label, style = MaterialTheme.typography.labelSmall,
+                        color = if (selected) Accent else Fg.copy(.6f), maxLines = 1)
+                }
             }
         }
     }
