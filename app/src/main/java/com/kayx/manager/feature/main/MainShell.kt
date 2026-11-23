@@ -40,12 +40,13 @@ import com.kayx.manager.ui.glass.glassBackground
 import com.kayx.manager.ui.theme.Accent
 import com.kayx.manager.ui.theme.Fg
 import com.kayx.manager.ui.theme.TextMuted
+import com.kayx.manager.ui.theme.isKayXDark
 
-private enum class MainTab(val label: String, val icon: ImageVector, val artwork: Int) {
-    FILES("Files", Icons.Default.Folder, R.drawable.home3d_nav_files),
-    STORAGE("Storage", Icons.Default.PieChart, R.drawable.home3d_nav_storage),
-    TOOLS("Tools", Icons.Default.Build, R.drawable.home3d_nav_tools),
-    SETTINGS("Settings", Icons.Default.Settings, R.drawable.home3d_nav_settings)
+private enum class MainTab(val label: String, val icon: ImageVector, val lightArtwork: Int, val darkArtwork: Int, val amoledArtwork: Int) {
+    FILES("Files", Icons.Default.Folder, R.drawable.nav4_light_files, R.drawable.nav4_dark_files, R.drawable.nav4_amoled_files),
+    STORAGE("Storage", Icons.Default.PieChart, R.drawable.nav4_light_storage, R.drawable.nav4_dark_storage, R.drawable.nav4_amoled_storage),
+    TOOLS("Tools", Icons.Default.Build, R.drawable.nav4_light_tools, R.drawable.nav4_dark_tools, R.drawable.nav4_amoled_tools),
+    SETTINGS("Settings", Icons.Default.Settings, R.drawable.nav4_light_settings, R.drawable.nav4_dark_settings, R.drawable.nav4_amoled_settings)
 }
 
 /**
@@ -58,6 +59,8 @@ private enum class MainTab(val label: String, val icon: ImageVector, val artwork
  */
 @Composable
 fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (String) -> Unit, onPush: (String, Tool) -> Unit, onOpenExternal: (String) -> Unit = {}) {
+    val darkTheme = isKayXDark()
+    val amoledTheme = SettingsStore.themeMode == com.kayx.manager.data.settings.ThemeMode.AMOLED
     var tab by rememberSaveable { mutableStateOf(0) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = searchOpen) { searchOpen = false }
@@ -114,7 +117,11 @@ fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (Str
                     selected = tab == i, onClick = { tab = i },
                     icon = {
                         if (SettingsStore.icons3d) {
-                            Image(painterResource(t.artwork), contentDescription = t.label, modifier = Modifier.size(38.dp))
+                            Image(
+                                painterResource(if (amoledTheme) t.amoledArtwork else if (darkTheme) t.darkArtwork else t.lightArtwork),
+                                contentDescription = t.label,
+                                modifier = Modifier.size(38.dp)
+                            )
                         } else {
                             Icon(t.icon, t.label)
                         }
