@@ -101,12 +101,25 @@ fun FileListScreen(
     val snack = remember { SnackbarHostState() }
     var tick by remember { mutableStateOf(0) }
     var sortBy by remember { mutableStateOf(0) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var newestFirst by remember { mutableStateOf(true) }
+    var gridMode by remember { mutableStateOf(grid) }
     var selected by remember { mutableStateOf(setOf<String>()) }
     var confirmDelete by remember { mutableStateOf(false) }
     var tagDialog by remember { mutableStateOf(false) }
     val loaded by produceState<List<ScanFile>?>(null, tick) { value = withContext(Dispatchers.IO) { runCatching(load).getOrDefault(emptyList()) } }
-    val list = remember(loaded, sortBy) {
-        loaded?.let { l -> when (sortBy) { 1 -> l.sortedByDescending { it.size }; 2 -> l.sortedBy { it.name.lowercase() }; else -> l.sortedByDescending { it.modified } } }
+    val list = remember(loaded, sortBy, newestFirst, query) {
+        loaded?.let { source ->
+            val filtered = if (query.isBlank()) source else source.filter {
+                it.name.contains(query.trim(), ignoreCase = true) || it.path.contains(query.trim(), ignoreCase = true)
+            }
+            when (sortBy) {
+                1 -> if (newestFirst) filtered.sortedByDescending { it.size } else filtered.sortedBy { it.size }
+                2 -> filtered.sortedBy { it.name.lowercase() }
+                else -> if (newestFirst) filtered.sortedByDescending { it.modified } else filtered.sortedBy { it.modified }
+            }
+        }
     }
     val total = list?.sumOf { it.size } ?: 0L
     var scanned by remember { mutableStateOf(0) }
@@ -116,7 +129,18 @@ fun FileListScreen(
 
     ToolScaffold(if (selected.isEmpty()) title else "${selected.size} selected", { if (selected.isNotEmpty()) { selected = emptySet() } else { onBack() } }, snack,
         actions = {
-            if (selected.isNotEmpty()) IconButton({ selected = list.orEmpty().map { it.path }.toSet() }) { Icon(Icons.Default.SelectAll, "Select all") }
+            if (selected.isEmpty()) {
+                IconButton({ searchOpen = !searchOpen; if (!searchOpen) query = "" }) {
+                    Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, if (searchOpen) "Close search" else "Search")
+                }
+                IconButton({ gridMode = !gridMode }) {
+                    Icon(if (gridMode) Icons.Default.ViewList else Icons.Default.GridView, if (gridMode) "List view" else "Grid view")
+                }
+                IconButton({ selected = list.orEmpty().map { it.path }.toSet() }) { Icon(Icons.Default.CheckBox, "Select all") }
+            } else {
+                IconButton({ selected = list.orEmpty().map { it.path }.toSet() }) { Icon(Icons.Default.SelectAll, "Select all") }
+                IconButton({ selected = emptySet() }) { Icon(Icons.Default.Close, "Clear selection") }
+            }
         },
         bottomBar = {
             if (selected.isNotEmpty()) GlassCard(Modifier.navigationBarsPadding().padding(12.dp).fillMaxWidth()) {
@@ -132,13 +156,22 @@ fun FileListScreen(
         }
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
+            if (searchOpen) {
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
+                    singleLine = true, placeholder = { Text("Search files and folders…") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Icons.Default.Close, "Clear search") } }
+                )
+            }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(if (list == null) "Scanning… $scanned files" else "${list.size} files · ${formatBytes(total)}", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = TextMuted)
-                listOf("Date", "Size", "Name").forEachIndexed { i, l -> FilterChip(sortBy == i, { sortBy = i }, { Text(l) }) }
+                listOf("Date", "Size", "Name").forEachIndexed { i, l -> FilterChip(sortBy == i, { if (sortBy == i && i != 2) newestFirst = !newestFirst else sortBy = i }, { Text(l + if (sortBy == i && i != 2) if (newestFirst) " ↓" else " ↑" else "") }) }
             }
             if (list == null) Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Accent) }
             else if (list.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Nothing here\n" + StorageScanner.status, color = Fg.copy(.5f)) }
-            else if (grid) ThumbGrid(list, selected, onTap, onHold)
+            else if (gridMode) ThumbGrid(list, selected, onTap, onHold)
             else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp, 4.dp, 12.dp, 90.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 items(list, key = { it.path }) { f ->
                     val on = f.path in selected
