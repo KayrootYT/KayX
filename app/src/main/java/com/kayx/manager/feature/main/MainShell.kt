@@ -43,10 +43,10 @@ import com.kayx.manager.ui.theme.TextMuted
 import com.kayx.manager.ui.theme.isKayXDark
 
 private enum class MainTab(val label: String, val icon: ImageVector, val lightArtwork: Int, val darkArtwork: Int, val amoledArtwork: Int) {
-    FILES("Files", Icons.Default.Folder, R.drawable.nav4_light_files, R.drawable.nav4_dark_files, R.drawable.nav4_amoled_files),
-    STORAGE("Storage", Icons.Default.PieChart, R.drawable.nav4_light_storage, R.drawable.nav4_dark_storage, R.drawable.nav4_amoled_storage),
-    TOOLS("Tools", Icons.Default.Build, R.drawable.nav4_light_tools, R.drawable.nav4_dark_tools, R.drawable.nav4_amoled_tools),
-    SETTINGS("Settings", Icons.Default.Settings, R.drawable.nav4_light_settings, R.drawable.nav4_dark_settings, R.drawable.nav4_amoled_settings)
+    FILES("Files", Icons.Default.Folder, R.drawable.kayx_extra_nav_files, R.drawable.kayx_extra_nav_files, R.drawable.kayx_extra_nav_files),
+    STORAGE("Storage", Icons.Default.PieChart, R.drawable.kayx_extra_nav_storage, R.drawable.kayx_extra_nav_storage, R.drawable.kayx_extra_nav_storage),
+    TOOLS("Tools", Icons.Default.Build, R.drawable.kayx_extra_nav_tools, R.drawable.kayx_extra_nav_tools, R.drawable.kayx_extra_nav_tools),
+    SETTINGS("Settings", Icons.Default.Settings, R.drawable.kayx_extra_nav_settings, R.drawable.kayx_extra_nav_settings, R.drawable.kayx_extra_nav_settings)
 }
 
 /**
