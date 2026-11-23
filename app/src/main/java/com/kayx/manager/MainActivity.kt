@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kayx.manager.data.storage.PrivateSpace
+import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.domain.model.Tool
 import com.kayx.manager.feature.filebrowser.FileBrowserScreen
 import com.kayx.manager.feature.tools.*
@@ -103,7 +104,11 @@ class MainActivity : ComponentActivity() {
             KayXTheme {
                 // Saveable so rotation / dark-mode / font-scale changes don't drop the user back to Home.
                 var showSettings by rememberSaveable { mutableStateOf(false) }
-                var path by rememberSaveable { mutableStateOf<String?>(startDir) }
+                var path by rememberSaveable {
+                    mutableStateOf<String?>(
+                        startDir ?: SettingsStore.browserPath.takeIf { saved -> saved.isNotBlank() && java.io.File(saved).isDirectory }
+                    )
+                }
                 var stack by rememberSaveable(stateSaver = ToolStackSaver) { mutableStateOf(listOf<Pair<String, Tool>>()) }
                 val push = { f: String, k: Tool -> stack = stack + (f to k) }
                 if (!granted.value) Box(Modifier.fillMaxSize().glassBackground().padding(24.dp), Alignment.Center) {
