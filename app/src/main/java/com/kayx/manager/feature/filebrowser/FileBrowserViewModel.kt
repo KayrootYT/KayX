@@ -116,9 +116,14 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     /** Start a browsing session at [path] (this becomes the root). */
     fun start(path: String) {
         if (_s.value.root == path) { reload(); return }
-        _s.update { it.copy(root = path, dir = "", secondaryDir = path, secondaryItems = emptyList(), activePane = 0,
+        val restoredSecondary = SettingsStore.browserSecondaryPath.takeIf { it.isNotBlank() && File(it).isDirectory } ?: path
+        val restoredActive = SettingsStore.browserActivePane.coerceIn(0, 1)
+        _s.update { it.copy(root = path, dir = path, secondaryDir = restoredSecondary, secondaryItems = emptyList(),
+            activePane = if (SettingsStore.dualPane) restoredActive else 0, dualPane = SettingsStore.dualPane,
             backStacks = listOf(emptyList(), emptyList()), fwdStacks = listOf(emptyList(), emptyList()), recent = emptySet(),
-            tabs = listOf(BrowserTab(path), BrowserTab(path)), activeTab = 0) }; open(path)
+            tabs = listOf(BrowserTab(path), BrowserTab(restoredSecondary)), activeTab = if (SettingsStore.dualPane) restoredActive else 0) }
+        SettingsStore.updateBrowserSession(path, restoredSecondary, restoredActive)
+        reload()
     }
 
     fun open(path: String) = navigatePane(0, path, NavMove.PUSH)
@@ -144,6 +149,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                 st.copy(dir = path, primarySelected = emptySet(), query = "", searching = false, activePane = 0, backStacks = backs, fwdStacks = fwds, recent = emptySet(), tabs = tabs, activeTab = 0)
             }
         }
+        val saved = _s.value
+        SettingsStore.updateBrowserSession(saved.dir, saved.secondaryDir, saved.activePane)
         reload()
     }
 
@@ -234,6 +241,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun swapPanes() {
         _s.update { it.copy(dir = it.secondaryDir, secondaryDir = it.dir, primarySelected = it.secondarySelected, secondarySelected = it.primarySelected,
             backStacks = it.backStacks.reversed(), fwdStacks = it.fwdStacks.reversed(), activePane = 1 - it.activePane) }
+        val saved = _s.value
+        SettingsStore.updateBrowserSession(saved.dir, saved.secondaryDir, saved.activePane)
         reload()
     }
 
