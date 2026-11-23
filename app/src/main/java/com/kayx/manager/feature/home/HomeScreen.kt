@@ -176,7 +176,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         val quick = listOf(
             CatTile("WhatsApp", Icons.AutoMirrored.Filled.Chat, Color(0xFF25D366), qCount(target("WhatsApp")), QuickAccess.firstExisting(target("WhatsApp"))?.absolutePath) { open(target("WhatsApp")) },
             CatTile("Screenshots", Icons.Default.Crop, Color(0xFF3D7BF0), qCount(target("Screenshots")), QuickAccess.firstExisting(target("Screenshots"))?.absolutePath) { open(target("Screenshots")) },
-            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"])) { onApps() },
+            CatTile("Apps", Icons.Default.Apps, Color(0xFF3D7BF0), num(counts["QA:Apps"]), artworkRes = R.drawable.home3d_apps) { onApps() },
             CatTile("Downloads", Icons.Default.Download, Color(0xFFE0A030), qCount(target("Downloads")), QuickAccess.firstExisting(target("Downloads"))?.absolutePath) { open(target("Downloads")) },
             CatTile("Recorder", Icons.Default.GraphicEq, Color(0xFF6B7488), qCount(target("Recorder")), QuickAccess.firstExisting(target("Recorder"))?.absolutePath) { open(target("Recorder")) },
             CatTile("Bluetooth", Icons.Default.Bluetooth, Color(0xFF3D7BF0), qCount(target("Bluetooth")), QuickAccess.firstExisting(target("Bluetooth"))?.absolutePath) { open(target("Bluetooth")) }
