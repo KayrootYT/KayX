@@ -195,13 +195,17 @@ object SettingsStore {
     fun updateUseRecycleBin(v: Boolean) { useRecycleBin = v; save { putBoolean("recycle_bin", v) } }
     fun updateHomePath(v: String) { homePath = v; save { putString("home_path", v) } }
     fun updateBrowserSession(primary: String, secondary: String, activePane: Int) {
-        // Never persist app-private locations (including the decrypted private-space staging directory).
-        val privateRoot = prefs?.let { it.getString("private_stage_path", null) }.orEmpty()
-        if (primary.isBlank() || primary.startsWith("/data/") || primary.startsWith("/")) {
-            if (privateRoot.isNotBlank() && (primary == privateRoot || primary.startsWith("$privateRoot/"))) return
-        }
-        browserPath = primary
-        browserSecondaryPath = secondary
+        // Only persist public/shared-storage locations. App-private paths can include decrypted vault data.
+        val safePrimary = primary.takeIf {
+            it == "/sdcard" || it.startsWith("/sdcard/") ||
+                it.startsWith("/storage/") || it.startsWith("/mnt/")
+        } ?: return
+        val safeSecondary = secondary.takeIf {
+            it == "/sdcard" || it.startsWith("/sdcard/") ||
+                it.startsWith("/storage/") || it.startsWith("/mnt/")
+        }.orEmpty()
+        browserPath = safePrimary
+        browserSecondaryPath = safeSecondary
         browserActivePane = activePane.coerceIn(0, 1)
         save {
             putString("browser_path", browserPath)
