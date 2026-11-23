@@ -221,21 +221,36 @@ fun GlassCard(
         else -> Brush.verticalGradient(listOf(Color.White.copy(alpha = .95f), Color.White.copy(alpha = .82f)))
     } }
     val edge: Brush = remember(p) { when {
-        p.amoled -> Brush.linearGradient(listOf(Color.White.copy(alpha = .14f), Color.White.copy(alpha = .06f)))
+        p.amoled -> Brush.linearGradient(listOf(
+            Color.White.copy(alpha = .25f), p.accent.copy(alpha = .20f),
+            Color.White.copy(alpha = .07f), p.accent2.copy(alpha = .16f)))
         p.dark -> Brush.linearGradient(listOf(
-            Color.White.copy(alpha = .42f), p.accent.copy(alpha = .13f),
-            Color.White.copy(alpha = .055f), p.accent2.copy(alpha = .20f)))
-        else -> Brush.linearGradient(listOf(Color.Black.copy(alpha = .09f), Color.Black.copy(alpha = .04f)))
+            Color.White.copy(alpha = .48f), p.accent.copy(alpha = .22f),
+            Color.White.copy(alpha = .08f), p.accent2.copy(alpha = .24f)))
+        else -> Brush.linearGradient(listOf(
+            Color.White.copy(alpha = .98f), p.accent.copy(alpha = .13f),
+            Color.Black.copy(alpha = .045f), p.accent2.copy(alpha = .12f)))
     } }
-    // Translucent layered fill, fine specular edge and restrained physical lift.
-    // Avoid per-row blur/offscreen layers so long file lists remain smooth.
+    // Liquid Glass 2.0: translucent surface, a restrained specular wash, luminous perimeter
+    // and soft theme-aware lift. No per-card blur/offscreen layer: long file lists stay smooth.
+    val specular = remember(p) {
+        Brush.linearGradient(
+            0f to Color.White.copy(alpha = if (p.dark || p.amoled) .17f else .42f),
+            .42f to p.accent.copy(alpha = if (p.dark || p.amoled) .055f else .035f),
+            1f to Color.Transparent
+        )
+    }
     val base = modifier
         .graphicsLayer { scaleX = scale; scaleY = scale }
-        .shadow(elevation.dp, shape, clip = false)
+        .shadow(
+            elevation.dp, shape, clip = false,
+            ambientColor = p.accent.copy(alpha = if (p.amoled) .10f else .075f),
+            spotColor = Color.Black.copy(alpha = if (p.dark || p.amoled) .30f else .12f)
+        )
         .clip(shape)
         .background(fill, shape)
-        // Keep one perimeter only. The previous second white stroke and inset bottom line
-        // produced visible grey/white side bands where adjacent cards met.
+        .background(specular, shape)
+        // One clean luminous perimeter; avoid stacked strokes and inset seams.
         .border(1.dp, edge, shape)
 
     val m = if (onClick != null || onLongClick != null)
