@@ -274,7 +274,7 @@ fun GlassCard(
         .background(specular, shape)
         .drawBehind {
             // Restrained animated reflection clipped by the card shape below.
-            drawRoundRect(sweepBrush, cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()))
+            drawRect(sweepBrush)
         }
         // One clean luminous perimeter; avoid stacked strokes and inset seams.
         .border(1.dp, edge, shape)
