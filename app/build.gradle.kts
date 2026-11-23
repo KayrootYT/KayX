@@ -91,9 +91,13 @@ val extractFolderArtworkResources = tasks.register<Copy>("extractFolderArtworkRe
     val folderArtworkZip = file("kayx-folder-icons-android-resources.zip")
     val homeArtworkZip = file("kayx-home-screen-icons-resources.zip")
     val homeNavArtworkZip = file("kayx-home-nav-3d-icons-resources.zip")
+    val extraHomeArtworkZip = file("kayx-extra-3d-icons-android-resources.zip")
     // Prefer the latest combined Home + Navigation artwork when filenames overlap.
     // EXCLUDE makes the first source win and avoids Gradle duplicate-resource failures.
     duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
+    from(zipTree(extraHomeArtworkZip)) {
+        include("drawable-nodpi/**")
+    }
     from(zipTree(homeNavArtworkZip)) {
         include("drawable-nodpi/**")
     }
@@ -104,7 +108,7 @@ val extractFolderArtworkResources = tasks.register<Copy>("extractFolderArtworkRe
         include("drawable-nodpi/**")
     }
     into(layout.buildDirectory.dir("generated/res/folderArtwork"))
-    onlyIf { folderArtworkZip.isFile || homeArtworkZip.isFile || homeNavArtworkZip.isFile }
+    onlyIf { folderArtworkZip.isFile || homeArtworkZip.isFile || homeNavArtworkZip.isFile || extraHomeArtworkZip.isFile }
 }
 tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(cargoNdkBuild, extractFolderArtworkResources)
