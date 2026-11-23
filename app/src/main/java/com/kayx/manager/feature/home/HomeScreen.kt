@@ -82,7 +82,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
     }
 
     Column(
-        Modifier.fillMaxSize().glassBackground().statusBarsPadding()
+        Modifier.fillMaxSize().statusBarsPadding()
             .navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
@@ -99,11 +99,15 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                     Text("Search", Modifier.weight(1f), color = TextMuted, style = MaterialTheme.typography.bodyLarge)
                 }
             }
-            IconButton(onClick = { barcodeScanner.launch(ScanOptions().setPrompt("Scan QR code or barcode").setBeepEnabled(false).setOrientationLocked(false)) }) {
-                Icon(Icons.Default.QrCodeScanner, "Scan storage", tint = Fg, modifier = Modifier.size(24.dp))
+            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                IconButton(onClick = { barcodeScanner.launch(ScanOptions().setPrompt("Scan QR code or barcode").setBeepEnabled(false).setOrientationLocked(false)) }) {
+                    Icon(Icons.Default.QrCodeScanner, "Scan storage", tint = Fg, modifier = Modifier.size(28.dp))
+                }
             }
-            IconButton(onClick = onSettings) {
-                if (SettingsStore.icons3d) Image(painterResource(R.drawable.home3d_settings), contentDescription = "Settings", modifier = Modifier.size(30.dp)) else Icon(Icons.Default.MoreVert, "More options", tint = Fg, modifier = Modifier.size(24.dp))
+            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                IconButton(onClick = onSettings) {
+                    if (SettingsStore.icons3d) Image(painterResource(R.drawable.home3d_settings), contentDescription = "Settings", modifier = Modifier.size(34.dp)) else Icon(Icons.Default.MoreVert, "More options", tint = Fg, modifier = Modifier.size(28.dp))
+                }
             }
         }
 
@@ -154,7 +158,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             CatTile("Private space", Icons.Default.Shield, Color(0xFF2ECC71), PrivateSpace.fileCount(ctx).toString(), artworkRes = R.drawable.home3d_private_space) { onTool(Tool.PRIVATE) },
         )
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(20.dp)) {
-            Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.padding(vertical = 14.dp, horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 cats.chunked(4).forEach { row -> Row(Modifier.fillMaxWidth()) { row.forEach { CategoryTileView(it, Modifier.weight(1f)) }; repeat(4 - row.size) { Spacer(Modifier.weight(1f)) } } }
             }
         }
@@ -191,7 +195,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             CatTile(n, Icons.Default.Folder, Color(0xFFE0A030), "", folder.absolutePath, when (n) { "DCIM" -> R.drawable.kayx_extra_dcim; "Documents" -> R.drawable.kayx_extra_documents_folder; "Music" -> R.drawable.kayx_extra_music; "Pictures" -> R.drawable.kayx_extra_pictures; else -> R.drawable.kayx_extra_movies }) { folder.mkdirs(); onOpen(folder.absolutePath) }
         }
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(20.dp)) {
-            Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.padding(vertical = 14.dp, horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 (if (allQuick) quick + folders else quick).chunked(4).forEach { row ->
                     Row(Modifier.fillMaxWidth()) { row.forEach { CategoryTileView(it, Modifier.weight(1f)) }; repeat(4 - row.size) { Spacer(Modifier.weight(1f)) } }
                 }
@@ -201,13 +205,13 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
         // Storage and services section follows the category and quick-access cards.
         Text("Storage and services", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TextMuted)
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(20.dp)) {
-            Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(horizontal = 15.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 StorageRow("Phone storage", Icons.Default.PieChart, root.absolutePath, R.drawable.home3d_storage) { onOpen(root.absolutePath) }
                 HorizontalDivider(color = Fg.copy(.08f))
                 StorageRow("Root directory", Icons.Default.PhoneAndroid, "/", R.drawable.kayx_extra_root_directory) { onOpen("/") }
                 HorizontalDivider(color = Fg.copy(.08f))
                 Row(Modifier.fillMaxWidth().clickable { onTool(Tool.FTP) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (SettingsStore.icons3d) Image(painterResource(R.drawable.kayx_extra_cross_device), contentDescription = null, modifier = Modifier.size(32.dp)) else Icon(Icons.Default.Devices, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
+                    if (SettingsStore.icons3d) Image(painterResource(R.drawable.kayx_extra_cross_device), contentDescription = null, modifier = Modifier.size(40.dp)) else Icon(Icons.Default.Devices, null, tint = Fg.copy(.85f), modifier = Modifier.size(40.dp))
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Cross-device services", style = MaterialTheme.typography.titleSmall)
@@ -217,7 +221,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                 }
                 HorizontalDivider(color = Fg.copy(.08f))
                 Row(Modifier.fillMaxWidth().clickable { onTool(Tool.RECYCLE) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (SettingsStore.icons3d) Image(painterResource(R.drawable.kayx_extra_recently_deleted), contentDescription = null, modifier = Modifier.size(32.dp)) else Icon(Icons.Default.DeleteOutline, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
+                    if (SettingsStore.icons3d) Image(painterResource(R.drawable.kayx_extra_recently_deleted), contentDescription = null, modifier = Modifier.size(40.dp)) else Icon(Icons.Default.DeleteOutline, null, tint = Fg.copy(.85f), modifier = Modifier.size(40.dp))
                     Spacer(Modifier.width(14.dp))
                     Text("Recently deleted", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                     Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
@@ -281,16 +285,18 @@ private fun CategoryTileView(t: CatTile, modifier: Modifier) {
     Column(
         modifier.graphicsLayer { scaleX = pressScale; scaleY = pressScale }
             .clickable(interactionSource = interaction, indication = null, onClick = t.onClick)
-            .padding(vertical = 4.dp),
+            .padding(vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        if (SettingsStore.icons3d && t.artworkRes != null) {
+        if (SettingsStore.icons3d && t.folderPath != null) {
+            com.kayx.manager.ui.FolderArtwork(path = t.folderPath, modified = 0L, size = HOME_TILE_ICON_SIZE)
+        } else if (SettingsStore.icons3d && t.artworkRes != null) {
             androidx.compose.foundation.Image(
                 painter = androidx.compose.ui.res.painterResource(t.artworkRes),
                 contentDescription = t.name,
                 modifier = Modifier.size(HOME_TILE_ICON_SIZE),
-                contentScale = androidx.compose.ui.layout.ContentScale.FillBounds
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
             )
         } else if (SettingsStore.icons3d) {
             com.kayx.manager.ui.Icon3D(t.icon, t.color, size = HOME_TILE_ICON_SIZE, contentDescription = t.name)
@@ -313,7 +319,7 @@ private fun StorageRow(title: String, icon: ImageVector, path: String, artworkRe
     val frac = if (total > 0) (used.toFloat() / total).coerceIn(0f, 1f) else 0f
     val systemRoot = path == "/" // read-only system partition: free space is always 0, so a usage bar would be misleading
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
-        if (SettingsStore.icons3d && artworkRes != null) Image(painterResource(artworkRes), contentDescription = title, modifier = Modifier.size(40.dp)) else Box(Modifier.size(46.dp).background(Fg.copy(.08f), CircleShape), Alignment.Center) { Icon(icon, null, tint = Fg.copy(.85f)) }
+        if (SettingsStore.icons3d && artworkRes != null) Image(painterResource(artworkRes), contentDescription = title, modifier = Modifier.size(44.dp)) else Box(Modifier.size(44.dp).background(Fg.copy(.08f), CircleShape), Alignment.Center) { Icon(icon, null, tint = Fg.copy(.85f)) }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
