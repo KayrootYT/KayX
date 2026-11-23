@@ -240,6 +240,28 @@ fun GlassCard(
             1f to Color.Transparent
         )
     }
+    // Slow, low-amplitude light sweep gives glass a living specular response without
+    // continuously invalidating composables or adding expensive blur/render-effect layers.
+    val lightSweep = rememberInfiniteTransition(label = "kayx-glass-light")
+        .animateFloat(
+            initialValue = -.35f,
+            targetValue = 1.35f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 8_000, easing = LinearEasing)
+            ),
+            label = "kayx-glass-sweep"
+        )
+    val sweepAlpha = if (p.amoled) .10f else if (p.dark) .16f else .22f
+    val sweepBrush = Brush.linearGradient(
+        colors = listOf(
+            Color.Transparent,
+            Color.White.copy(alpha = sweepAlpha),
+            p.accent.copy(alpha = sweepAlpha * .45f),
+            Color.Transparent
+        ),
+        start = Offset(lightSweep.value * 900f, 0f),
+        end = Offset(lightSweep.value * 900f + 240f, 240f)
+    )
     val base = modifier
         .graphicsLayer { scaleX = scale; scaleY = scale }
         .shadow(
@@ -250,6 +272,10 @@ fun GlassCard(
         .clip(shape)
         .background(fill, shape)
         .background(specular, shape)
+        .drawBehind {
+            // Restrained animated reflection clipped by the card shape below.
+            drawRoundRect(sweepBrush, cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()))
+        }
         // One clean luminous perimeter; avoid stacked strokes and inset seams.
         .border(1.dp, edge, shape)
 
