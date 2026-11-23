@@ -18,10 +18,11 @@ fun FolderArtwork(
     path: String,
     modified: Long,
     modifier: Modifier = Modifier,
-    size: Dp = 44.dp
+    size: Dp = 44.dp,
+    force: Boolean = false
 ) {
     val palette = LocalPalette.current
-    val kind = rememberFolderKind(path, modified, SettingsStore.folderIcons)
+    val kind = rememberFolderKind(path, modified, force || SettingsStore.folderIcons)
     val theme = if (palette.amoled) "amoled" else if (palette.dark) "dark" else "light"
     val drawable = when (kind) {
         FolderKind.PHOTO -> when (theme) {
