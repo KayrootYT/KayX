@@ -69,6 +69,14 @@ object FolderKinds {
 
     /** Looks at the folder's direct files (first [SCAN_LIMIT]) and returns the most common media/document type. */
     private fun scan(path: String): FolderKind {
+        // Prefer well-known Android public directory identities even when they are empty
+        // or contain mixed file types; this keeps Home quick-access artwork distinct.
+        when (File(path).name.lowercase()) {
+            "dcim", "camera", "screenshots", "screenshot", "pictures", "images" -> return FolderKind.PHOTO
+            "documents", "document" -> return FolderKind.DOCS
+            "music", "audio", "alarms", "ringtones", "podcasts" -> return FolderKind.MUSIC
+            "movies", "videos", "video" -> return FolderKind.VIDEO
+        }
         val names = runCatching { File(path).list() }.getOrNull() ?: return FolderKind.NONE
         if (names.isEmpty()) return FolderKind.EMPTY
         val counts = IntArray(FolderKind.values().size)
