@@ -190,6 +190,9 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             val enabled = !current.dualPane
             current.copy(dualPane = enabled, activePane = if (enabled) current.activePane else 0, secondaryDir = current.secondaryDir.ifBlank { current.root.ifBlank { current.dir } })
         }
+        val saved = _s.value
+        SettingsStore.updateDualPane(saved.dualPane)
+        SettingsStore.updateBrowserSession(saved.dir, saved.secondaryDir, saved.activePane)
         reload()
     }
 
@@ -230,7 +233,11 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         reload()
     }
 
-    fun setActivePane(pane: Int) { _s.update { it.copy(activePane = pane.coerceIn(0, 1)) } }
+    fun setActivePane(pane: Int) {
+        _s.update { it.copy(activePane = pane.coerceIn(0, 1)) }
+        val saved = _s.value
+        SettingsStore.updateBrowserSession(saved.dir, saved.secondaryDir, saved.activePane)
+    }
 
     fun openSecondary(path: String) = navigatePane(1, path, NavMove.PUSH)
 
