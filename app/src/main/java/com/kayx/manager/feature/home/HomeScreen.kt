@@ -188,7 +188,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             "Pictures" to Environment.DIRECTORY_PICTURES, "Movies" to Environment.DIRECTORY_MOVIES
         ).map { (n, d) ->
             val folder = Environment.getExternalStoragePublicDirectory(d)
-            CatTile(n, Icons.Default.Folder, Color(0xFFE0A030), "", folder.absolutePath) { folder.mkdirs(); onOpen(folder.absolutePath) }
+            CatTile(n, Icons.Default.Folder, Color(0xFFE0A030), "", folder.absolutePath, when (n) { "DCIM" -> R.drawable.kayx_extra_dcim; "Documents" -> R.drawable.kayx_extra_documents_folder; "Music" -> R.drawable.kayx_extra_music; "Pictures" -> R.drawable.kayx_extra_pictures; else -> R.drawable.kayx_extra_movies }) { folder.mkdirs(); onOpen(folder.absolutePath) }
         }
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -204,10 +204,10 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             Column(Modifier.padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 StorageRow("Phone storage", Icons.Default.PieChart, root.absolutePath, R.drawable.home3d_storage) { onOpen(root.absolutePath) }
                 HorizontalDivider(color = Fg.copy(.08f))
-                StorageRow("Root directory", Icons.Default.PhoneAndroid, "/", R.drawable.home3d_files) { onOpen("/") }
+                StorageRow("Root directory", Icons.Default.PhoneAndroid, "/", R.drawable.kayx_extra_root_directory) { onOpen("/") }
                 HorizontalDivider(color = Fg.copy(.08f))
                 Row(Modifier.fillMaxWidth().clickable { onTool(Tool.FTP) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (SettingsStore.icons3d) Image(painterResource(R.drawable.home3d_tools), contentDescription = null, modifier = Modifier.size(32.dp)) else Icon(Icons.Default.Devices, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
+                    if (SettingsStore.icons3d) Image(painterResource(R.drawable.kayx_extra_cross_device), contentDescription = null, modifier = Modifier.size(32.dp)) else Icon(Icons.Default.Devices, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Cross-device services", style = MaterialTheme.typography.titleSmall)
@@ -217,7 +217,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                 }
                 HorizontalDivider(color = Fg.copy(.08f))
                 Row(Modifier.fillMaxWidth().clickable { onTool(Tool.RECYCLE) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.DeleteOutline, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
+                    if (SettingsStore.icons3d) Image(painterResource(R.drawable.kayx_extra_recently_deleted), contentDescription = null, modifier = Modifier.size(32.dp)) else Icon(Icons.Default.DeleteOutline, null, tint = Fg.copy(.85f), modifier = Modifier.size(25.dp))
                     Spacer(Modifier.width(14.dp))
                     Text("Recently deleted", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                     Icon(Icons.Default.ChevronRight, null, tint = TextMuted)
@@ -292,7 +292,7 @@ private fun CategoryTileView(t: CatTile, modifier: Modifier) {
                 painter = androidx.compose.ui.res.painterResource(t.artworkRes),
                 contentDescription = t.name,
                 modifier = Modifier.size(HOME_TILE_ICON_SIZE),
-                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                contentScale = androidx.compose.ui.layout.ContentScale.FillBounds
             )
         } else if (SettingsStore.icons3d) {
             com.kayx.manager.ui.Icon3D(t.icon, t.color, size = HOME_TILE_ICON_SIZE, contentDescription = t.name)
