@@ -91,13 +91,16 @@ val extractFolderArtworkResources = tasks.register<Copy>("extractFolderArtworkRe
     val folderArtworkZip = file("kayx-folder-icons-android-resources.zip")
     val homeArtworkZip = file("kayx-home-screen-icons-resources.zip")
     val homeNavArtworkZip = file("kayx-home-nav-3d-icons-resources.zip")
-    from(zipTree(folderArtworkZip)) {
+    // Prefer the latest combined Home + Navigation artwork when filenames overlap.
+    // EXCLUDE makes the first source win and avoids Gradle duplicate-resource failures.
+    duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
+    from(zipTree(homeNavArtworkZip)) {
         include("drawable-nodpi/**")
     }
     from(zipTree(homeArtworkZip)) {
         include("drawable-nodpi/**")
     }
-    from(zipTree(homeNavArtworkZip)) {
+    from(zipTree(folderArtworkZip)) {
         include("drawable-nodpi/**")
     }
     into(layout.buildDirectory.dir("generated/res/folderArtwork"))
