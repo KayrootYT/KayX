@@ -290,7 +290,7 @@ private fun CategoryTileView(t: CatTile, modifier: Modifier) {
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         if (SettingsStore.icons3d && t.folderPath != null) {
-            com.kayx.manager.ui.FolderArtwork(path = t.folderPath, modified = 0L, size = HOME_TILE_ICON_SIZE)
+            com.kayx.manager.ui.FolderArtwork(path = t.folderPath, modified = 0L, size = HOME_TILE_ICON_SIZE, force = true)
         } else if (SettingsStore.icons3d && t.artworkRes != null) {
             androidx.compose.foundation.Image(
                 painter = androidx.compose.ui.res.painterResource(t.artworkRes),
