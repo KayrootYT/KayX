@@ -285,9 +285,7 @@ private fun CategoryTileView(t: CatTile, modifier: Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        if (SettingsStore.icons3d && t.folderPath != null) {
-            com.kayx.manager.ui.Icon3D(t.icon, t.color, size = HOME_TILE_ICON_SIZE, contentDescription = t.name)
-        } else if (SettingsStore.icons3d && t.artworkRes != null) {
+        if (SettingsStore.icons3d && t.artworkRes != null) {
             androidx.compose.foundation.Image(
                 painter = androidx.compose.ui.res.painterResource(t.artworkRes),
                 contentDescription = t.name,
