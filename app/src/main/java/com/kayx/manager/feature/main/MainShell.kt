@@ -127,7 +127,7 @@ fun MainShell(storageGranted: Boolean, onManageStorage: () -> Unit, onOpen: (Str
                         }
                     }, label = { Text(t.label) },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Accent, selectedTextColor = Accent, indicatorColor = Accent.copy(.15f),
+                        selectedIconColor = Accent, selectedTextColor = Accent, indicatorColor = Color.Transparent,
                         unselectedIconColor = Fg.copy(.6f), unselectedTextColor = Fg.copy(.6f)
                     )
                 )
