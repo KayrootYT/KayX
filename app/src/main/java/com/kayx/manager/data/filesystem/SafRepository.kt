@@ -124,6 +124,21 @@ object SafRepository {
         }
         return false
     }
+    private fun awaitTransfer(control: FileOps.TransferControl) {
+        while (control.state == FileOps.TransferState.PAUSED) Thread.sleep(50)
+        check(control.state != FileOps.TransferState.CANCELLED) { "Transfer cancelled" }
+    }
+
+    private fun copyStream(input: InputStream, output: OutputStream, control: FileOps.TransferControl) {
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            awaitTransfer(control)
+            val count = input.read(buffer)
+            if (count < 0) break
+            output.write(buffer, 0, count)
+        }
+        output.flush()
+    }
     fun createFolder(context: Context, treeUri: Uri, parentRelativePath: String, name: String): Uri? {
         if (!isSafeName(name)) return null
         return findByRelativePath(context, treeUri, parentRelativePath)
@@ -150,7 +165,8 @@ object SafRepository {
         sourceUri: Uri,
         targetTreeUri: Uri,
         targetParentRelativePath: String,
-        targetName: String
+        targetName: String,
+        control: FileOps.TransferControl = FileOps.TransferControl()
     ): Uri? {
         if (!isSafeName(targetName)) return null
         val source = document(context, sourceUri) ?: return null
@@ -162,7 +178,7 @@ object SafRepository {
         return try {
             val input = context.contentResolver.openInputStream(source.uri) ?: error("Cannot read source")
             val output = context.contentResolver.openOutputStream(target.uri, "wt") ?: error("Cannot write destination")
-            input.use { src -> output.use { dst -> src.copyTo(dst) } }
+            input.use { src -> output.use { dst -> copyStream(src, dst, control) } }
             target.uri
         } catch (_: Exception) {
             runCatching { target.delete() }
@@ -195,7 +211,8 @@ object SafRepository {
         sourceUri: Uri,
         targetTreeUri: Uri,
         targetParentRelativePath: String = "",
-        targetName: String? = null
+        targetName: String? = null,
+        control: FileOps.TransferControl = FileOps.TransferControl()
     ): Uri? {
         val source = document(context, sourceUri) ?: return null
         val name = targetName ?: source.name ?: return null
@@ -205,6 +222,7 @@ object SafRepository {
         if (source.isDirectory && isSameOrDescendant(parent, source)) return null
 
         fun copyNode(src: DocumentFile, dstParent: DocumentFile, dstName: String): DocumentFile? {
+            awaitTransfer(control)
             if (!isSafeName(dstName)) return null
             if (src.isDirectory) {
                 val safeDestinationName = uniqueChildName(dstParent, dstName)
@@ -214,6 +232,7 @@ object SafRepository {
                     return null
                 }
                 for (child in children) {
+                    awaitTransfer(control)
                     val childName = child.name ?: run { dst.delete(); return null }
                     if (copyNode(child, dst, childName) == null) {
                         dst.delete()
@@ -228,7 +247,7 @@ object SafRepository {
             return try {
                 val input = context.contentResolver.openInputStream(src.uri) ?: error("Cannot read source")
                 val output = context.contentResolver.openOutputStream(dst.uri, "wt") ?: error("Cannot write destination")
-                input.use { from -> output.use { to -> from.copyTo(to) } }
+                input.use { from -> output.use { to -> copyStream(from, to, control) } }
                 dst
             } catch (_: Exception) {
                 runCatching { dst.delete() }
@@ -247,7 +266,8 @@ object SafRepository {
         context: Context,
         sourceFile: java.io.File,
         targetTreeUri: Uri,
-        targetParentRelativePath: String = ""
+        targetParentRelativePath: String = "",
+        control: FileOps.TransferControl = FileOps.TransferControl()
     ): Uri? {
         if (!sourceFile.exists() || !sourceFile.canRead() || !isSafeName(sourceFile.name)) return null
         val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
@@ -258,6 +278,7 @@ object SafRepository {
         val visited = mutableSetOf<String>()
 
         fun copyNode(source: java.io.File, destination: DocumentFile): DocumentFile? {
+            awaitTransfer(control)
             val canonical = runCatching { source.canonicalFile }.getOrNull() ?: return null
             if (canonical.path != source.absolutePath) return null
             if (canonical.path != rootPath && !canonical.path.startsWith(rootPath + java.io.File.separator)) return null
@@ -267,6 +288,7 @@ object SafRepository {
                 val folder = destination.createDirectory(safeDestinationName) ?: return null
                 val children = source.listFiles() ?: run { folder.delete(); return null }
                 for (child in children) {
+                    awaitTransfer(control)
                     if (!isSafeName(child.name) || copyNode(child, folder) == null) {
                         folder.delete()
                         return null
@@ -283,7 +305,7 @@ object SafRepository {
                 source.inputStream().use { input ->
                     val output = context.contentResolver.openOutputStream(target.uri, "wt")
                         ?: error("Cannot write destination")
-                    output.use { input.copyTo(it) }
+                    output.use { copyStream(input, it, control) }
                 }
                 target
             } catch (_: Exception) {
@@ -300,9 +322,11 @@ object SafRepository {
         context: Context,
         sourceFile: java.io.File,
         targetTreeUri: Uri,
-        targetParentRelativePath: String = ""
+        targetParentRelativePath: String = "",
+        control: FileOps.TransferControl = FileOps.TransferControl()
     ): Uri? {
-        val copied = copyLocalFileToTree(context, sourceFile, targetTreeUri, targetParentRelativePath) ?: return null
+        val copied = copyLocalFileToTree(context, sourceFile, targetTreeUri, targetParentRelativePath, control) ?: return null
+        try { awaitTransfer(control) } catch (_: Exception) { runCatching { document(context, copied)?.delete() }; return null }
         // Keep the destination copy if source cleanup fails; never roll back the only complete copy.
         if (!sourceFile.deleteRecursively()) return null
         return copied
@@ -314,11 +338,13 @@ object SafRepository {
         sourceUri: Uri,
         targetTreeUri: Uri,
         targetParentRelativePath: String = "",
-        targetName: String? = null
+        targetName: String? = null,
+        control: FileOps.TransferControl = FileOps.TransferControl()
     ): Uri? {
         if (sourceUri == targetTreeUri) return null
-        val copied = copyDocumentToTree(context, sourceUri, targetTreeUri, targetParentRelativePath, targetName)
+        val copied = copyDocumentToTree(context, sourceUri, targetTreeUri, targetParentRelativePath, targetName, control)
             ?: return null
+        try { awaitTransfer(control) } catch (_: Exception) { runCatching { document(context, copied)?.delete() }; return null }
         val deleted = delete(context, sourceUri)
         if (!deleted) {
             // Do not silently report a move when the provider refused source deletion.
