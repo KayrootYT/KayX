@@ -157,14 +157,34 @@ object FileOps {
                     }
                 }
             }
+            var preserveCompletedCopy = false
             try {
                 if (move) {
-                    if (!f.renameTo(dest)) { copyClean(f, dest, control); check(f.deleteRecursively()) { "Could not remove source: ${f.name}" } }
+                    if (!f.renameTo(dest)) {
+                        copyClean(f, dest, control)
+                        // Once the full destination copy exists, never delete it merely because
+                        // source cleanup failed: recursive deletion can fail after partial progress.
+                        preserveCompletedCopy = true
+                        if (!f.deleteRecursively()) {
+                            replaceBackup?.let { backup ->
+                                if (backup.exists()) {
+                                    val preservedOld = uniqueName(dst, f.name)
+                                    check(backup.renameTo(preservedOld)) { "Copied destination, but could not preserve the replaced item" }
+                                }
+                            }
+                            error("Copied ${f.name}, but source cleanup failed; destination copy was retained")
+                        }
+                    }
                 } else copyClean(f, dest, control)
                 replaceBackup?.deleteRecursively()
             } catch (e: Exception) {
-                dest.deleteRecursively()
-                replaceBackup?.let { backup -> if (backup.exists()) check(backup.renameTo(dest)) { "Transfer failed and existing file could not be restored" } }
+                if (!preserveCompletedCopy) dest.deleteRecursively()
+                replaceBackup?.let { backup ->
+                    if (backup.exists()) {
+                        val restoreTarget = if (preserveCompletedCopy) uniqueName(dst, f.name) else dest
+                        check(backup.renameTo(restoreTarget)) { "Transfer failed and existing file could not be restored" }
+                    }
+                }
                 throw e
             }
             n++
