@@ -131,7 +131,10 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                 Text("${selectedUris.size} selected", style = MaterialTheme.typography.labelMedium)
                 IconButton(onClick = { confirmBulkDelete = true }, enabled = canWrite) { Icon(Icons.Default.Delete, "Delete selected") }
                 IconButton(onClick = { selectedUris = emptySet() }) { Icon(Icons.Default.Close, "Clear selection") }
-            } else if (!searchOpen) IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "Search") }
+            } else {
+                if (!searchOpen) IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "Search") }
+                if (visibleEntries.isNotEmpty()) TextButton(onClick = { selectedUris = visibleEntries.map { it.uri.toString() }.toSet() }) { Text("Select") }
+            }
             Box {
                 IconButton(onClick = { sortMenu = true }) { Icon(Icons.Default.Sort, "Sort") }
                 DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
