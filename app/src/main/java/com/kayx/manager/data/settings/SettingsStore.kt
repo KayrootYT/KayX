@@ -196,14 +196,13 @@ object SettingsStore {
     fun updateHomePath(v: String) { homePath = v; save { putString("home_path", v) } }
     fun updateBrowserSession(primary: String, secondary: String, activePane: Int) {
         // Only persist public/shared-storage locations. App-private paths can include decrypted vault data.
-        val safePrimary = primary.takeIf {
-            it == "/sdcard" || it.startsWith("/sdcard/") ||
-                it.startsWith("/storage/") || it.startsWith("/mnt/")
-        } ?: return
-        val safeSecondary = secondary.takeIf {
-            it == "/sdcard" || it.startsWith("/sdcard/") ||
-                it.startsWith("/storage/") || it.startsWith("/mnt/")
-        }.orEmpty()
+        fun isPublicLocation(value: String): Boolean =
+            value == "/sdcard" || value.startsWith("/sdcard/") ||
+                value.startsWith("/storage/") || value.startsWith("/mnt/") ||
+                com.kayx.manager.data.filesystem.StorageLocation.fromStableKey(value)
+                    is com.kayx.manager.data.filesystem.StorageLocation.Saf
+        val safePrimary = primary.takeIf(::isPublicLocation) ?: return
+        val safeSecondary = secondary.takeIf(::isPublicLocation).orEmpty()
         browserPath = safePrimary
         browserSecondaryPath = safeSecondary
         browserActivePane = activePane.coerceIn(0, 1)
