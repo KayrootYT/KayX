@@ -117,7 +117,8 @@ class StorageTransferRepository {
     private fun resolveDocument(context: Context, location: StorageLocation.Saf): DocumentFile? =
         SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)
 
-    private fun itemSize(context: Context, location: StorageLocation): Long = when (location) {
+    private fun itemSize(context: Context, location: StorageLocation): Long {
+        return when (location) {
         is StorageLocation.Local -> {
             val root = location.directory
             if (root.isFile) root.length().coerceAtLeast(0L)
@@ -137,6 +138,7 @@ class StorageTransferRepository {
                 else total += item.length().coerceAtLeast(0L)
             }
             total
+        }
         }
     }
 
