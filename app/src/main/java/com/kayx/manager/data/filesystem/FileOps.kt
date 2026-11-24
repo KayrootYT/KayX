@@ -74,10 +74,7 @@ object FileOps {
         d.exists() && d.canonicalPath != it.canonicalPath
     }.map { it.name }
 
-    private fun copyAny(src: File, dest: File) {
-        if (src.isDirectory) check(src.copyRecursively(dest, overwrite = false)) { "Copy failed: ${src.name}" }
-        else src.copyTo(dest, overwrite = false)
-    }
+    private fun copyAny(src: File, dest: File) = copyAny(src, dest, TransferControl())
 
     private fun awaitTransfer(control: TransferControl) {
         while (control.state == TransferState.PAUSED) Thread.sleep(50)
@@ -103,6 +100,8 @@ object FileOps {
 
     private fun copyAny(src: File, dest: File, control: TransferControl) {
         awaitTransfer(control)
+        val lexicalPath = src.absolutePath
+        check(src.canonicalPath == lexicalPath) { "Refusing to follow symbolic link: ${src.name}" }
         if (src.isDirectory) {
             check(dest.mkdir()) { "Cannot create folder: ${dest.name}" }
             val children = src.listFiles() ?: error("Cannot read folder: ${src.name}")
