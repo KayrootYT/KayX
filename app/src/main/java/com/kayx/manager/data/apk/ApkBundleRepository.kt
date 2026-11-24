@@ -18,23 +18,43 @@ data class ApkBundleInspection(
 object ApkBundleRepository {
     const val INSTALL_RESULT_ACTION = "com.kayx.manager.action.INSTALL_STATUS"
 
+    private const val MAX_APK_COUNT = 64
+    private const val MAX_TOTAL_APK_BYTES = 1L shl 30
+
     fun inspect(bundle: File): Result<ApkBundleInspection> = runCatching {
         require(bundle.isFile) { "Bundle is missing" }
         ZipFile(bundle).use { zip ->
-            val names = zip.entries().toList().map { it.name }
-            val apkFiles = names.filter { it.endsWith(".apk", ignoreCase = true) }
-                .sortedWith(compareBy<String> { if (it.endsWith("base.apk", ignoreCase = true)) 0 else 1 }.thenBy { it })
+            val entries = zip.entries().toList().filterNot { it.isDirectory }
+            require(entries.size <= 4096) { "Bundle contains too many entries" }
+            val names = entries.map { it.name }
+            require(names.distinct().size == names.size) { "Bundle contains duplicate entry names" }
+            names.forEach { name ->
+                require(name.isNotBlank() && !name.startsWith("/") && !name.startsWith("\\\\") &&
+                    !name.split('/', '\\\\').any { it == ".." } && !name.contains('\\u0000')) {
+                    "Bundle contains an unsafe entry name"
+                }
+            }
+            val apkEntries = entries.filter { it.name.endsWith(".apk", ignoreCase = true) }
+            require(apkEntries.isNotEmpty()) { "No APK payloads found in bundle" }
+            require(apkEntries.size <= MAX_APK_COUNT) { "Bundle contains too many APK files" }
+            val totalBytes = apkEntries.sumOf { it.size.coerceAtLeast(0L) }
+            require(totalBytes <= MAX_TOTAL_APK_BYTES) { "APK payload is larger than the supported 1 GiB limit" }
+            require(apkEntries.all { it.size > 0L }) { "Bundle contains an empty APK payload" }
+
+            val apkFiles = apkEntries.map { it.name }.sortedWith(
+                compareBy<String> { if (it.substringAfterLast('/').equals("base.apk", true)) 0 else 1 }
+                    .thenBy { it.lowercase() }
+            )
             val manifestFiles = names.filter {
                 it.equals("manifest.json", ignoreCase = true) ||
                     it.endsWith("/manifest.json", ignoreCase = true)
             }
-            val supported = apkFiles.isNotEmpty()
-            val type = if (bundle.extension.equals("apks", true) || names.any {
-                it.endsWith(".apk", ignoreCase = true) && it.contains("/")
+            val type = if (bundle.extension.equals("apks", true) || apkFiles.any {
+                it.substringBeforeLast('/', "").isNotEmpty()
             }) "APKS/XAPK" else "ZIP/APK bundle"
-            check(supported) { "No APK payloads found in bundle" }
             ApkBundleInspection(type, apkFiles, manifestFiles, names.filterNot {
-                it.endsWith(".apk", ignoreCase = true) || it.contains("manifest")
+                it.endsWith(".apk", ignoreCase = true) || it.equals("manifest.json", true) ||
+                    it.endsWith("/manifest.json", true)
             })
         }
     }
@@ -47,14 +67,21 @@ object ApkBundleRepository {
         val session = installer.openSession(sessionId)
         try {
             ZipFile(bundle).use { zip ->
-                for ((index, name) in inspection.apkFiles.withIndex()) {
-                    val entry = zip.getEntry(name) ?: continue
-                    zip.getInputStream(entry).use { input ->
-                        val outName = "split-$index.apk"
-                        session.openWrite(outName, 0, entry.size.coerceAtLeast(0)).use { output ->
-                            input.copyTo(output)
-                            session.fsync(output)
-                        }
+                val baseName = inspection.apkFiles.firstOrNull {
+                    it.substringAfterLast('/').equals("base.apk", ignoreCase = true)
+                } ?: error("This bundle has no base.apk; install requires a base APK")
+                val ordered = listOf(baseName) + inspection.apkFiles.filterNot { it == baseName }
+                ordered.forEachIndexed { index, name ->
+                    val entry = zip.getEntry(name) ?: error("Missing APK payload: $name")
+                    val outName = if (index == 0) "base.apk" else {
+                        val splitName = name.substringAfterLast('/').substringBeforeLast('.')
+                            .replace(Regex("[^A-Za-z0-9_.-]"), "_")
+                            .take(80).ifBlank { "split_$index" }
+                        "split_$splitName.apk"
+                    }
+                    session.openWrite(outName, 0, entry.size).use { output ->
+                        zip.getInputStream(entry).use { input -> input.copyTo(output) }
+                        session.fsync(output)
                     }
                 }
             }
