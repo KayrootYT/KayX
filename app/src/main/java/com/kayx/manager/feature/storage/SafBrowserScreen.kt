@@ -84,14 +84,16 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         val source = transferEntry
         transferEntry = null
         if (destinationTree != null && source != null) {
-            scope.launch {
+            if (destinationTree == treeUri) {
+                error = "Choose a different storage folder to avoid copying an item into its own tree."
+                moveTransfer = false
+            } else scope.launch {
                 val result = withContext(Dispatchers.IO) {
                     if (moveTransfer) SafRepository.moveDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
                     else SafRepository.copyDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
                 }
                 moveTransfer = false
                 if (result == null) error = if (source.isDirectory) "Folder transfer failed. Check destination permission and available space." else "File transfer failed."
-                else if (source.uri in entries.map { it.uri }) scope.launch { refresh() }
             }
         } else moveTransfer = false
     }
