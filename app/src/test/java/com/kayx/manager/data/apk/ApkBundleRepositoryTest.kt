@@ -45,4 +45,39 @@ class ApkBundleRepositoryTest {
             root.deleteRecursively()
         }
     }
+    @Test
+    fun rejectsPathTraversalEntries() {
+        val root = createTempDir(prefix = "kayx-apk-bundle-traversal-")
+        try {
+            val bundle = File(root, "unsafe.apks")
+            ZipOutputStream(bundle.outputStream()).use { out ->
+                for (name in listOf("base.apk", "../outside.apk")) {
+                    out.putNextEntry(ZipEntry(name))
+                    out.write(byteArrayOf(0x50, 0x4B, 0x03, 0x04))
+                    out.closeEntry()
+                }
+            }
+            assertTrue(ApkBundleRepository.inspect(bundle).isFailure)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun inspectsSplitOnlyBundleButDoesNotAssumeItCanBeInstalledAlone() {
+        val root = createTempDir(prefix = "kayx-apk-bundle-no-base-")
+        try {
+            val bundle = File(root, "splits.apks")
+            ZipOutputStream(bundle.outputStream()).use { out ->
+                out.putNextEntry(ZipEntry("split_config.arm64_v8a.apk"))
+                out.write(byteArrayOf(0x50, 0x4B, 0x03, 0x04))
+                out.closeEntry()
+            }
+            val inspected = ApkBundleRepository.inspect(bundle).getOrThrow()
+            assertEquals(listOf("split_config.arm64_v8a.apk"), inspected.apkFiles)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
 }
