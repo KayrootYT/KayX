@@ -371,17 +371,20 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     val location = locationOf(dir)
                     if (location is StorageLocation.Saf) {
                         val context = appContext ?: return emptyList()
-                        val listed = try {
-                            storageLocations.list(context, location, snapshot.showHidden, snapshot.sort)
+                        return try {
+                            if (searchActive && searchPane == pane) {
+                                if (snapshot.grep && !isFilenamePattern(snapshot.query)) {
+                                    _s.update { it.copy(message = "Content search is not supported by this SAF provider; searching names instead") }
+                                }
+                                storageLocations.searchSaf(
+                                    context, location, snapshot.query.trim(), snapshot.showHidden, snapshot.sort,
+                                    SettingsStore.searchMode, snapshot.searchCategory.extensions
+                                )
+                            } else storageLocations.list(context, location, snapshot.showHidden, snapshot.sort)
                         } catch (error: Exception) {
                             _s.update { it.copy(message = "Storage unavailable: " + (error.message ?: "permission revoked or device disconnected")) }
-                            return emptyList()
+                            emptyList()
                         }
-                        return if (searchActive && searchPane == pane) {
-                            listed.filter { it.name.contains(snapshot.query.trim(), ignoreCase = true) &&
-                                (snapshot.searchCategory.extensions.isEmpty() || it.isDir ||
-                                    it.name.substringAfterLast('.', "").lowercase() in snapshot.searchCategory.extensions) }
-                        } else listed
                     }
                     val local = (location as StorageLocation.Local).directory
                     return if (searchActive && searchPane == pane) {
