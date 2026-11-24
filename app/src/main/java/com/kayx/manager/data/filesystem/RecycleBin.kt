@@ -35,6 +35,7 @@ object RecycleBin {
 
     private fun move(src: File, dest: File) {
         if (src.renameTo(dest)) return
+        check(src.canonicalPath == src.absolutePath) { "Cannot safely copy a symbolic link into the recycle bin" }
         try {
             if (src.isDirectory) check(src.copyRecursively(dest, overwrite = false)) { "Copy failed: ${src.name}" }
             else src.copyTo(dest, overwrite = false)
