@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
+import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,14 +41,17 @@ import java.io.File
 
 data class AppRow(
     val label: String, val pkg: String, val version: String, val apk: String, val splits: List<String>,
-    val system: Boolean, val size: Long, val updated: Long
+    val system: Boolean, val size: Long, val updated: Long,
+    val versionCode: Long, val targetSdk: Int, val permissions: List<String>
 )
 
 private fun loadApps(pm: PackageManager): List<AppRow> = pm.getInstalledApplications(0).map { ai ->
-    val pi = runCatching { pm.getPackageInfo(ai.packageName, 0) }.getOrNull()
+    val pi = runCatching { pm.getPackageInfo(ai.packageName, PackageManager.GET_PERMISSIONS) }.getOrNull()
+    val versionCode = if (Build.VERSION.SDK_INT >= 28) pi?.longVersionCode ?: 0L else pi?.versionCode?.toLong() ?: 0L
     AppRow(pm.getApplicationLabel(ai).toString(), ai.packageName, pi?.versionName ?: "?", ai.sourceDir,
         ai.splitSourceDirs?.toList().orEmpty(), (ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-        File(ai.sourceDir).length(), pi?.lastUpdateTime ?: 0L)
+        (listOf(ai.sourceDir) + ai.splitSourceDirs.orEmpty()).sumOf { File(it).length() }, pi?.lastUpdateTime ?: 0L,
+        versionCode, ai.targetSdkVersion, pi?.requestedPermissions?.toList().orEmpty())
 }
 
 private fun fmt(b: Long): String {
@@ -72,7 +77,8 @@ fun AppManagerScreen(onBack: () -> Unit, onOpenApk: (String) -> Unit) {
     val pm = ctx.packageManager
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
-    var apps by remember { mutableStateOf<List<AppRow>?>(null) }\n    var reloadKey by remember { mutableIntStateOf(0) }
+    var apps by remember { mutableStateOf<List<AppRow>?>(null) }
+    var reloadKey by remember { mutableIntStateOf(0) }
     var q by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(0) }
     var sortBy by remember { mutableStateOf(0) }
@@ -145,6 +151,12 @@ fun AppManagerScreen(onBack: () -> Unit, onOpenApk: (String) -> Unit) {
         )
         AlertDialog({ sel = null }, title = { Text(a.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("Package: ${a.pkg}", style = MaterialTheme.typography.bodySmall)
+                Text("Version: ${a.version} (${a.versionCode})", style = MaterialTheme.typography.bodySmall)
+                Text("Target SDK: ${a.targetSdk} · APK size: ${fmt(a.size)}", style = MaterialTheme.typography.bodySmall)
+                Text("${a.permissions.size} requested permission(s)", style = MaterialTheme.typography.bodySmall)
+                a.permissions.forEach { permission -> Text("• $permission", style = MaterialTheme.typography.labelSmall, color = Fg.copy(.65f)) }
+                Spacer(Modifier.height(8.dp))
                 acts.forEach { (l, r) -> TextButton({ sel = null; runCatching { r() } }, Modifier.fillMaxWidth()) { Text(l) } }
             } },
             confirmButton = {}, dismissButton = { TextButton({ sel = null }) { Text("Close") } })
