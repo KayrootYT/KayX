@@ -145,11 +145,16 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         )
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
-        if (!loading && entries.isEmpty() && error == null) {
+        if (!loading && visibleEntries.isEmpty() && error == null && relativePath.isBlank()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("This folder is empty", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (query.isBlank()) "This folder is empty" else "No files match your search", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else LazyColumn(Modifier.fillMaxSize()) {
+            if (!loading && visibleEntries.isEmpty() && error == null) item(key = "empty-result") {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    Text(if (query.isBlank()) "This folder is empty" else "No files match your search", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             if (relativePath.isNotBlank()) item {
                 Row(Modifier.fillMaxWidth().clickable(onClick = goUp).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Folder, null)
