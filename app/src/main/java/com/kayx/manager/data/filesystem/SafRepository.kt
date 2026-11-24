@@ -208,6 +208,56 @@ object SafRepository {
         return copyNode(source, parent, name)?.uri
     }
 
+    /**
+     * Copy a normal filesystem file or directory to a SAF destination.
+     * Uses streams for file contents and never assumes the destination has a filesystem path.
+     */
+    fun copyLocalFileToTree(
+        context: Context,
+        sourceFile: java.io.File,
+        targetTreeUri: Uri,
+        targetParentRelativePath: String = ""
+    ): Uri? {
+        if (!sourceFile.exists() || !sourceFile.canRead() || !isSafeName(sourceFile.name)) return null
+        val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
+            ?.takeIf { it.isDirectory } ?: return null
+        val visited = mutableSetOf<String>()
+
+        fun copyNode(source: java.io.File, destination: DocumentFile): DocumentFile? {
+            val canonical = runCatching { source.canonicalFile }.getOrNull() ?: return null
+            if (!visited.add(canonical.path)) return null
+            if (source.isDirectory) {
+                val folder = destination.createDirectory(source.name) ?: return null
+                val children = source.listFiles() ?: run { folder.delete(); return null }
+                for (child in children) {
+                    if (!isSafeName(child.name) || copyNode(child, folder) == null) {
+                        folder.delete()
+                        return null
+                    }
+                }
+                return folder
+            }
+            val target = destination.createFile(
+                android.webkit.MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(source.extension.lowercase()) ?: "application/octet-stream",
+                source.name
+            ) ?: return null
+            return try {
+                source.inputStream().use { input ->
+                    val output = context.contentResolver.openOutputStream(target.uri, "wt")
+                        ?: error("Cannot write destination")
+                    output.use { input.copyTo(it) }
+                }
+                target
+            } catch (_: Exception) {
+                runCatching { target.delete() }
+                null
+            }
+        }
+
+        return copyNode(sourceFile, parent)?.uri
+    }
+
     /** Move a SAF document only after its complete copy has succeeded. */
     fun moveDocumentToTree(
         context: Context,
