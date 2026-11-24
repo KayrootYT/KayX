@@ -150,11 +150,17 @@ class ApkRepository(private val context: Context) {
             val result = mutableListOf<String>()
             val entries = zip.entries()
             var entryCount = 0
+            var totalNameChars = 0L
             while (entries.hasMoreElements()) {
                 val name = entries.nextElement().name
                 entryCount++
                 require(entryCount <= MAX_APK_ZIP_ENTRIES) {
                     "APK contains too many ZIP entries to inspect safely"
+                }
+                require(name.length <= 4096) { "APK contains an excessively long ZIP entry name" }
+                totalNameChars += name.length
+                require(totalNameChars <= 8L * 1024 * 1024) {
+                    "APK contains excessive ZIP filename metadata"
                 }
                 if (accept(name)) result += name
             }
