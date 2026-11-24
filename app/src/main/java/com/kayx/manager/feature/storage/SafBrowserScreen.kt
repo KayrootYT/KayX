@@ -39,7 +39,9 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val canWrite = remember(treeUri) { SafRepository.hasWriteAccess(context, treeUri) }
-    var relativePath by remember(treeUri) { mutableStateOf("") }
+    var relativePath by remember(treeUri) {
+        mutableStateOf(context.getSharedPreferences("kayx_saf_browser", android.content.Context.MODE_PRIVATE).getString(treeUri.toString(), "").orEmpty())
+    }
     var entries by remember(treeUri, relativePath) { mutableStateOf<List<SafRepository.Entry>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -102,18 +104,18 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             } else {
                 SafRepository.persistTreePermission(context, destinationTree)
                 scope.launch {
+                    val wasMove = moveTransfer
                     var completed = 0
                     var failed = 0
-                    for (source in sources) {
-                        transferProgress = "${if (moveTransfer) "Moving" else "Copying"} ${completed + 1}/${sources.size}: ${source.name}"
+                    for ((index, source) in sources.withIndex()) {
+                        transferProgress = "${if (wasMove) "Moving" else "Copying"} ${index + 1}/${sources.size}: ${source.name}"
                         val result = withContext(Dispatchers.IO) {
-                            if (moveTransfer) SafRepository.moveDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
+                            if (wasMove) SafRepository.moveDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
                             else SafRepository.copyDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
                         }
                         if (result == null) failed++ else completed++
                     }
                     transferProgress = null
-                    val wasMove = moveTransfer
                     moveTransfer = false
                     selectedUris = emptySet()
                     error = if (failed == 0) "${if (wasMove) "Moved" else "Copied"} $completed item(s) successfully"
@@ -124,7 +126,11 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         } else moveTransfer = false
     }
 
-    LaunchedEffect(treeUri, relativePath) { refresh() }
+    LaunchedEffect(treeUri, relativePath) {
+        context.getSharedPreferences("kayx_saf_browser", android.content.Context.MODE_PRIVATE)
+            .edit().putString(treeUri.toString(), relativePath).apply()
+        refresh()
+    }
     val visibleEntries = remember(entries, query, sortMode, descending) {
         val filtered = entries.filter { it.name.contains(query.trim(), ignoreCase = true) }
         val sorted = when (sortMode) { "Date" -> filtered.sortedBy { it.lastModified }; "Size" -> filtered.sortedBy { it.size }; else -> filtered.sortedBy { it.name.lowercase() } }
