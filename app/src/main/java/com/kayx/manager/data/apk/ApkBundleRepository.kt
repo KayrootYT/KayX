@@ -29,8 +29,8 @@ object ApkBundleRepository {
             val names = entries.map { it.name }
             require(names.distinct().size == names.size) { "Bundle contains duplicate entry names" }
             names.forEach { name ->
-                require(name.isNotBlank() && !name.startsWith("/") && !name.startsWith("\\\\") &&
-                    !name.split('/', '\\\\').any { it == ".." } && !name.contains('\\u0000')) {
+                require(name.isNotBlank() && !name.startsWith("/") && !name.startsWith("\\") &&
+                    !name.split('/', '\\').any { it == ".." } && name.indexOf(0) < 0) {
                     "Bundle contains an unsafe entry name"
                 }
             }
@@ -85,7 +85,7 @@ object ApkBundleRepository {
                     }
                 }
             }
-            val intent = Intent(INSTALL_RESULT_ACTION).setPackage(ctx.packageName)
+            val intent = Intent(INSTALL_RESULT_ACTION).setClass(ctx, ApkInstallStatusReceiver::class.java)
             // PackageInstaller fills status extras into this callback Intent; MUTABLE is required.
             val flags = if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 else PendingIntent.FLAG_UPDATE_CURRENT
