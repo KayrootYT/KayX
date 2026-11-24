@@ -43,10 +43,13 @@ class MainActivity : ComponentActivity() {
     private val granted = mutableStateOf(false)
     private val privateNeedsUnlock = mutableStateOf(false)
     private val privateSessionActive = mutableStateOf(false)
+    private val selectedSafTree = mutableStateOf<String?>(null)
     private val PRIVATE_SESSION_STATE = "kayx_private_session_active"
     private val legacyPerm = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted.value = hasAccess() }
     private val safTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) com.kayx.manager.data.filesystem.SafRepository.persistTreePermission(this, uri)
+        if (uri != null && com.kayx.manager.data.filesystem.SafRepository.persistTreePermission(this, uri)) {
+            selectedSafTree.value = uri.toString()
+        }
     }
 
     private fun hasAccess() = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
@@ -104,7 +107,7 @@ class MainActivity : ComponentActivity() {
             KayXTheme {
                 // Saveable so rotation / dark-mode / font-scale changes don't drop the user back to Home.
                 var showSettings by rememberSaveable { mutableStateOf(false) }
-                var safTree by rememberSaveable { mutableStateOf<String?>(null) }
+                val safTree by selectedSafTree
                 var path by rememberSaveable {
                     mutableStateOf<String?>(
                         startDir ?: SettingsStore.browserPath.takeIf { saved -> saved.isNotBlank() && java.io.File(saved).isDirectory }
@@ -112,7 +115,7 @@ class MainActivity : ComponentActivity() {
                 }
                 var stack by rememberSaveable(stateSaver = ToolStackSaver) { mutableStateOf(listOf<Pair<String, Tool>>()) }
                 val push = { f: String, k: Tool -> stack = stack + (f to k) }
-                if (!granted.value) Box(Modifier.fillMaxSize().glassBackground().padding(24.dp), Alignment.Center) {
+                if (!granted.value && safTree == null) Box(Modifier.fillMaxSize().glassBackground().padding(24.dp), Alignment.Center) {
                     GlassCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text("Storage access needed", style = MaterialTheme.typography.titleLarge)
@@ -165,9 +168,9 @@ class MainActivity : ComponentActivity() {
                             Tool.ROOT -> RootExplorerScreen(close)
                         }
                     } else if (safTree != null) {
-                        com.kayx.manager.feature.storage.SafBrowserScreen(android.net.Uri.parse(safTree), onBack = { safTree = null })
+                        com.kayx.manager.feature.storage.SafBrowserScreen(android.net.Uri.parse(safTree), onBack = { selectedSafTree.value = null })
                     } else if (showSettings) {
-                        SettingsScreen(storageGranted = granted.value, onManageStorage = ::requestAccess, onBack = { showSettings = false }, onOpenSaf = { safTree = it.toString() })
+                        SettingsScreen(storageGranted = granted.value, onManageStorage = ::requestAccess, onBack = { showSettings = false }, onOpenSaf = { selectedSafTree.value = it.toString() })
                     } else if (p != null) {
                         FileBrowserScreen(p, onExit = {
                             if (privateSessionActive.value && PrivateSpace.isUnlocked()) {
