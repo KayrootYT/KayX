@@ -80,4 +80,23 @@ class ApkBundleRepositoryTest {
         }
     }
 
+    @Test
+    fun sortsBundletoolBaseMasterBeforeConfigurationSplits() {
+        val root = createTempDir(prefix = "kayx-apk-bundletool-")
+        try {
+            val bundle = File(root, "bundle.apks")
+            ZipOutputStream(bundle.outputStream()).use { out ->
+                for (name in listOf("splits/base-en.apk", "splits/base-master.apk", "splits/base-arm64_v8a.apk")) {
+                    out.putNextEntry(ZipEntry(name))
+                    out.write(byteArrayOf(0x50, 0x4B, 0x03, 0x04))
+                    out.closeEntry()
+                }
+            }
+            val inspected = ApkBundleRepository.inspect(bundle).getOrThrow()
+            assertEquals("splits/base-master.apk", inspected.apkFiles.first())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
 }
