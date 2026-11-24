@@ -410,10 +410,10 @@ object SafRepository {
         return copied
     }
 
-    fun exportDocument(context: Context, sourceUri: Uri, destinationUri: Uri): Boolean = try {
+    fun exportDocument(context: Context, sourceUri: Uri, destinationUri: Uri, control: FileOps.TransferControl = FileOps.TransferControl()): Boolean = try {
         val input = context.contentResolver.openInputStream(sourceUri) ?: error("Cannot read source")
         val output = context.contentResolver.openOutputStream(destinationUri, "wt") ?: error("Cannot write destination")
-        input.use { src -> output.use { dst -> src.copyTo(dst) } }
+        input.use { src -> output.use { dst -> copyStream(src, dst, control) } }
         true
     } catch (_: Exception) {
         false
