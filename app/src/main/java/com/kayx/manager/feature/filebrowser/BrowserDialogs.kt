@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.kayx.manager.data.filesystem.Conflict
 import com.kayx.manager.data.filesystem.FileOps
+import com.kayx.manager.data.filesystem.StorageLocation
 import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.ui.theme.Accent
 import com.kayx.manager.ui.theme.Fg
@@ -89,18 +90,21 @@ internal fun BreadcrumbBar(path: String, onGo: (String) -> Unit) {
 
 @Composable
 internal fun PropertiesDialog(f: FileItem, onClose: () -> Unit, onChanged: () -> Unit) {
+    val safBacked = StorageLocation.fromStableKey(f.path) is StorageLocation.Saf
     val file = remember(f.path) { File(f.path) }
-    var info by remember { mutableStateOf<Pair<Long, Int>?>(null) }
-    var mode by remember { mutableStateOf(FileOps.modeOf(file)) }
+    var info by remember(f.path) { mutableStateOf<Pair<Long, Int>?>(if (safBacked) f.size to 0 else null) }
+    var mode by remember(f.path) { mutableStateOf(if (safBacked) null else FileOps.modeOf(file)) }
     var recursive by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(f.path) { info = withContext(Dispatchers.IO) { FileOps.sizeAndCount(file) } }
+    LaunchedEffect(f.path) {
+        if (!safBacked) info = withContext(Dispatchers.IO) { FileOps.sizeAndCount(file) }
+    }
     AlertDialog(onClose, title = { Text("Properties") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(f.name, style = MaterialTheme.typography.titleSmall)
-            Text("Path: ${f.path}", style = MaterialTheme.typography.bodySmall)
+            Text("Path: " + if (safBacked) "SAF storage · " + (StorageLocation.fromStableKey(f.path) as StorageLocation.Saf).relativePath else f.path, style = MaterialTheme.typography.bodySmall)
             Text("Type: ${if (f.isDir) "Folder" else f.name.substringAfterLast('.', "File").uppercase()}")
-            Text("Size: " + (info?.let { size(it.first) + if (f.isDir) "  (${it.second} items)" else "" } ?: "calculating…"))
+            Text("Size: " + if (safBacked && f.isDir) "Folder size not calculated" else info?.let { size(it.first) + if (f.isDir) "  (${it.second} items)" else "" } ?: "calculating…")
             Text("Modified: ${DateFormat.getDateTimeInstance().format(Date(f.modified))}")
             val m = mode
             if (m != null) {
