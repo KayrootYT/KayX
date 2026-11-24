@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import com.kayx.manager.data.filesystem.SafRepository
+import com.kayx.manager.data.filesystem.FileOps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -52,6 +53,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     var exportSource by remember { mutableStateOf<Uri?>(null) }
     var transferEntries by remember { mutableStateOf<List<SafRepository.Entry>>(emptyList()) }
     var transferProgress by remember { mutableStateOf<String?>(null) }
+    var transferControl by remember { mutableStateOf<FileOps.TransferControl?>(null) }
     var moveTransfer by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -107,21 +109,32 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                     moveTransfer = false
                 } else scope.launch {
                     val wasMove = moveTransfer
+                    val control = FileOps.TransferControl()
+                    transferControl = control
                     var completed = 0
                     var failed = 0
+                    var cancelled = false
                     for ((index, source) in sources.withIndex()) {
+                        if (control.isStopped()) { cancelled = true; break }
                         transferProgress = "${if (wasMove) "Moving" else "Copying"} ${index + 1}/${sources.size}: ${source.name}"
                         val result = withContext(Dispatchers.IO) {
-                            if (wasMove) SafRepository.moveDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
-                            else SafRepository.copyDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
+                            if (wasMove) SafRepository.moveDocumentToTree(context, source.uri, destinationTree, targetName = source.name, control = control)
+                            else SafRepository.copyDocumentToTree(context, source.uri, destinationTree, targetName = source.name, control = control)
                         }
-                        if (result == null) failed++ else completed++
+                        if (result == null) {
+                            if (control.isStopped()) { cancelled = true; break }
+                            failed++
+                        } else completed++
                     }
                     transferProgress = null
+                    transferControl = null
                     moveTransfer = false
-                    selectedUris = emptySet()
-                    error = if (failed == 0) "${if (wasMove) "Moved" else "Copied"} $completed item(s) successfully"
-                        else "$completed item(s) transferred; $failed failed. Check destination permissions and free space."
+                    if (!cancelled && failed == 0) selectedUris = emptySet()
+                    error = when {
+                        cancelled -> "Transfer cancelled after $completed of ${sources.size} item(s). Remaining items were not started."
+                        failed == 0 -> "${if (wasMove) "Moved" else "Copied"} $completed item(s) successfully"
+                        else -> "$completed item(s) transferred; $failed failed. Check destination permissions and free space."
+                    }
                     refresh()
                 }
             }
@@ -189,7 +202,12 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         transferProgress?.let { label ->
             LinearProgressIndicator(Modifier.fillMaxWidth())
-            Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f), maxLines = 1)
+                val paused = transferControl?.state == FileOps.TransferState.PAUSED
+                TextButton(onClick = { if (paused) transferControl?.resume() else transferControl?.pause() }) { Text(if (paused) "Resume" else "Pause") }
+                TextButton(onClick = { transferControl?.cancel() }) { Text("Cancel") }
+            }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
         if (!loading && visibleEntries.isEmpty() && error == null && relativePath.isBlank()) {
