@@ -60,8 +60,8 @@ sealed class StorageLocation {
             path.trim('/').split('/').filter { it.isNotBlank() }.joinToString("/")
 
         private fun isSafeRelativePath(path: String): Boolean {
-            if (path.any { it.code < 32 || it == '\\u0000' }) return false
-            return path.split('/').none { it == "." || it == ".." || it.contains('\\\\') }
+            if (path.any { it.code < 32 }) return false
+            return path.split('/').none { it == "." || it == ".." || it.contains('\\') }
         }
     }
 }
