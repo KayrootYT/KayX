@@ -157,6 +157,15 @@ object SafRepository {
         }
     }
 
+    fun exportDocument(context: Context, sourceUri: Uri, destinationUri: Uri): Boolean = try {
+        val input = context.contentResolver.openInputStream(sourceUri) ?: error("Cannot read source")
+        val output = context.contentResolver.openOutputStream(destinationUri, "wt") ?: error("Cannot write destination")
+        input.use { src -> output.use { dst -> src.copyTo(dst) } }
+        true
+    } catch (_: Exception) {
+        false
+    }
+
     fun rename(context: Context, documentUri: Uri, newName: String): Uri? {
         if (!isSafeName(newName)) return null
         return runCatching {
