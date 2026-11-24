@@ -144,7 +144,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val restoredSecondary = restoredSecondarySaf
             ?: SettingsStore.browserSecondaryPath.takeIf { it.isNotBlank() && File(it).isDirectory }
             ?: primary
-        val restoredActive = SettingsStore.browserActivePane.coerceIn(0, 1)
+        val restoredActive = (saved?.getInt("active_pane", SettingsStore.browserActivePane) ?: SettingsStore.browserActivePane).coerceIn(0, 1)
         _s.update { it.copy(root = primary, dir = primary, secondaryDir = restoredSecondary, secondaryItems = emptyList(),
             activePane = if (SettingsStore.dualPane) restoredActive else 0, dualPane = SettingsStore.dualPane,
             backStacks = listOf(emptyList(), emptyList()), fwdStacks = listOf(emptyList(), emptyList()), recent = emptySet(),
@@ -161,6 +161,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         context.getSharedPreferences("kayx_browser_storage", Context.MODE_PRIVATE).edit()
             .putString("primary_saf", primary)
             .putString("secondary_saf", secondary)
+            .putInt("active_pane", state.activePane.coerceIn(0, 1))
             .apply()
     }
 
@@ -289,6 +290,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         _s.update { it.copy(activePane = pane.coerceIn(0, 1)) }
         val saved = _s.value
         SettingsStore.updateBrowserSession(saved.dir, saved.secondaryDir, saved.activePane)
+        persistSafBrowserSession(saved)
     }
 
     fun openSecondary(path: String) = navigatePane(1, path, NavMove.PUSH)
