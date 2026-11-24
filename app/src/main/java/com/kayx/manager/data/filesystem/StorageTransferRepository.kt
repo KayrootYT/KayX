@@ -2,6 +2,8 @@ package com.kayx.manager.data.filesystem
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
+import android.os.Environment
 import androidx.documentfile.provider.DocumentFile
 import java.io.File
 
@@ -56,7 +58,15 @@ class StorageTransferRepository {
         }
         if (source is StorageLocation.Saf && destination is StorageLocation.Local) {
             val doc = resolveDocument(context, source) ?: return false
-            val target = uniqueTarget(destination.directory, doc.name ?: return false, policy) ?: return false
+            val sourceName = doc.name ?: return false
+            if (!isSafeName(sourceName)) return false
+            if (doc.isDirectory) {
+                val sourcePath = externalStoragePath(context, source)
+                val destinationPath = runCatching { destination.directory.canonicalFile }.getOrNull()
+                if (sourcePath != null && destinationPath != null &&
+                    (destinationPath == sourcePath || destinationPath.toPath().startsWith(sourcePath.toPath()))) return false
+            }
+            val target = uniqueTarget(destination.directory, sourceName, policy) ?: return false
             if (!copySafNode(context, doc, target, control)) return false
             if (move && !SafRepository.delete(context, doc.uri)) warnings += (doc.name ?: target.name)
             return true
@@ -94,9 +104,25 @@ class StorageTransferRepository {
         val target = File(parent, name)
         if (!target.exists()) return target
         if (policy == Conflict.SKIP) return null
-        if (policy == Conflict.REPLACE) { if (!target.deleteRecursively()) return null; return target }
+        // Do not destroy an existing destination before the replacement copy is verified.
+        if (policy == Conflict.REPLACE) return null
         return FileOps.uniqueName(parent, name)
     }
+
+    private fun isSafeName(name: String): Boolean =
+        name.isNotBlank() && name != "." && name != ".." && !name.contains('/') &&
+            !name.contains('\\\\') && name.none { it.code < 32 }
+
+    private fun externalStoragePath(context: Context, location: StorageLocation.Saf): File? = runCatching {
+        val tree = Uri.parse(location.treeUri)
+        if (tree.authority != "com.android.externalstorage.documents") return null
+        val documentId = DocumentsContract.getTreeDocumentId(tree)
+        val volume = documentId.substringBefore(':')
+        val selected = documentId.substringAfter(':', "")
+        val root = if (volume.equals("primary", true)) Environment.getExternalStorageDirectory()
+            else File("/storage", volume)
+        File(root, listOf(selected, location.relativePath).filter { it.isNotBlank() }.joinToString("/")).canonicalFile
+    }.getOrNull()
 
     private fun location(key: String): StorageLocation = StorageLocation.fromStableKey(key) ?: StorageLocation.Local(File(key))
     private fun await(control: FileOps.TransferControl) {
