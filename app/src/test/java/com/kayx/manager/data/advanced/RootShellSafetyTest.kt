@@ -37,7 +37,7 @@ class RootShellSafetyTest {
         try {
             val link = java.io.File(base, "system-link")
             try {
-                java.nio.file.Files.createSymbolicLink(link.toPath(), java.nio.file.Paths.get("/system"))
+                java.nio.file.Files.createSymbolicLink(link.toPath(), java.nio.file.Paths.get("/proc"))
                 assertFalse(isSafeRecursiveDeleteTarget(java.io.File(link, "private").path))
             } catch (_: UnsupportedOperationException) {
                 // Host filesystem does not support symbolic links.
