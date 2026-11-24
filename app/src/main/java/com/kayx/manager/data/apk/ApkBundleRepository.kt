@@ -30,7 +30,11 @@ object ApkBundleRepository {
             require(entries.size <= 4096) { "Bundle contains too many entries" }
             val names = entries.map { it.name }
             require(names.distinct().size == names.size) { "Bundle contains duplicate entry names" }
+            var totalNameChars = 0L
             names.forEach { name ->
+                require(name.length <= 4096) { "Bundle contains an excessively long entry name" }
+                totalNameChars += name.length
+                require(totalNameChars <= 8L * 1024 * 1024) { "Bundle contains excessive ZIP filename metadata" }
                 require(name.isNotBlank() && !name.startsWith("/") && !name.startsWith("\\") &&
                     !name.split('/', '\\').any { it == ".." } && name.none { it.code == 0 }) {
                     "Bundle contains an unsafe entry name"
