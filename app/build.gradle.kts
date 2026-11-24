@@ -67,6 +67,8 @@ dependencies {
     implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
     // tar / tar.gz / tar.bz2 / tar.xz / 7z / gz / bz2 / xz extraction
     implementation("org.apache.commons:commons-compress:1.21")
+    // RAR 4/5/7 extraction only (RAR archive creation is not supported by this library license).
+    implementation("com.github.junrar:junrar:8.1.2")
     implementation("org.tukaani:xz:1.9")
     // Shizuku (official API + provider) – privileged shell via a user-granted Shizuku service
     implementation("dev.rikka.shizuku:api:13.1.5")
