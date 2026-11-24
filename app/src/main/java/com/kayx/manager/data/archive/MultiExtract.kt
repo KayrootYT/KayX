@@ -47,8 +47,11 @@ object MultiExtract {
         require(!normalized.startsWith('/') && !Regex("^[A-Za-z]:").containsMatchIn(normalized)) {
             "Blocked absolute archive path: $name"
         }
-        require(normalized.split('/').none { it == ".." || it == "." }) { "Blocked unsafe path: $name" }
-        val output = File(root, normalized)
+        val segments = normalized.split('/')
+        require(segments.none { it == ".." || it == "." }) { "Blocked unsafe path: $name" }
+        val clean = segments.filter { it.isNotEmpty() }.joinToString("/")
+        require(clean.isNotEmpty()) { "Archive entry resolves to an empty path" }
+        val output = File(root, clean)
         val rootPath = root.canonicalPath
         val outputPath = output.canonicalPath
         check(outputPath == rootPath || outputPath.startsWith(rootPath + File.separator)) {
@@ -98,6 +101,7 @@ object MultiExtract {
         val destination = unique(File(src.parentFile, baseName.ifEmpty { "extracted" }))
         var count = 0
         var totalBytes = 0L
+        val writtenEntries = HashSet<String>()
 
         fun acceptEntry() {
             count++
@@ -125,6 +129,7 @@ object MultiExtract {
                         while (entry != null) {
                             acceptEntry()
                             val output = safe(destination, entry.fileName)
+                            check(writtenEntries.add(output.relativeTo(destination).path)) { "Duplicate archive entry: " + entry.fileName }
                             if (entry.isDirectory) {
                                 check(output.mkdirs() || output.isDirectory) { "Could not create directory: " + entry.fileName }
                             } else {
@@ -145,6 +150,7 @@ object MultiExtract {
                         while (entry != null) {
                             acceptEntry()
                             val output = safe(destination, entry.name)
+                            check(writtenEntries.add(output.relativeTo(destination).path)) { "Duplicate archive entry: " + entry.name }
                             if (entry.isDirectory) {
                                 check(output.mkdirs() || output.isDirectory) { "Could not create directory: ${entry.name}" }
                             } else {
@@ -172,6 +178,7 @@ object MultiExtract {
                         while (entry != null) {
                             acceptEntry()
                             val output = safe(destination, entry.name)
+                            check(writtenEntries.add(output.relativeTo(destination).path)) { "Duplicate archive entry: " + entry.name }
                             when {
                                 entry.isDirectory -> check(output.mkdirs() || output.isDirectory) {
                                     "Could not create directory: ${entry.name}"
