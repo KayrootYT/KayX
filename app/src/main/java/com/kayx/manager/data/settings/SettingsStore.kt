@@ -199,8 +199,8 @@ object SettingsStore {
         fun isPublicLocation(value: String): Boolean =
             value == "/sdcard" || value.startsWith("/sdcard/") ||
                 value.startsWith("/storage/") || value.startsWith("/mnt/") ||
-                com.kayx.manager.data.filesystem.StorageLocation.fromStableKey(value)
-                    is com.kayx.manager.data.filesystem.StorageLocation.Saf
+                (com.kayx.manager.data.filesystem.StorageLocation.fromStableKey(value)
+                    is com.kayx.manager.data.filesystem.StorageLocation.Saf)
         val safePrimary = primary.takeIf(::isPublicLocation) ?: return
         val safeSecondary = secondary.takeIf(::isPublicLocation).orEmpty()
         browserPath = safePrimary

@@ -34,6 +34,31 @@ class FileTransferControlTest {
     }
 
     @Test
+    fun cancellationDuringSingleFileCopyRemovesPartialDestination() {
+        val base = createTempDir(prefix = "kayx-transfer-mid-cancel-")
+        try {
+            val source = File(base, "source.bin").apply { writeBytes(ByteArray(32 * 1024) { 9 }) }
+            val destination = File(base, "destination").apply { mkdirs() }
+            val control = FileOps.TransferControl()
+
+            val result = FileOps.transfer(
+                listOf(source),
+                destination,
+                move = false,
+                policy = Conflict.KEEP_BOTH,
+                control = control,
+                onBytesCopied = { control.cancel() }
+            )
+
+            assertTrue(result.isFailure)
+            assertFalse(File(destination, source.name).exists())
+            assertTrue(source.exists())
+        } finally {
+            base.deleteRecursively()
+        }
+    }
+
+    @Test
     fun reportsActualBytesWrittenDuringCopy() {
         val base = createTempDir(prefix = "kayx-transfer-progress-")
         try {

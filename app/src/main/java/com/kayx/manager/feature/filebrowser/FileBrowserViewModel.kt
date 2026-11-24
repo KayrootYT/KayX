@@ -145,8 +145,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         } else null
         val primary = restoredPrimarySaf ?: path
         if (_s.value.root == primary) { reload(); return }
-        val restoredSecondary = restoredSecondarySaf
-            ?: SettingsStore.browserSecondaryPath.takeIf { it.isNotBlank() && File(it).isDirectory }
+        val storedSecondary = SettingsStore.browserSecondaryPath
+        val restoredSecondary = restoredSecondarySaf ?: when (val storedLocation = StorageLocation.fromStableKey(storedSecondary)) {
+            is StorageLocation.Saf -> storedLocation.takeIf { it.treeUri in grantedTrees }?.stableKey()
+            is StorageLocation.Local -> storedLocation.directory.takeIf { it.isDirectory }?.absolutePath
+            null -> storedSecondary.takeIf { it.isNotBlank() && File(it).isDirectory }
+        }
             ?: primary
         val restoredActive = (saved?.getInt("active_pane", SettingsStore.browserActivePane) ?: SettingsStore.browserActivePane).coerceIn(0, 1)
         _s.update { it.copy(root = primary, dir = primary, secondaryDir = restoredSecondary, secondaryItems = emptyList(),
@@ -605,7 +609,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             repo.invalidateSearchCache()
             val outcome = result.getOrNull()
             val failed = outcome?.failed.orEmpty()
-            clearPaneSelection(sourcePane ?: _s.value.activeIdx)
+            if (result.isSuccess && !fromClipboard) clearPaneSelection(sourcePane ?: _s.value.activeIdx)
             _s.update { current ->
                 current.copy(
                     transferProgress = null,
@@ -615,15 +619,17 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                         destinationKey, cut, sourcePane, fromClipboard, effectivePolicy
                     ) else null,
                     message = result.exceptionOrNull()?.message ?: buildString {
-                        append(if (cut) "Moved " else "Copied ")
+                        val cleanupIssue = outcome?.cleanupWarnings?.isNotEmpty() == true
+                        append(if (cut && !cleanupIssue) "Moved " else if (cleanupIssue) "Copied (source cleanup incomplete) " else "Copied ")
                         append(outcome?.completed ?: 0)
                         append(" item(s)")
+                        outcome?.let { if (it.skipped > 0) append("; ${it.skipped} skipped") }
                         if (failed.isNotEmpty()) append("; " + failed.size + " failed")
                         if (outcome?.cleanupWarnings?.isNotEmpty() == true) append("; source cleanup warning: " + outcome.cleanupWarnings.joinToString())
                     }
                 )
             }
-            if (result.isSuccess && failed.isEmpty()) FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else FileActionSound.COPY)
+            if (result.isSuccess && failed.isEmpty() && (outcome?.completed ?: 0) > 0) FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else FileActionSound.COPY)
             if (fromClipboard && cut && result.isSuccess && failed.isEmpty()) clearClipboard()
             reload()
         }

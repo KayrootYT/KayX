@@ -201,6 +201,8 @@ object SafRepository {
             output.write(buffer, 0, count)
             onBytesCopied(count.toLong())
         }
+        // Do not commit a completed-looking file if cancellation arrived after the final read.
+        awaitTransfer(control)
         output.flush()
     }
     fun createFolder(context: Context, treeUri: Uri, parentRelativePath: String, name: String): Uri? {
@@ -293,19 +295,19 @@ object SafRepository {
             if (src.isDirectory) {
                 val safeDestinationName = uniqueChildName(dstParent, dstName)
                 val dst = dstParent.createDirectory(safeDestinationName) ?: return null
-                val children = runCatching { src.listFiles().toList() }.getOrElse {
-                    dst.delete()
-                    return null
-                }
-                for (child in children) {
-                    awaitTransfer(control)
-                    val childName = child.name ?: run { dst.delete(); return null }
-                    if (runCatching { copyNode(child, dst, childName) }.getOrNull() == null) {
-                        dst.delete()
-                        return null
+                return try {
+                    val children = src.listFiles().toList()
+                    for (child in children) {
+                        awaitTransfer(control)
+                        val childName = child.name ?: error("Provider returned an unnamed item")
+                        check(copyNode(child, dst, childName) != null) { "Could not copy $childName" }
                     }
+                    awaitTransfer(control)
+                    dst
+                } catch (_: Exception) {
+                    runCatching { dst.delete() }
+                    null
                 }
-                return dst
             }
 
             val safeDestinationName = uniqueChildName(dstParent, dstName)
@@ -365,6 +367,7 @@ object SafRepository {
                         check(isSafeName(child.name)) { "Unsafe child name: ${child.name}" }
                         check(runCatching { copyNode(child, folder) }.getOrNull() != null) { "Could not copy ${child.name}" }
                     }
+                    awaitTransfer(control)
                     folder
                 } catch (_: Exception) {
                     runCatching { folder.delete() }
