@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -71,12 +72,12 @@ fun AppManagerScreen(onBack: () -> Unit, onOpenApk: (String) -> Unit) {
     val pm = ctx.packageManager
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
-    var apps by remember { mutableStateOf<List<AppRow>?>(null) }
+    var apps by remember { mutableStateOf<List<AppRow>?>(null) }\n    var reloadKey by remember { mutableIntStateOf(0) }
     var q by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(0) }
     var sortBy by remember { mutableStateOf(0) }
     var sel by remember { mutableStateOf<AppRow?>(null) }
-    LaunchedEffect(Unit) { apps = withContext(Dispatchers.IO) { loadApps(pm) } }
+    LaunchedEffect(reloadKey) { apps = null; apps = withContext(Dispatchers.IO) { loadApps(pm) } }
 
     val shown = remember(apps, q, filter, sortBy) {
         apps.orEmpty().filter {
@@ -105,7 +106,7 @@ fun AppManagerScreen(onBack: () -> Unit, onOpenApk: (String) -> Unit) {
 
     ToolScaffold("Apps (${shown.size})", onBack, snack) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
-            OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, placeholder = { Text("Search name or package") })
+            OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, placeholder = { Text("Search name or package") }, trailingIcon = { IconButton(onClick = { reloadKey++ }) { Icon(Icons.Default.Refresh, "Refresh apps") } })
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically
