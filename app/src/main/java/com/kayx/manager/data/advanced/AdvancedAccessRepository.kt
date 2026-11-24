@@ -19,7 +19,7 @@ class AdvancedAccessRepository {
      * Root authorization is requested by the actual user-initiated command through RootShell.
      */
     suspend fun checkAccessStatus(): AccessStatus = withContext(Dispatchers.IO) {
-        val hasRootSu = checkSuBinary()
+        val hasRootSu = RootShell.hasSuBinary()
         // This check is called only after the user taps "Check root" in Settings, so it is
         // safe to let the configured root manager display its authorization prompt here.
         val rootResult = if (hasRootSu) RootShell.runRoot("id", 5_000) else RootShell.Res(-1, "", "su not found")
@@ -35,8 +35,5 @@ class AdvancedAccessRepository {
         )
     }
 
-    private fun checkSuBinary(): Boolean {
-        val paths = arrayOf("/system/bin/su", "/system/xbin/su", "/sbin/su", "/system/sd/xbin/su")
-        return paths.any { File(it).let { f -> f.isFile && f.canExecute() } }
-    }
+
 }
