@@ -189,13 +189,14 @@ object SafRepository {
         check(control.state != FileOps.TransferState.CANCELLED) { "Transfer cancelled" }
     }
 
-    private fun copyStream(input: InputStream, output: OutputStream, control: FileOps.TransferControl) {
+    private fun copyStream(input: InputStream, output: OutputStream, control: FileOps.TransferControl, onBytesCopied: (Long) -> Unit = {}) {
         val buffer = ByteArray(64 * 1024)
         while (true) {
             awaitTransfer(control)
             val count = input.read(buffer)
             if (count < 0) break
             output.write(buffer, 0, count)
+            onBytesCopied(count.toLong())
         }
         output.flush()
     }
@@ -226,7 +227,8 @@ object SafRepository {
         targetTreeUri: Uri,
         targetParentRelativePath: String,
         targetName: String,
-        control: FileOps.TransferControl = FileOps.TransferControl()
+        control: FileOps.TransferControl = FileOps.TransferControl(),
+        onBytesCopied: (Long) -> Unit = {}
     ): Uri? {
         if (!isSafeName(targetName)) return null
         val source = document(context, sourceUri) ?: return null
@@ -238,7 +240,7 @@ object SafRepository {
         return try {
             val input = context.contentResolver.openInputStream(source.uri) ?: error("Cannot read source")
             val output = context.contentResolver.openOutputStream(target.uri, "wt") ?: error("Cannot write destination")
-            input.use { src -> output.use { dst -> copyStream(src, dst, control) } }
+            input.use { src -> output.use { dst -> copyStream(src, dst, control, onBytesCopied) } }
             target.uri
         } catch (_: Exception) {
             runCatching { target.delete() }
@@ -307,7 +309,7 @@ object SafRepository {
             return try {
                 val input = context.contentResolver.openInputStream(src.uri) ?: error("Cannot read source")
                 val output = context.contentResolver.openOutputStream(dst.uri, "wt") ?: error("Cannot write destination")
-                input.use { from -> output.use { to -> copyStream(from, to, control) } }
+                input.use { from -> output.use { to -> copyStream(from, to, control, onBytesCopied) } }
                 dst
             } catch (_: Exception) {
                 runCatching { dst.delete() }
@@ -373,7 +375,7 @@ object SafRepository {
                 source.inputStream().use { input ->
                     val output = context.contentResolver.openOutputStream(target.uri, "wt")
                         ?: error("Cannot write destination")
-                    output.use { copyStream(input, it, control) }
+                    output.use { copyStream(input, it, control, onBytesCopied) }
                 }
                 target
             } catch (_: Exception) {
@@ -392,9 +394,10 @@ object SafRepository {
         targetTreeUri: Uri,
         targetParentRelativePath: String = "",
         control: FileOps.TransferControl = FileOps.TransferControl(),
-        onSourceCleanupFailure: () -> Unit = {}
+        onSourceCleanupFailure: () -> Unit = {},
+        onBytesCopied: (Long) -> Unit = {}
     ): Uri? {
-        val copied = copyLocalFileToTree(context, sourceFile, targetTreeUri, targetParentRelativePath, control) ?: return null
+        val copied = copyLocalFileToTree(context, sourceFile, targetTreeUri, targetParentRelativePath, control, onBytesCopied) ?: return null
         try { awaitTransfer(control) } catch (_: Exception) { runCatching { document(context, copied)?.delete() }; return null }
         // The copy is complete. Preserve it and report cleanup separately if source removal fails.
         if (!runCatching { sourceFile.deleteRecursively() }.getOrDefault(false)) {
@@ -414,7 +417,7 @@ object SafRepository {
         control: FileOps.TransferControl = FileOps.TransferControl()
     ): Uri? {
         if (sourceUri == targetTreeUri) return null
-        val copied = copyDocumentToTree(context, sourceUri, targetTreeUri, targetParentRelativePath, targetName, control)
+        val copied = copyDocumentToTree(context, sourceUri, targetTreeUri, targetParentRelativePath, targetName, control, onBytesCopied)
             ?: return null
         try { awaitTransfer(control) } catch (_: Exception) { runCatching { document(context, copied)?.delete() }; return null }
         val deleted = delete(context, sourceUri)
