@@ -104,7 +104,7 @@ object RecycleBin {
                 "File path contains unsupported control characters"
             }
             val deletedAt = System.currentTimeMillis()
-            val id = java.util.UUID.randomUUID().toString().replace("-", "") + "_" + f.name.take(60)
+            val id = java.util.UUID.randomUUID().toString().replace("-", "") + "_payload"
             val record = Triple(id, f.absolutePath, deletedAt)
             // Commit intent first: after a crash the index still knows the original path.
             writeIndex(rawEntries() + record)
