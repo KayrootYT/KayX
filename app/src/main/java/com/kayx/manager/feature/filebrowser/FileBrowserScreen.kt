@@ -129,18 +129,21 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 safTransferPaused = false
                 var completed = 0
                 var failed = 0
+                var cleanupWarnings = 0
                 var cancelled = false
+                val retryPaths = linkedSetOf<String>()
                 for ((index, path) in selectedPaths.withIndex()) {
-                    if (control.isStopped()) { cancelled = true; break }
+                    if (control.isStopped()) { retryPaths.addAll(selectedPaths.drop(index)); cancelled = true; break }
                     val file = File(path)
                     safTransferProgress = "${if (moving) "Moving" else "Copying"} ${index + 1}/${selectedPaths.size}: ${file.name}"
                     val result = withContext(Dispatchers.IO) {
-                        if (moving) SafRepository.moveLocalFileToTree(ctx, file, destinationTree, control = control)
+                        if (moving) SafRepository.moveLocalFileToTree(ctx, file, destinationTree, control = control, onSourceCleanupFailure = { cleanupWarnings++ })
                         else SafRepository.copyLocalFileToTree(ctx, file, destinationTree, control = control)
                     }
                     if (result == null) {
-                        if (control.isStopped()) { cancelled = true; break }
+                        if (control.isStopped()) { retryPaths.addAll(selectedPaths.drop(index)); cancelled = true; break }
                         failed++
+                        retryPaths += path
                     } else completed++
                 }
                 safTransferProgress = null
@@ -148,8 +151,11 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 safTransferControl = null
                 safTransferPaused = false
                 val action = if (moving) "Moved" else "Copied"
-                snack.showSnackbar(if (cancelled) "$action cancelled: $completed of ${selectedPaths.size} item(s) completed" else "$action $completed of ${selectedPaths.size} item(s); $failed failed")
-                if (!cancelled && failed == 0) vm.clearSelection()
+                val summary = if (cancelled) "$action cancelled: $completed of ${selectedPaths.size} item(s) completed" else "$action $completed of ${selectedPaths.size} item(s); $failed failed"
+                val warning = if (cleanupWarnings > 0) "; $cleanupWarnings source cleanup warning(s), destination copies were kept" else ""
+                snack.showSnackbar(summary + warning)
+                if (retryPaths.isEmpty()) vm.clearSelection() else vm.selectPaths(retryPaths)
+                vm.reload()
             }
         } else moveSelectionToSaf = false
     }
