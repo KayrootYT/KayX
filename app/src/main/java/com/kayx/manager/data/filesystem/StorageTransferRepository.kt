@@ -19,7 +19,7 @@ class StorageTransferRepository {
         val failures = mutableListOf<String>()
         val warnings = mutableListOf<String>()
         var completed = 0
-        val itemSizes = sourceKeys.map { itemSize(context, location(it)) }
+        val itemSizes = sourceKeys.map { key -> runCatching { itemSize(context, location(key)) }.getOrDefault(0L) }
         val totalBytes = itemSizes.sum()
         var completedBytes = 0L
         for ((index, key) in sourceKeys.withIndex()) {
@@ -27,16 +27,13 @@ class StorageTransferRepository {
             val itemBytes = itemSizes[index]
             val name = when (source) { is StorageLocation.Local -> source.directory.name; is StorageLocation.Saf -> source.relativePath.substringAfterLast('/') }
             if (control.isStopped()) {
-                sourceKeys.drop(index).forEach { remaining ->
-                    val item = location(remaining)
-                    failures += when (item) { is StorageLocation.Local -> item.directory.name; is StorageLocation.Saf -> item.relativePath.substringAfterLast('/') }
-                }
+                failures.addAll(sourceKeys.drop(index))
                 break
             }
             onProgress(index, sourceKeys.size, name, completedBytes, totalBytes)
             val ok = try { transferOne(context, source, destination, move, policy, control, warnings) }
                 catch (_: Exception) { false }
-            if (ok) { completed++; completedBytes += itemBytes } else failures += name
+            if (ok) { completed++; completedBytes += itemBytes } else failures += key
             onProgress(index + 1, sourceKeys.size, name, completedBytes, totalBytes)
         }
         Outcome(completed, failures, warnings)
