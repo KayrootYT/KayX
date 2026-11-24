@@ -3,6 +3,8 @@ package com.kayx.manager.feature.storage
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +16,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,6 +43,30 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     var renameTarget by remember { mutableStateOf<SafRepository.Entry?>(null) }
     var deleteTarget by remember { mutableStateOf<SafRepository.Entry?>(null) }
     var name by remember { mutableStateOf("") }
+    var exportSource by remember { mutableStateOf<Uri?>(null) }
+    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { sourceUri ->
+        if (sourceUri != null) {
+            scope.launch {
+                val source = DocumentFile.fromSingleUri(context, sourceUri)
+                val displayName = source?.name ?: "imported-file"
+                val copied = withContext(Dispatchers.IO) {
+                    SafRepository.copyIntoTree(context, sourceUri, treeUri, relativePath, displayName)
+                }
+                if (copied == null) error = "Import failed. Check write permission and available space."
+                refresh()
+            }
+        }
+    }
+    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { destinationUri ->
+        val sourceUri = exportSource
+        exportSource = null
+        if (destinationUri != null && sourceUri != null) {
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) { SafRepository.exportDocument(context, sourceUri, destinationUri) }
+                if (!ok) error = "Export failed"
+            }
+        }
+    }
 
     suspend fun refresh() {
         loading = true
@@ -63,6 +91,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                 Text("SD card / SAF", style = MaterialTheme.typography.titleLarge)
                 Text(if (relativePath.isBlank()) "Selected folder" else relativePath, style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
+            IconButton({ importPicker.launch(arrayOf("*/*")) }) { Icon(Icons.Default.FileUpload, "Import file") }
             IconButton({ createDialog = true; name = "" }) { Icon(Icons.Default.CreateNewFolder, "New folder") }
             IconButton({ scope.launch { refresh() } }) { Icon(Icons.Default.Refresh, "Refresh") }
         }
@@ -108,6 +137,11 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                     Box {
                         TextButton(onClick = { menu = true }) { Text("⋮") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (!entry.isDirectory) DropdownMenuItem(text = { Text("Export") }, leadingIcon = { Icon(Icons.Default.FileDownload, null) }, onClick = {
+                                menu = false
+                                exportSource = entry.uri
+                                exportPicker.launch(entry.name)
+                            })
                             DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = {
                                 menu = false; renameTarget = entry; name = entry.name
                             })
