@@ -78,6 +78,7 @@ class ArchiveRepository {
     /** Streams entries through ZipInputStream and verifies CRCs with bounded work. */
     fun testIntegrity(zip: File, limits: ArchiveLimits = ArchiveLimits()): Pair<Int, String?> {
         var count = 0
+        var entriesSeen = 0
         var total = 0L
         return try {
             ZipInputStream(zip.inputStream().buffered()).use { input ->
@@ -85,9 +86,10 @@ class ArchiveRepository {
                 var entry = input.nextEntry
                 while (entry != null) {
                     normalizedEntryName(entry.name)
-                    count++
-                    check(count <= limits.maxEntries) { "Archive exceeds entry limit" }
+                    entriesSeen++
+                    check(entriesSeen <= limits.maxEntries) { "Archive exceeds entry limit" }
                     if (!entry.isDirectory) {
+                        count++
                         while (true) {
                             val read = input.read(buffer)
                             if (read < 0) break
