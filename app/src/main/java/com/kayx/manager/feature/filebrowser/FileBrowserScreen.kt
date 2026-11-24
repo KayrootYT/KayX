@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import com.kayx.manager.data.archive.MultiExtract
 import com.kayx.manager.data.filesystem.ExternalOps
 import com.kayx.manager.data.filesystem.SafRepository
+import com.kayx.manager.data.filesystem.FileOps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -112,6 +113,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     var moveSelectionToSaf by remember { mutableStateOf(false) }
+    var safTransferProgress by remember { mutableStateOf<String?>(null) }
+    var safTransferControl by remember { mutableStateOf<FileOps.TransferControl?>(null) }
+    var safTransferPaused by remember { mutableStateOf(false) }
     val safDestinationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { destinationTree ->
         val selectedPaths = s.selected.toList()
         if (destinationTree != null && selectedPaths.isNotEmpty()) {
@@ -120,19 +124,38 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
             } else scope.launch {
                 val moving = moveSelectionToSaf
                 moveSelectionToSaf = false
-                val results = withContext(Dispatchers.IO) {
-                    selectedPaths.map { path ->
-                        val file = File(path)
-                        if (moving) SafRepository.moveLocalFileToTree(ctx, file, destinationTree) != null
-                        else SafRepository.copyLocalFileToTree(ctx, file, destinationTree) != null
+                val control = FileOps.TransferControl()
+                safTransferControl = control
+                safTransferPaused = false
+                var completed = 0
+                var failed = 0
+                var cancelled = false
+                for ((index, path) in selectedPaths.withIndex()) {
+                    if (control.isStopped()) { cancelled = true; break }
+                    val file = File(path)
+                    safTransferProgress = "${if (moving) "Moving" else "Copying"} ${index + 1}/${selectedPaths.size}: ${file.name}"
+                    val result = withContext(Dispatchers.IO) {
+                        if (moving) SafRepository.moveLocalFileToTree(ctx, file, destinationTree, control = control)
+                        else SafRepository.copyLocalFileToTree(ctx, file, destinationTree, control = control)
                     }
+                    if (result == null) {
+                        if (control.isStopped()) { cancelled = true; break }
+                        failed++
+                    } else completed++
                 }
-                val completed = results.count { it }
+                safTransferProgress = null
+                control.state = when { cancelled -> FileOps.TransferState.CANCELLED; failed > 0 -> FileOps.TransferState.FAILED; else -> FileOps.TransferState.COMPLETE }
+                safTransferControl = null
+                safTransferPaused = false
                 val action = if (moving) "Moved" else "Copied"
-                snack.showSnackbar("$action $completed of ${results.size} item(s) to selected storage")
-                if (completed == results.size) vm.clearSelection()
+                snack.showSnackbar(if (cancelled) "$action cancelled: $completed of ${selectedPaths.size} item(s) completed" else "$action $completed of ${selectedPaths.size} item(s); $failed failed")
+                if (!cancelled && failed == 0) vm.clearSelection()
             }
         } else moveSelectionToSaf = false
+    }
+    DisposableEffect(safTransferControl) {
+        val active = safTransferControl
+        onDispose { active?.takeIf { it.state == FileOps.TransferState.RUNNING || it.state == FileOps.TransferState.PAUSED }?.cancel() }
     }
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -428,7 +451,13 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
             }
         },
         bottomBar = {
-            if (s.transferProgress == null && s.retryTransfer != null) GlassCard(Modifier.navigationBarsPadding().padding(12.dp).fillMaxWidth()) {
+            if (safTransferProgress != null) GlassCard(Modifier.navigationBarsPadding().padding(12.dp).fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(safTransferProgress.orEmpty(), Modifier.weight(1f), maxLines = 1)
+                    TextButton(onClick = { if (safTransferPaused) safTransferControl?.resume() else safTransferControl?.pause(); safTransferPaused = !safTransferPaused }) { Text(if (safTransferPaused) "Resume" else "Pause") }
+                    TextButton(onClick = { safTransferControl?.cancel() }) { Text("Cancel") }
+                }
+            } else if (s.transferProgress == null && s.retryTransfer != null) GlassCard(Modifier.navigationBarsPadding().padding(12.dp).fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Transfer failed", Modifier.weight(1f))
                     TextButton(vm::retryTransfer) { Text("Retry") }
