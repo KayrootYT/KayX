@@ -307,6 +307,7 @@ object SafRepository {
                         return null
                     }
                 }
+                awaitTransfer(control)
                 return dst
             }
 
@@ -367,6 +368,7 @@ object SafRepository {
                         check(isSafeName(child.name)) { "Unsafe child name: ${child.name}" }
                         check(runCatching { copyNode(child, folder) }.getOrNull() != null) { "Could not copy ${child.name}" }
                     }
+                    awaitTransfer(control)
                     folder
                 } catch (_: Exception) {
                     runCatching { folder.delete() }
