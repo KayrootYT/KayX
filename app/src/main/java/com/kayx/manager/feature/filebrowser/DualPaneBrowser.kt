@@ -125,6 +125,7 @@ internal fun DualPaneBrowser(
     snack: SnackbarHostState,
     onExit: () -> Unit,
     onSettings: () -> Unit,
+    onBrowseSaf: () -> Unit,
     onOpenFile: (String, Tool) -> Unit,
     onDialog: (Dlg) -> Unit,
     onOpenItem: (FileItem) -> Unit,
@@ -138,7 +139,7 @@ internal fun DualPaneBrowser(
     Scaffold(
         modifier = Modifier.glassBackground(), containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snack) },
-        topBar = { DualHeader(s, vm, onExit, onSettings, onOpenFile, onDialog) },
+        topBar = { DualHeader(s, vm, onExit, onSettings, onBrowseSaf, onOpenFile, onDialog) },
         bottomBar = { DualBottomBar(s, vm, onDialog, actionMenu, { actionMenu = it }, onOpenWith, onProperties) }
     ) { pad ->
         PanePager(s, vm, pad, onOpenItem, onItemMenu)
@@ -152,7 +153,8 @@ internal fun DualPaneBrowser(
 @Composable
 private fun DualHeader(
     s: BrowserState, vm: FileBrowserViewModel,
-    onExit: () -> Unit, onSettings: () -> Unit, onOpenFile: (String, Tool) -> Unit, onDialog: (Dlg) -> Unit
+    onExit: () -> Unit, onSettings: () -> Unit, onBrowseSaf: () -> Unit,
+    onOpenFile: (String, Tool) -> Unit, onDialog: (Dlg) -> Unit
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val p = LocalPalette.current
@@ -179,6 +181,7 @@ private fun DualHeader(
                     SettingsStore.bookmarks.forEach { b ->
                         DropdownMenuItem({ Text("★  " + b.substringAfterLast('/').ifEmpty { "/" }) }, { navOpen = false; vm.jump(b) })
                     }
+                    DropdownMenuItem({ Text("Browse SD card / SAF storage…") }, { navOpen = false; onBrowseSaf() })
                     DropdownMenuItem({ Text("Recycle bin") }, { navOpen = false; onOpenFile("", Tool.RECYCLE) })
                     DropdownMenuItem({ Text("Settings") }, { navOpen = false; onSettings() })
                 }
