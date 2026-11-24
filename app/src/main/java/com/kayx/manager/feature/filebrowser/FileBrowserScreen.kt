@@ -512,27 +512,30 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             @Composable fun It(label: String, onClick: () -> Unit) =
                                 DropdownMenuItem({ Text(label, style = MaterialTheme.typography.bodyLarge) }, { more = false; onClick() })
                             val one = if (s.selected.size == 1) s.selected.first() else null
-                            val oneFile = one?.let { File(it) }
+                            val oneIsSaf = one?.let { StorageLocation.fromStableKey(it) is StorageLocation.Saf } == true
+                            val oneFile = one?.takeUnless { oneIsSaf }?.let { File(it) }
                             val oneItem = one?.let { p -> (s.items + s.secondaryItems).firstOrNull { it.path == p } }
                             val isAudio = oneFile != null && oneFile.isFile && oneFile.extension.lowercase() in setOf("mp3", "m4a", "wav", "flac", "ogg", "aac", "amr", "awb", "opus")
-                            val isArchive = one != null && MultiExtract.canExtract(one)
+                            val isArchive = !oneIsSaf && one != null && MultiExtract.canExtract(one)
                             if (isAudio) { It("Set as") { ExternalOps.setAs(ctx, oneFile!!) }; It("Create ringtone") { ExternalOps.createRingtone(ctx, oneFile!!) } }
-                            if (isArchive) It("Decompress file") { vm.extractHere(one!!); vm.clearSelection() } else It("Compress") { dlg = Dlg.Zip }
+                            if (!oneIsSaf) {
+                                if (isArchive) It("Decompress file") { vm.extractHere(one!!); vm.clearSelection() } else It("Compress") { dlg = Dlg.Zip }
+                            }
                             if (one != null) It("Rename") { dlg = Dlg.Rename(one, one.substringAfterLast('/')) }
                             It("Tags") { dlg = Dlg.Tag }
-                            if (oneFile != null && oneFile.isFile && !isArchive && StorageLocation.fromStableKey(one.orEmpty()) !is StorageLocation.Saf) It("Open with") { oneItem?.let { openFor = it } }
+                            if (oneFile != null && oneFile.isFile && !isArchive) It("Open with") { oneItem?.let { openFor = it } }
                             It("Details") { if (oneItem != null) infoFor = oneItem else dlg = Dlg.MultiProps }
-                            if (oneFile != null) It("Home screen shortcuts") { ExternalOps.pinShortcut(ctx, oneFile) }
+                            if (oneFile?.isFile == true) It("Home screen shortcuts") { ExternalOps.pinShortcut(ctx, oneFile) }
                             It("Move to Private space") { vm.moveToPrivate(ctx) }
                             HorizontalDivider()
                             if (s.clipboard.isNotEmpty()) It("Paste here") { dlg = Dlg.ConfirmPaste }
-                            if (s.selected.size == 2 && s.selected.all { File(it).isFile }) It("Compare files") { val l = s.selected.toList(); onOpenFile(l[0] + "\u001f" + l[1], Tool.COMPARE) }
+                            if (s.selected.size == 2 && s.selected.all { StorageLocation.fromStableKey(it) !is StorageLocation.Saf && File(it).isFile }) It("Compare files") { val l = s.selected.toList(); onOpenFile(l[0] + "\u001f" + l[1], Tool.COMPARE) }
                             It("Invert selection") { vm.invertSelection() }
                             It("Select by pattern…") { dlg = Dlg.Pattern }
                             It("Batch rename…") { dlg = Dlg.Batch }
                             It("Duplicate") { vm.duplicateSelected() }
                             It("Copy path") { ExternalOps.copyText(ctx, s.selected.joinToString("\n")); vm.notify("Path copied") }
-                            if (one != null) It("Create symlink here…") { dlg = Dlg.Symlink(one) }
+                            if (one != null && !oneIsSaf) It("Create symlink here…") { dlg = Dlg.Symlink(one) }
                         }
                     }
                 }
