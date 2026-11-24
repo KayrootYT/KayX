@@ -117,4 +117,46 @@ class ArchiveSafetyTest {
         }
     }
 
+    @Test
+    fun archiveEditRejectsTraversalRenameWithoutChangingOriginal() {
+        val root = createTempDir(prefix = "kayx-archive-edit-traversal-")
+        try {
+            val zip = File(root, "edit.zip")
+            ZipOutputStream(zip.outputStream()).use { out ->
+                out.putNextEntry(ZipEntry("safe.txt"))
+                out.write("original".toByteArray())
+                out.closeEntry()
+            }
+            val result = ArchiveEdit.rewrite(zip, rename = mapOf("safe.txt" to "../escape.txt"))
+            assertTrue(result.isFailure)
+            assertEquals("original", ArchiveEdit.readEntry(zip, "safe.txt").toString(Charsets.UTF_8))
+            assertTrue(!File(root.parentFile, "escape.txt").exists())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun archiveEditRejectsDuplicateRenamedEntries() {
+        val root = createTempDir(prefix = "kayx-archive-edit-duplicate-")
+        try {
+            val zip = File(root, "duplicate.zip")
+            ZipOutputStream(zip.outputStream()).use { out ->
+                listOf("one.txt", "two.txt").forEach { name ->
+                    out.putNextEntry(ZipEntry(name))
+                    out.write(name.toByteArray())
+                    out.closeEntry()
+                }
+            }
+            val result = ArchiveEdit.rewrite(
+                zip, rename = mapOf("two.txt" to "one.txt")
+            )
+            assertTrue(result.isFailure)
+            assertEquals("one.txt", ArchiveEdit.readEntry(zip, "one.txt").toString(Charsets.UTF_8))
+            assertEquals("two.txt", ArchiveEdit.readEntry(zip, "two.txt").toString(Charsets.UTF_8))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
 }
