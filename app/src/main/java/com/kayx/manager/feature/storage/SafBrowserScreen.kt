@@ -253,7 +253,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                             })
                             DropdownMenuItem(enabled = canWrite, text = { Text("Move to storage…") }, leadingIcon = { Icon(Icons.Default.FileDownload, null) }, onClick = {
                                 menu = false
-                                transferEntry = entry
+                                transferEntries = listOf(entry)
                                 moveTransfer = true
                                 destinationTreePicker.launch(null)
                             })
