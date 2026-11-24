@@ -114,7 +114,7 @@ fun AppManagerScreen(onBack: () -> Unit, onOpenApk: (String) -> Unit) {
             )
         }
         snack.showSnackbar(result.fold(
-            { "Backup saved: ${it.relativeTo(File(Environment.getExternalStorageDirectory(), "KayX/apk"))}" },
+            { "Backup saved: ${it.name}" },
             { it.message ?: "APK backup failed" }
         ))
     }
