@@ -29,10 +29,14 @@ object RootShell {
         }
     }
 
-    fun run(cmd: String, timeoutMs: Long = 20_000): Res {
+    fun run(cmd: String, timeoutMs: Long = 20_000): Res =
+        if (SettingsStore.backend == PrivilegedBackend.SHIZUKU) ShizukuShell.run(cmd, timeoutMs)
+        else runRoot(cmd, timeoutMs)
+
+    /** Execute through su regardless of the currently selected privileged backend. */
+    fun runRoot(cmd: String, timeoutMs: Long = 20_000): Res {
         require(cmd.isNotBlank()) { "Command is empty" }
         val timeout = timeoutMs.coerceIn(100L, 120_000L)
-        if (SettingsStore.backend == PrivilegedBackend.SHIZUKU) return ShizukuShell.run(cmd, timeout)
         val process = try { ProcessBuilder("su", "-c", cmd).start() }
         catch (e: Exception) { return Res(-1, "", e.message ?: "su is not available") }
         runCatching { process.outputStream.close() }
@@ -62,11 +66,10 @@ object RootShell {
             runCatching { process.errorStream.close() }
         }
     }
-
     fun q(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
     /** True when the selected backend responds; Root mode additionally requires uid 0. */
-    fun isRoot(): Boolean = run("id", 5_000).let { it.code == 0 && isRootIdentity(it.out) }
+    fun isRoot(): Boolean = runRoot("id", 5_000).let { it.code == 0 && isRootIdentity(it.out) }
 
     private val lsLine = Regex(
         "^([a-z\\-][rwxsStTl\\-]{9})\\s+(?:\\d+\\s+)?(\\S+)\\s+(\\S+)\\s+(?:(\\d+)(?:,\\s*\\d+)?\\s+)?(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{2}:\\d{2})(?::\\d{2})?\\s+(.+)$"
