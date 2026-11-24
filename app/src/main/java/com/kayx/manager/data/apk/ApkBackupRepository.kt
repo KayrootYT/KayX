@@ -32,29 +32,36 @@ object ApkBackupRepository {
         require(root.isDirectory && root.canWrite()) { "APK backup destination is not writable" }
 
         val baseName = sanitizeSegment("${appLabel}_${versionName}")
-        val isSplitSet = sources.size > 1
-        val finalTarget = uniqueTarget(root, baseName, if (isSplitSet) "" else ".apk")
-        val staging = File(root, ".kayx-apk-tmp-${UUID.randomUUID()}")
-        require(staging.mkdir()) { "Cannot create temporary APK backup directory" }
-
-        try {
-            if (isSplitSet) {
+        if (sources.size == 1) {
+            // A single APK is published as a file, not a directory with an .apk suffix.
+            val target = uniqueTarget(root, baseName, ".apk")
+            val stagedFile = File(root, ".kayx-apk-tmp-${UUID.randomUUID()}.apk")
+            try {
+                copyAndSync(sources.single(), stagedFile)
+                check(!target.exists()) { "Backup destination already exists" }
+                Files.move(stagedFile.toPath(), target.toPath())
+                target
+            } finally {
+                stagedFile.delete()
+            }
+        } else {
+            val target = uniqueTarget(root, baseName, "")
+            val staging = File(root, ".kayx-apk-tmp-${UUID.randomUUID()}")
+            require(staging.mkdir()) { "Cannot create temporary APK backup directory" }
+            try {
                 val usedNames = mutableSetOf<String>()
                 sources.forEachIndexed { index, source ->
                     val original = sanitizeSegment(source.name.ifBlank { "split_${index + 1}.apk" })
                     val name = uniqueFileName(original, usedNames)
                     copyAndSync(source, File(staging, name))
                 }
-            } else {
-                copyAndSync(sources.single(), File(staging, "$baseName.apk"))
+                check(!target.exists()) { "Backup destination already exists" }
+                Files.move(staging.toPath(), target.toPath())
+                target
+            } catch (t: Throwable) {
+                staging.deleteRecursively()
+                throw t
             }
-
-            check(!finalTarget.exists()) { "Backup destination already exists" }
-            Files.move(staging.toPath(), finalTarget.toPath())
-            finalTarget
-        } catch (t: Throwable) {
-            staging.deleteRecursively()
-            throw t
         }
     }
 
