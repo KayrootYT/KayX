@@ -280,26 +280,45 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun navigateUpActive(): Boolean {
         val s = _s.value
         if (s.selected.isNotEmpty()) { clearSelection(); return true }
-        val current = activeDirectory(s)
-        val root = File(s.root)
-        if (current.absolutePath == root.absolutePath) {
-            if (s.dualPane) {
-                val other = if (s.activePane == 0) File(s.secondaryDir) else File(s.dir)
-                if (other.absolutePath != root.absolutePath) { setActivePane(1 - s.activePane); return true }
+        return when (val location = activeLocation(s)) {
+            is StorageLocation.Saf -> {
+                if (location.relativePath.isNotBlank()) {
+                    val parent = location.relativePath.substringBeforeLast('/', "")
+                    openLocation(StorageLocation.Saf(location.treeUri, parent), s.activeIdx)
+                    true
+                } else if (s.dualPane && s.activePane == 1) { setActivePane(0); true } else false
             }
-            return false
+            is StorageLocation.Local -> {
+                val current = location.directory
+                val root = File(s.root)
+                if (current.absolutePath == root.absolutePath) {
+                    if (s.dualPane) {
+                        val other = File(if (s.activePane == 0) s.secondaryDir else s.dir)
+                        if (other.absolutePath != root.absolutePath) { setActivePane(1 - s.activePane); return true }
+                    }
+                    return false
+                }
+                val parent = current.parentFile ?: return false
+                openLocation(StorageLocation.Local(parent), s.activeIdx)
+                true
+            }
         }
-        val parent = current.parentFile ?: return false
-        if (s.dualPane && s.activePane == 1) openSecondary(parent.absolutePath) else open(parent.absolutePath)
-        return true
     }
 
     /** Go to the parent folder (also leaves the browser root, unlike back). */
     fun goUp() {
-        val cur = activeDirectory(); val parent = cur.parentFile
-        if (parent == null) { notify("Already at the top"); return }
-        if (_s.value.root.isNotEmpty() && cur.absolutePath == _s.value.root) _s.update { it.copy(root = "/") }
-        openActive(parent.absolutePath)
+        when (val location = activeLocation()) {
+            is StorageLocation.Saf -> {
+                if (location.relativePath.isBlank()) notify("Already at the selected storage root")
+                else openLocation(StorageLocation.Saf(location.treeUri, location.relativePath.substringBeforeLast('/', "")))
+            }
+            is StorageLocation.Local -> {
+                val parent = location.directory.parentFile
+                if (parent == null) { notify("Already at the top"); return }
+                if (_s.value.root.isNotEmpty() && location.directory.absolutePath == _s.value.root) _s.update { it.copy(root = "/") }
+                openActive(parent.absolutePath)
+            }
+        }
     }
 
     /** @return false when already at root (caller should leave the browser). */
