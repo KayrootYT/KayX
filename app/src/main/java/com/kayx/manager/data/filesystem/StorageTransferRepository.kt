@@ -162,6 +162,7 @@ class StorageTransferRepository {
                 val childTarget = uniqueTarget(target, name, Conflict.KEEP_BOTH) ?: error("Cannot create child")
                 check(copySafNode(context, child, childTarget, control, onBytesCopied)) { "Could not copy " + name }
             }
+            await(control)
         } else {
             val input = context.contentResolver.openInputStream(source.uri) ?: error("Cannot read source")
             input.use { src -> target.outputStream().use { dst ->
