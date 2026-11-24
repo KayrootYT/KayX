@@ -453,7 +453,10 @@ private fun DualBottomBar(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "${if (s.transferProgress.moving) "Moving" else "Copying"} ${s.transferProgress.completed}/${s.transferProgress.total}: ${s.transferProgress.currentName}",
+                            "${if (s.transferProgress.moving) "Moving" else "Copying"}: ${s.transferProgress.currentName} · " +
+                                if (s.transferProgress.totalBytes > 0L) "${dxSize(s.transferProgress.completedBytes)} / ${dxSize(s.transferProgress.totalBytes)} · ${dxSize(s.transferProgress.bytesPerSecond)}/s" +
+                                    (s.transferProgress.etaSeconds?.let { " · ETA ${it / 60}m ${it % 60}s" } ?: "")
+                                else "${s.transferProgress.completed}/${s.transferProgress.total} items",
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelMedium
