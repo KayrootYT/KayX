@@ -15,6 +15,11 @@ class StorageTransferRepository {
         policy: Conflict, control: FileOps.TransferControl,
         onProgress: (Int, Int, String, Long, Long) -> Unit = { _, _, _, _, _ -> }): Result<Outcome> = runCatching {
         val destination = location(destinationKey)
+        if (destination is StorageLocation.Saf) {
+            require(SafRepository.hasWriteAccess(context, Uri.parse(destination.treeUri))) {
+                "Selected SAF destination is read-only or its write permission was revoked"
+            }
+        }
         require(sourceKeys.isNotEmpty()) { "No source items selected" }
         val failures = mutableListOf<String>()
         val warnings = mutableListOf<String>()
