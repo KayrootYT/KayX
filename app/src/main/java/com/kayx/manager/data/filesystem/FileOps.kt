@@ -163,8 +163,10 @@ object FileOps {
                 if (move) {
                     if (!f.renameTo(dest)) {
                         copyClean(f, dest, control, onBytesCopied)
-                        // Once the full destination copy exists, never delete it merely because
-                        // source cleanup failed: recursive deletion can fail after partial progress.
+                        // Cancellation before the commit point must leave the original untouched.
+                        awaitTransfer(control)
+                        // Once the full destination copy exists and the move is committed, never
+                        // delete it merely because source cleanup fails after partial progress.
                         preserveCompletedCopy = true
                         if (!f.deleteRecursively()) {
                             replaceBackup?.let { backup ->
