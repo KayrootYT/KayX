@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kayx.manager.data.archive.ArchiveRepository
 import android.content.Context
+import android.net.Uri
 import com.kayx.manager.data.apk.ApkSignRepo
 import com.kayx.manager.data.archive.ArchiveEdit
 import com.kayx.manager.data.archive.MultiExtract
@@ -106,6 +107,7 @@ internal enum class NavMove { PUSH, BACK, FORWARD }
 
 class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), private val archive: ArchiveRepository = ArchiveRepository()) : ViewModel() {
     private val storageLocations = StorageLocationRepository()
+    private val storageTransfers = com.kayx.manager.data.filesystem.StorageTransferRepository()
     private val _s = MutableStateFlow(BrowserState(showHidden = SettingsStore.showHidden, sort = SettingsStore.defaultSort, dualPane = SettingsStore.dualPane, tabMode = SettingsStore.dualTabs))
     private var applied = Triple(SettingsStore.showHidden, SettingsStore.defaultSort, SettingsStore.dualPane)
     private var appContext: Context? = null
@@ -459,10 +461,10 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val s = _s.value
         val pending = s.pending
         if (policy != null && pending != null) {
-            startTransfer(pending.files.map(::File), File(pending.dst), pending.cut, policy, pending.sourcePane, pending.fromClipboard)
+            startStorageTransfer(pending.files, pending.dst, pending.cut, policy, pending.sourcePane, pending.fromClipboard)
             return
         }
-        startTransfer(s.clipboard.map(::File), activeDirectory(s), s.cut, policy, null, true)
+        startStorageTransfer(s.clipboard, activeLocation(s).stableKey(), s.cut, policy ?: Conflict.KEEP_BOTH, null, true)
     }
 
     /**
@@ -472,7 +474,47 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun transferSelectedToOther(cut: Boolean, policy: Conflict? = null) {
         val s = _s.value
         if (!s.dualPane) { notify("Turn on dual pane first"); return }
-        startTransfer(s.selected.map(::File), File(s.otherDir), cut, policy, s.activePane, false)
+        startStorageTransfer(s.selected.toList(), s.otherDir, cut, policy ?: Conflict.KEEP_BOTH, s.activePane, false)
+    }
+
+    private fun startStorageTransfer(keys: List<String>, destinationKey: String, cut: Boolean, policy: Conflict, sourcePane: Int?, fromClipboard: Boolean) {
+        val context = appContext
+        if (context == null) { notify("Storage context is not ready"); return }
+        if (keys.isEmpty()) { notify("Nothing selected to transfer"); return }
+        val control = FileOps.TransferControl()
+        _s.update { it.copy(conflicts = emptyList(), pending = null, recent = emptySet(), transferControl = control, retryTransfer = null) }
+        viewModelScope.launch {
+            _s.update { it.copy(transferProgress = TransferProgress(0, keys.size, "Preparing", cut)) }
+            val result = withContext(Dispatchers.IO) {
+                storageTransfers.transfer(context, keys, destinationKey, cut, policy, control) { completed, total, name ->
+                    _s.update { it.copy(transferProgress = TransferProgress(completed, total, name, cut)) }
+                }
+            }
+            repo.invalidateSearchCache()
+            val outcome = result.getOrNull()
+            val failed = outcome?.failed.orEmpty()
+            clearPaneSelection(sourcePane ?: _s.value.activeIdx)
+            _s.update { current ->
+                current.copy(
+                    transferProgress = null,
+                    transferControl = null,
+                    retryTransfer = if (failed.isNotEmpty()) RetryTransfer(
+                        keys.filter { key -> key.substringAfterLast('/').substringAfterLast(':') in failed },
+                        destinationKey, cut, sourcePane, fromClipboard, policy
+                    ) else null,
+                    message = result.exceptionOrNull()?.message ?: buildString {
+                        append(if (cut) "Moved " else "Copied ")
+                        append(outcome?.completed ?: 0)
+                        append(" item(s)")
+                        if (failed.isNotEmpty()) append("; " + failed.size + " failed")
+                        if (outcome?.cleanupWarnings?.isNotEmpty() == true) append("; source cleanup warning: " + outcome.cleanupWarnings.joinToString())
+                    }
+                )
+            }
+            if (result.isSuccess && failed.isEmpty()) FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else FileActionSound.COPY)
+            if (fromClipboard && cut && result.isSuccess && failed.isEmpty()) clearClipboard()
+            reload()
+        }
     }
 
     private fun startTransfer(files: List<File>, dst: File, cut: Boolean, policy: Conflict?, sourcePane: Int?, fromClipboard: Boolean) {
@@ -529,9 +571,42 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val r = _s.value.retryTransfer ?: return
         startTransfer(r.files.map(::File), File(r.dst), r.cut, r.policy, r.sourcePane, r.fromClipboard)
     }
-    fun newFolder(n: String) = run({ repo.createFolder(activeDirectory(), n) }, "Folder created: $n", FileActionSound.CREATE)
-    fun newFile(n: String) = run({ repo.createFile(activeDirectory(), n) }, "File created: $n", FileActionSound.CREATE)
-    fun rename(path: String, n: String) = run({ repo.rename(File(path), n) }, "Renamed to $n", FileActionSound.RENAME)
+    fun newFolder(n: String) {
+        when (val location = activeLocation()) {
+            is StorageLocation.Local -> run({ repo.createFolder(location.directory, n) }, "Folder created: $n", FileActionSound.CREATE)
+            is StorageLocation.Saf -> viewModelScope.launch {
+                val context = appContext ?: return@launch notify("Storage context is not ready")
+                val result = withContext(Dispatchers.IO) { SafRepository.createFolder(context, Uri.parse(location.treeUri), location.relativePath, n) }
+                notify(if (result != null) "Folder created: $n" else "Could not create folder")
+                reload()
+            }
+        }
+    }
+    fun newFile(n: String) {
+        when (val location = activeLocation()) {
+            is StorageLocation.Local -> run({ repo.createFile(location.directory, n) }, "File created: $n", FileActionSound.CREATE)
+            is StorageLocation.Saf -> viewModelScope.launch {
+                val context = appContext ?: return@launch notify("Storage context is not ready")
+                val result = withContext(Dispatchers.IO) { SafRepository.createFile(context, Uri.parse(location.treeUri), location.relativePath, n) }
+                notify(if (result != null) "File created: $n" else "Could not create file")
+                reload()
+            }
+        }
+    }
+    fun rename(path: String, n: String) {
+        when (val location = locationOf(path)) {
+            is StorageLocation.Local -> run({ repo.rename(location.directory, n) }, "Renamed to $n", FileActionSound.RENAME)
+            is StorageLocation.Saf -> viewModelScope.launch {
+                val context = appContext ?: return@launch notify("Storage context is not ready")
+                val result = withContext(Dispatchers.IO) {
+                    val doc = SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)
+                    doc?.let { SafRepository.rename(context, it.uri, n) }
+                }
+                notify(if (result != null) "Renamed to $n" else "Rename failed")
+                reload()
+            }
+        }
+    }
     fun zipSelected(name: String) {
         val f = _s.value.selected.map(::File)
         val n = name.trim().replace('/', '_').ifEmpty { "archive" }.let { if (it.endsWith(".zip", true)) it else "$it.zip" }
@@ -539,9 +614,30 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         run({ archive.create(f, out) }, "Created $n", FileActionSound.SUCCESS)
     }
     fun deleteSelected() {
-        val f = _s.value.selected.map(::File)
-        if (SettingsStore.useRecycleBin) run({ withContext(Dispatchers.IO) { RecycleBin.trash(f) } }, "Moved ${f.size} to recycle bin", FileActionSound.DELETE)
-        else run({ repo.delete(f) }, "Deleted ${f.size}", FileActionSound.DELETE)
+        val keys = _s.value.selected.toList()
+        if (keys.all { locationOf(it) is StorageLocation.Local }) {
+            val files = keys.map { (locationOf(it) as StorageLocation.Local).directory }
+            if (SettingsStore.useRecycleBin) run({ withContext(Dispatchers.IO) { RecycleBin.trash(files) } }, "Moved ${files.size} to recycle bin", FileActionSound.DELETE)
+            else run({ repo.delete(files) }, "Deleted ${files.size}", FileActionSound.DELETE)
+            return
+        }
+        viewModelScope.launch {
+            val context = appContext ?: return@launch notify("Storage context is not ready")
+            val results = withContext(Dispatchers.IO) {
+                keys.map { key ->
+                    when (val location = locationOf(key)) {
+                        is StorageLocation.Local -> runCatching { location.directory.deleteRecursively() }.getOrDefault(false)
+                        is StorageLocation.Saf -> {
+                            val doc = SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)
+                            doc?.let { SafRepository.delete(context, it.uri) } ?: false
+                        }
+                    }
+                }
+            }
+            notify("Deleted ${results.count { it }} of ${results.size} item(s)")
+            clearSelection()
+            reload()
+        }
     }
 
     // ---- MT-Manager-style extras ----
