@@ -115,8 +115,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     val safDestinationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { destinationTree ->
         val selectedPaths = s.selected.toList()
         if (destinationTree != null && selectedPaths.isNotEmpty()) {
-            SafRepository.persistTreePermission(ctx, destinationTree)
-            scope.launch {
+            if (!SafRepository.persistTreePermission(ctx, destinationTree) && !SafRepository.hasWriteAccess(ctx, destinationTree)) {
+                scope.launch { snack.showSnackbar("Could not save destination permission. Select the storage folder again and allow write access.") }
+            } else scope.launch {
                 val moving = moveSelectionToSaf
                 moveSelectionToSaf = false
                 val results = withContext(Dispatchers.IO) {
