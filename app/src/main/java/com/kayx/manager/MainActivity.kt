@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
             KayXTheme {
                 // Saveable so rotation / dark-mode / font-scale changes don't drop the user back to Home.
                 var showSettings by rememberSaveable { mutableStateOf(false) }
+                var safTree by rememberSaveable { mutableStateOf<String?>(null) }
                 var path by rememberSaveable {
                     mutableStateOf<String?>(
                         startDir ?: SettingsStore.browserPath.takeIf { saved -> saved.isNotBlank() && java.io.File(saved).isDirectory }
@@ -163,8 +164,10 @@ class MainActivity : ComponentActivity() {
                             Tool.FTP -> FtpScreen(close)
                             Tool.ROOT -> RootExplorerScreen(close)
                         }
+                    } else if (safTree != null) {
+                        com.kayx.manager.feature.storage.SafBrowserScreen(android.net.Uri.parse(safTree), onBack = { safTree = null })
                     } else if (showSettings) {
-                        SettingsScreen(storageGranted = granted.value, onManageStorage = ::requestAccess, onBack = { showSettings = false })
+                        SettingsScreen(storageGranted = granted.value, onManageStorage = ::requestAccess, onBack = { showSettings = false }, onOpenSaf = { safTree = it.toString() })
                     } else if (p != null) {
                         FileBrowserScreen(p, onExit = {
                             if (privateSessionActive.value && PrivateSpace.isUnlocked()) {
