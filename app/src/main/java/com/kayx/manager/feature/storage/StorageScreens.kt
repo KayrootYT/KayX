@@ -116,7 +116,7 @@ fun FileListScreen(
             }
             when (sortBy) {
                 1 -> if (newestFirst) filtered.sortedByDescending { it.size } else filtered.sortedBy { it.size }
-                2 -> filtered.sortedBy { it.name.lowercase() }
+                2 -> if (newestFirst) filtered.sortedBy { it.name.lowercase() } else filtered.sortedByDescending { it.name.lowercase() }
                 else -> if (newestFirst) filtered.sortedByDescending { it.modified } else filtered.sortedBy { it.modified }
             }
         }
@@ -167,7 +167,7 @@ fun FileListScreen(
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(if (list == null) "Scanning… $scanned files" else "${list.size} files · ${formatBytes(total)}", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = TextMuted)
-                listOf("Date", "Size", "Name").forEachIndexed { i, l -> FilterChip(sortBy == i, { if (sortBy == i && i != 2) newestFirst = !newestFirst else sortBy = i }, { Text(l + if (sortBy == i && i != 2) if (newestFirst) " ↓" else " ↑" else "") }) }
+                listOf("Date", "Size", "Name").forEachIndexed { i, l -> FilterChip(sortBy == i, { if (sortBy == i) newestFirst = !newestFirst else { sortBy = i; newestFirst = true } }, { Text(l + if (sortBy == i) if (newestFirst) " ↓" else " ↑" else "") }) }
             }
             if (list == null) Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Accent) }
             else if (list.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Nothing here\n" + StorageScanner.status, color = Fg.copy(.5f)) }
