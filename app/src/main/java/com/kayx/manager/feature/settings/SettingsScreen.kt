@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
@@ -47,7 +48,7 @@ private val Indigo = Color(0xFF5856D6)
 private val Teal = Color(0xFF30B0C7)
 
 @Composable
-fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack: () -> Unit, showBack: Boolean = true) {
+fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack: () -> Unit, showBack: Boolean = true, onOpenSaf: (Uri) -> Unit = {}) {
     BackHandler(onBack = onBack)
     val p = LocalPalette.current
     val ctx = LocalContext.current
@@ -56,11 +57,12 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
     var rootStatus by remember { mutableStateOf<String?>(null) }
     var checkingRoot by remember { mutableStateOf(false) }
     var shizukuState by remember { mutableStateOf(runCatching { ShizukuShell.state(ctx) }.getOrDefault(ShizukuShell.State.NOT_RUNNING)) }
-    var safCount by remember { mutableStateOf(SafRepository.persistedTrees(ctx).size) }
+    var safTrees by remember { mutableStateOf(SafRepository.persistedTrees(ctx)) }
+    val safCount = safTrees.size
     val safPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             SafRepository.persistTreePermission(ctx, uri)
-            safCount = SafRepository.persistedTrees(ctx).size
+            safTrees = SafRepository.persistedTrees(ctx)
         }
     }
     DisposableEffect(Unit) {
@@ -205,6 +207,29 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
                     subtitle = if (safCount == 0) "Choose a document tree" else "$safCount persistent folder(s)",
                     onClick = { safPicker.launch(null) }
                 )
+                safTrees.forEachIndexed { index, treeUri ->
+                    IosDivider(58.dp)
+                    IosRow(
+                        "Open SD card folder ${index + 1}",
+                        icon = Icons.Default.FolderOpen,
+                        iconBg = Teal,
+                        chevron = true,
+                        subtitle = treeUri.lastPathSegment?.substringAfter(':')?.replace('/', ' / ') ?: treeUri.authority.orEmpty(),
+                        onClick = { onOpenSaf(treeUri) }
+                    )
+                    IosDivider(58.dp)
+                    IosRow(
+                        "Remove access",
+                        icon = Icons.Default.LinkOff,
+                        iconBg = Red,
+                        chevron = true,
+                        subtitle = "Revoke this saved folder permission",
+                        onClick = {
+                            SafRepository.removeTree(ctx, treeUri)
+                            safTrees = SafRepository.persistedTrees(ctx)
+                        }
+                    )
+                }
             }
 
             // ---------------- Advanced access ----------------
