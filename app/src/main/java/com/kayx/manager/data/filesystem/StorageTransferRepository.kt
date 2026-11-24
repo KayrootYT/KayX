@@ -18,11 +18,19 @@ class StorageTransferRepository {
         val warnings = mutableListOf<String>()
         var completed = 0
         for ((index, key) in sourceKeys.withIndex()) {
-            await(control)
             val source = location(key)
             val name = when (source) { is StorageLocation.Local -> source.directory.name; is StorageLocation.Saf -> source.relativePath.substringAfterLast('/') }
+            if (control.isStopped()) {
+                sourceKeys.drop(index).forEach { remaining ->
+                    val item = location(remaining)
+                    failures += when (item) { is StorageLocation.Local -> item.directory.name; is StorageLocation.Saf -> item.relativePath.substringAfterLast('/') }
+                }
+                break
+            }
             onProgress(index, sourceKeys.size, name)
-            if (transferOne(context, source, destination, move, policy, control, warnings)) completed++ else failures += name
+            val ok = try { transferOne(context, source, destination, move, policy, control, warnings) }
+                catch (_: Exception) { false }
+            if (ok) completed++ else failures += name
             onProgress(index + 1, sourceKeys.size, name)
         }
         Outcome(completed, failures, warnings)
