@@ -274,7 +274,8 @@ object SafRepository {
         targetTreeUri: Uri,
         targetParentRelativePath: String = "",
         targetName: String? = null,
-        control: FileOps.TransferControl = FileOps.TransferControl()
+        control: FileOps.TransferControl = FileOps.TransferControl(),
+        onBytesCopied: (Long) -> Unit = {}
     ): Uri? {
         val source = document(context, sourceUri) ?: return null
         val name = targetName ?: source.name ?: return null
@@ -329,7 +330,8 @@ object SafRepository {
         sourceFile: java.io.File,
         targetTreeUri: Uri,
         targetParentRelativePath: String = "",
-        control: FileOps.TransferControl = FileOps.TransferControl()
+        control: FileOps.TransferControl = FileOps.TransferControl(),
+        onBytesCopied: (Long) -> Unit = {}
     ): Uri? {
         if (!sourceFile.exists() || !sourceFile.canRead() || !isSafeName(sourceFile.name)) return null
         val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
@@ -414,7 +416,8 @@ object SafRepository {
         targetTreeUri: Uri,
         targetParentRelativePath: String = "",
         targetName: String? = null,
-        control: FileOps.TransferControl = FileOps.TransferControl()
+        control: FileOps.TransferControl = FileOps.TransferControl(),
+        onBytesCopied: (Long) -> Unit = {}
     ): Uri? {
         if (sourceUri == targetTreeUri) return null
         val copied = copyDocumentToTree(context, sourceUri, targetTreeUri, targetParentRelativePath, targetName, control, onBytesCopied)
@@ -429,10 +432,10 @@ object SafRepository {
         return copied
     }
 
-    fun exportDocument(context: Context, sourceUri: Uri, destinationUri: Uri, control: FileOps.TransferControl = FileOps.TransferControl()): Boolean = try {
+    fun exportDocument(context: Context, sourceUri: Uri, destinationUri: Uri, control: FileOps.TransferControl = FileOps.TransferControl(), onBytesCopied: (Long) -> Unit = {}): Boolean = try {
         val input = context.contentResolver.openInputStream(sourceUri) ?: error("Cannot read source")
         val output = context.contentResolver.openOutputStream(destinationUri, "wt") ?: error("Cannot write destination")
-        input.use { src -> output.use { dst -> copyStream(src, dst, control) } }
+        input.use { src -> output.use { dst -> copyStream(src, dst, control, onBytesCopied) } }
         true
     } catch (_: Exception) {
         runCatching { document(context, destinationUri)?.delete() }
