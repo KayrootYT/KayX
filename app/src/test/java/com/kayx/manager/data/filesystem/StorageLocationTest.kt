@@ -45,4 +45,9 @@ class StorageLocationTest {
         assertNull(StorageLocation.fromStableKey("file:///storage/emulated/0"))
         assertNull(StorageLocation.fromStableKey("saf://location/%ZZ?path="))
     }
+    @Test(expected = IllegalArgumentException::class)
+    fun childRejectsPathSeparators() {
+        StorageLocation.Saf("content://provider/tree/root").child("../outside")
+    }
+
 }
