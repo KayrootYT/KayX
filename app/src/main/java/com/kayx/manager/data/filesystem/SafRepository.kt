@@ -84,8 +84,10 @@ object SafRepository {
     }
 
     fun document(context: Context, uri: Uri): DocumentFile? = when {
-        DocumentsContract.isTreeUri(uri) -> DocumentFile.fromTreeUri(context, uri)
+        // Descendant URIs created by a tree provider contain both /tree/ and /document/.
+        // Resolve those as the selected document, not as the tree root.
         DocumentsContract.isDocumentUri(context, uri) -> DocumentFile.fromSingleUri(context, uri)
+        DocumentsContract.isTreeUri(uri) -> DocumentFile.fromTreeUri(context, uri)
         else -> null
     }
 
@@ -114,6 +116,12 @@ object SafRepository {
     }
 
     /** Prevent recursive copies when a folder is targeted inside itself through another tree URI. */
+    private fun isDocumentIdAncestor(sourceUri: Uri, targetParentUri: Uri): Boolean = runCatching {
+        if (sourceUri.authority != targetParentUri.authority) return false
+        val sourceId = DocumentsContract.getDocumentId(sourceUri)
+        val targetId = DocumentsContract.getDocumentId(targetParentUri)
+        targetId == sourceId || targetId.startsWith(sourceId.trimEnd('/') + "/")
+    }.getOrDefault(false)
     private fun isSameOrDescendant(targetParent: DocumentFile, source: DocumentFile): Boolean {
         var current: DocumentFile? = targetParent
         val visited = HashSet<String>()
@@ -229,7 +237,7 @@ object SafRepository {
         if (!isSafeName(name)) return null
         val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
             ?.takeIf { it.isDirectory } ?: return null
-        if (source.isDirectory && isSameOrDescendant(parent, source)) return null
+        if (source.isDirectory && (isSameOrDescendant(parent, source) || isDocumentIdAncestor(source.uri, parent.uri))) return null
 
         fun copyNode(src: DocumentFile, dstParent: DocumentFile, dstName: String): DocumentFile? {
             awaitTransfer(control)
