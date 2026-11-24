@@ -6,6 +6,8 @@ import androidx.compose.material.icons.automirrored.filled.TextSnippet
 import com.kayx.manager.ui.theme.Fg
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -42,6 +44,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.kayx.manager.data.archive.MultiExtract
 import com.kayx.manager.data.filesystem.ExternalOps
+import com.kayx.manager.data.filesystem.SafRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.kayx.manager.data.filesystem.FileSearchCategory
 import java.io.File
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -103,6 +109,22 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     var itemMenu by remember { mutableStateOf<Pair<FileItem, Int>?>(null) }
     var infoFor by remember { mutableStateOf<FileItem?>(null) }
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val safDestinationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { destinationTree ->
+        val selectedPaths = s.selected.toList()
+        if (destinationTree != null && selectedPaths.isNotEmpty()) {
+            scope.launch {
+                val results = withContext(Dispatchers.IO) {
+                    selectedPaths.map { path ->
+                        SafRepository.copyLocalFileToTree(ctx, File(path), destinationTree) != null
+                    }
+                }
+                val copied = results.count { it }
+                snack.showSnackbar("Copied $copied of ${results.size} item(s) to selected storage")
+                if (copied == results.size) vm.clearSelection()
+            }
+        }
+    }
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val snack = remember { SnackbarHostState() }
@@ -265,6 +287,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             }
                         }
                     } else {
+                        IconButton({ safDestinationPicker.launch(null) }) {
+                            Icon(Icons.Default.SdCard, "Copy selection to SD card or SAF folder")
+                        }
                         IconButton(vm::selectAll) { Icon(Icons.Default.SelectAll, "Select all") }
                         IconButton(vm::clearSelection) { Icon(Icons.Default.Close, "Clear selection") }
                     }
