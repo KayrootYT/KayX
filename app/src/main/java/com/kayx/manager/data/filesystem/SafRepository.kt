@@ -145,7 +145,8 @@ object SafRepository {
         val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
             ?.takeIf { it.isDirectory } ?: return null
         val mime = source.type ?: "application/octet-stream"
-        val target = parent.createFile(mime, targetName) ?: return null
+        val safeTargetName = uniqueChildName(parent, targetName)
+        val target = parent.createFile(mime, safeTargetName) ?: return null
         return try {
             val input = context.contentResolver.openInputStream(source.uri) ?: error("Cannot read source")
             val output = context.contentResolver.openOutputStream(target.uri, "wt") ?: error("Cannot write destination")
