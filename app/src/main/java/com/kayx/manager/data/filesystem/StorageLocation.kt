@@ -22,7 +22,7 @@ sealed class StorageLocation {
     }
 
     fun stableKey(): String = when (this) {
-        is Local -> "local:${directory.absoluteFile.normalize().path}"
+        is Local -> "local:${directory.absoluteFile.path}"
         is Saf -> "saf://location/${encode(treeUri)}?path=${encode(normalizeRelativePath(relativePath))}"
     }
 
