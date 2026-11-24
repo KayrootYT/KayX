@@ -94,6 +94,8 @@ object FileOps {
                     output.write(buffer, 0, count)
                     onBytesCopied(count.toLong())
                 }
+                // Treat cancellation after the final read but before the file commit as a cancel.
+                awaitTransfer(control)
                 output.fd.sync()
             }
         }
