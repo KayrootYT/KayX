@@ -50,6 +50,22 @@ class StorageTransferRepository {
     private fun transferOne(context: Context, source: StorageLocation, destination: StorageLocation, move: Boolean,
         policy: Conflict, control: FileOps.TransferControl, warnings: MutableList<String>,
         onBytesCopied: (Long) -> Unit): Boolean {
+        if (!(source is StorageLocation.Local && destination is StorageLocation.Local)) {
+            val sourceName = when (source) {
+                is StorageLocation.Local -> source.directory.name
+                is StorageLocation.Saf -> source.relativePath.substringAfterLast('/')
+            }
+            val destinationExists = when (destination) {
+                is StorageLocation.Local -> File(destination.directory, sourceName).exists()
+                is StorageLocation.Saf -> SafRepository.findByRelativePath(
+                    context, Uri.parse(destination.treeUri), destination.relativePath
+                )?.findFile(sourceName) != null
+            }
+            if (destinationExists && policy == Conflict.SKIP) return true
+            // Cross-provider replacement must stage/restore provider documents atomically.
+            // Until that is available, fail safely rather than silently turning REPLACE into KEEP_BOTH.
+            if (destinationExists && policy == Conflict.REPLACE) return false
+        }
         if (source is StorageLocation.Local && destination is StorageLocation.Local) {
             var itemCompleted = false
             val result = FileOps.transfer(
