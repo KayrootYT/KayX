@@ -427,7 +427,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 }
                 IconButton({ vm.addTab(s.dir) }) { Icon(Icons.Default.Add, "New tab") }
             }
-            if (s.selected.size == 1 && ExternalOps.isOfficeOrPdf(File(s.selected.first()))) Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (s.selected.size == 1 && StorageLocation.fromStableKey(s.selected.first()) !is StorageLocation.Saf && ExternalOps.isOfficeOrPdf(File(s.selected.first()))) Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val f1 = File(s.selected.first())
                 @Composable fun Q(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) =
                     Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Color(0x22FFFFFF)).clickable(onClick = onClick).padding(vertical = 10.dp),
