@@ -56,7 +56,8 @@ class StorageTransferRepository {
         return false
     }
 
-    private fun copySafNode(context: Context, source: DocumentFile, target: File, control: FileOps.TransferControl): Boolean = try {
+    private fun copySafNode(context: Context, source: DocumentFile, target: File, control: FileOps.TransferControl): Boolean {
+        return try {
         await(control)
         if (source.isDirectory) {
             if (!target.mkdir()) return false
@@ -75,7 +76,8 @@ class StorageTransferRepository {
             } }
         }
         true
-    } catch (_: Exception) { target.deleteRecursively(); false }
+        } catch (_: Exception) { target.deleteRecursively(); false }
+    }
 
     private fun resolveDocument(context: Context, location: StorageLocation.Saf): DocumentFile? =
         SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)
