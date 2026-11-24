@@ -41,7 +41,7 @@ object MultiExtract {
 
     private fun safe(root: File, name: String): File {
         require(name.isNotBlank() && name.none { it.code == 0 }) { "Blocked invalid archive entry" }
-        val normalized = name.replace('\\\\', '/')
+        val normalized = name.replace('\\', '/')
         require(!normalized.startsWith('/') && !Regex("^[A-Za-z]:").containsMatchIn(normalized)) {
             "Blocked absolute archive path: $name"
         }
