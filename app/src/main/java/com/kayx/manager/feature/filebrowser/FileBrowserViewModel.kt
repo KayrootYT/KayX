@@ -394,6 +394,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val paths = (if (st.dualPane && st.activePane == 1) st.secondaryItems else st.items).map { it.path }.toSet()
         if (st.dualPane && st.activePane == 1) st.copy(secondarySelected = paths) else st.copy(primarySelected = paths)
     }
+    fun selectPaths(paths: Set<String>) = updateActiveSelection { paths }
     fun clearSelection() = updateActiveSelection { emptySet() }
     private fun clearPaneSelection(pane: Int) = _s.update { st ->
         if (pane == 1) st.copy(secondarySelected = emptySet()) else st.copy(primarySelected = emptySet())
