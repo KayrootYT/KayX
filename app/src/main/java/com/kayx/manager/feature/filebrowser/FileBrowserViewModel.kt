@@ -425,6 +425,19 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun jump(raw: String) {
         val text = raw.trim()
         if (text.isEmpty()) return
+        val saf = StorageLocation.fromStableKey(text) as? StorageLocation.Saf
+        if (saf != null) {
+            viewModelScope.launch {
+                val context = appContext ?: return@launch notify("Storage context is not ready")
+                val valid = withContext(Dispatchers.IO) {
+                    SafRepository.persistedTrees(context).contains(Uri.parse(saf.treeUri)) &&
+                        SafRepository.findByRelativePath(context, Uri.parse(saf.treeUri), saf.relativePath)?.isDirectory == true
+                }
+                if (!valid) notify("SAF folder is unavailable or its permission was revoked")
+                else openLocation(saf)
+            }
+            return
+        }
         val f = File(text)
         if (!f.exists()) { notify("Path not found"); return }
         if (!f.isDirectory) { notify("Not a folder"); return }
