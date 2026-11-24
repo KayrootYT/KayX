@@ -588,7 +588,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun cancelTransfer() { _s.value.transferControl?.cancel() }
     fun retryTransfer() {
         val r = _s.value.retryTransfer ?: return
-        startTransfer(r.files.map(::File), File(r.dst), r.cut, r.policy, r.sourcePane, r.fromClipboard)
+        startStorageTransfer(r.files, r.dst, r.cut, r.policy, r.sourcePane, r.fromClipboard)
     }
     fun newFolder(n: String) {
         when (val location = activeLocation()) {
