@@ -42,7 +42,7 @@ object ApkBundleRepository {
             require(apkEntries.all { it.size > 0L }) { "Bundle contains an empty APK payload" }
 
             val apkFiles = apkEntries.map { it.name }.sortedWith(
-                compareBy<String> { if (it.substringAfterLast('/').equals("base.apk", true)) 0 else 1 }
+                compareBy<String> { if (it.substringAfterLast('/').let { base -> base.equals("base.apk", true) || base.equals("base-master.apk", true) }) 0 else 1 }
                     .thenBy { it.lowercase() }
             )
             val manifestFiles = names.filter {
@@ -68,8 +68,10 @@ object ApkBundleRepository {
         try {
             ZipFile(bundle).use { zip ->
                 val baseName = inspection.apkFiles.firstOrNull {
-                    it.substringAfterLast('/').equals("base.apk", ignoreCase = true)
-                } ?: error("This bundle has no base.apk; install requires a base APK")
+                    it.substringAfterLast('/').let { base ->
+                        base.equals("base.apk", ignoreCase = true) || base.equals("base-master.apk", ignoreCase = true)
+                    }
+                } ?: error("This bundle has no base.apk or base-master.apk; install requires a base APK")
                 val ordered = listOf(baseName) + inspection.apkFiles.filterNot { it == baseName }
                 ordered.forEachIndexed { index, name ->
                     val entry = zip.getEntry(name) ?: error("Missing APK payload: $name")
