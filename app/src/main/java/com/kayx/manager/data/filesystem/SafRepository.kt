@@ -201,6 +201,8 @@ object SafRepository {
             output.write(buffer, 0, count)
             onBytesCopied(count.toLong())
         }
+        // Do not commit a completed-looking file if cancellation arrived after the final read.
+        awaitTransfer(control)
         output.flush()
     }
     fun createFolder(context: Context, treeUri: Uri, parentRelativePath: String, name: String): Uri? {
