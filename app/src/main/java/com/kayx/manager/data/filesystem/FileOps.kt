@@ -82,7 +82,7 @@ object FileOps {
     }
 
     /** Stream files in bounded chunks so pause/cancel also works during a single large file. */
-    private fun copyFileControlled(src: File, dest: File, control: TransferControl) {
+    private fun copyFileControlled(src: File, dest: File, control: TransferControl, onBytesCopied: (Long) -> Unit = {}) {
         dest.parentFile?.let { check(it.exists() || it.mkdirs()) { "Cannot create destination folder: ${it.path}" } }
         java.io.FileInputStream(src).use { input ->
             java.io.FileOutputStream(dest, false).use { output ->
@@ -92,13 +92,14 @@ object FileOps {
                     val count = input.read(buffer)
                     if (count < 0) break
                     output.write(buffer, 0, count)
+                    onBytesCopied(count.toLong())
                 }
                 output.fd.sync()
             }
         }
     }
 
-    private fun copyAny(src: File, dest: File, control: TransferControl) {
+    private fun copyAny(src: File, dest: File, control: TransferControl, onBytesCopied: (Long) -> Unit = {}) {
         awaitTransfer(control)
         val lexicalPath = src.absolutePath
         check(src.canonicalPath == lexicalPath) { "Refusing to follow symbolic link: ${src.name}" }
@@ -107,9 +108,9 @@ object FileOps {
             val children = src.listFiles() ?: error("Cannot read folder: ${src.name}")
             for (child in children) {
                 awaitTransfer(control)
-                copyAny(child, File(dest, child.name), control)
+                copyAny(child, File(dest, child.name), control, onBytesCopied)
             }
-        } else copyFileControlled(src, dest, control)
+        } else copyFileControlled(src, dest, control, onBytesCopied)
     }
 
     /** Like [copyAny], but removes a half-written destination when the copy fails. */
@@ -117,15 +118,16 @@ object FileOps {
         try { copyAny(src, dest) } catch (e: Exception) { dest.deleteRecursively(); throw e }
     }
 
-    private fun copyClean(src: File, dest: File, control: TransferControl) {
-        try { copyAny(src, dest, control) } catch (e: Exception) { dest.deleteRecursively(); throw e }
+    private fun copyClean(src: File, dest: File, control: TransferControl, onBytesCopied: (Long) -> Unit = {}) {
+        try { copyAny(src, dest, control, onBytesCopied) } catch (e: Exception) { dest.deleteRecursively(); throw e }
     }
 
     /** Copy or move [files] into [dst] using [policy] for name conflicts. Returns number of items processed. */
     fun transfer(
         files: List<File>, dst: File, move: Boolean, policy: Conflict,
         onProgress: (completed: Int, total: Int, currentName: String) -> Unit = { _, _, _ -> },
-        control: TransferControl = TransferControl()
+        control: TransferControl = TransferControl(),
+        onBytesCopied: (Long) -> Unit = {}
     ): Result<Int> = runCatching {
         var n = 0
         val total = files.size
@@ -160,7 +162,7 @@ object FileOps {
             try {
                 if (move) {
                     if (!f.renameTo(dest)) {
-                        copyClean(f, dest, control)
+                        copyClean(f, dest, control, onBytesCopied)
                         // Once the full destination copy exists, never delete it merely because
                         // source cleanup failed: recursive deletion can fail after partial progress.
                         preserveCompletedCopy = true
@@ -177,7 +179,7 @@ object FileOps {
                             error("Copied ${f.name}, but source cleanup failed; destination copy was retained")
                         }
                     }
-                } else copyClean(f, dest, control)
+                } else copyClean(f, dest, control, onBytesCopied)
                 replaceBackup?.deleteRecursively()
             } catch (e: Exception) {
                 if (!preserveCompletedCopy) dest.deleteRecursively()
