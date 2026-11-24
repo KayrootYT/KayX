@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
     private val privateSessionActive = mutableStateOf(false)
     private val selectedSafTree = mutableStateOf<String?>(null)
     private val PRIVATE_SESSION_STATE = "kayx_private_session_active"
+    private val ACTIVE_SAF_TREE_STATE = "kayx_active_saf_tree"
     private val legacyPerm = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted.value = hasAccess() }
     private val safTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null && com.kayx.manager.data.filesystem.SafRepository.persistTreePermission(this, uri)) {
@@ -83,6 +84,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(PRIVATE_SESSION_STATE, privateSessionActive.value || privateNeedsUnlock.value)
+        outState.putString(ACTIVE_SAF_TREE_STATE, selectedSafTree.value)
         super.onSaveInstanceState(outState)
     }
 
@@ -91,6 +93,10 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState?.getBoolean(PRIVATE_SESSION_STATE) == true) {
             privateSessionActive.value = true
             privateNeedsUnlock.value = true
+        }
+        selectedSafTree.value = savedInstanceState?.getString(ACTIVE_SAF_TREE_STATE)?.let { saved ->
+            com.kayx.manager.data.filesystem.SafRepository.persistedTrees(this)
+                .firstOrNull { it.toString() == saved }?.toString()
         }
         enableEdgeToEdge()
         val shortcutFile = intent?.getStringExtra("path")?.let { java.io.File(it) }?.takeIf { it.exists() }
