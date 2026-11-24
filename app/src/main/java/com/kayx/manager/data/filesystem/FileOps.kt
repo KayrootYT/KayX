@@ -142,7 +142,7 @@ object FileOps {
                 check(!(dst.canonicalPath.trimEnd(File.separatorChar) + File.separator).startsWith(src)) { "Cannot copy a folder into itself" }
             }
             val same = dest.exists() && dest.canonicalPath == f.canonicalPath
-            if (same && move) continue
+            if (same && move) { onProgress(index + 1, total, f.name); continue }
             if (dest.exists()) {
                 when {
                     same -> dest = uniqueName(dst, f.name)
