@@ -3,6 +3,7 @@ package com.kayx.manager.data.apk
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.nio.file.Files
 import java.util.UUID
 
 /**
@@ -49,7 +50,7 @@ object ApkBackupRepository {
             }
 
             check(!finalTarget.exists()) { "Backup destination already exists" }
-            check(staging.renameTo(finalTarget)) { "Could not finalize APK backup" }
+            Files.move(staging.toPath(), finalTarget.toPath())
             finalTarget
         } catch (t: Throwable) {
             staging.deleteRecursively()
