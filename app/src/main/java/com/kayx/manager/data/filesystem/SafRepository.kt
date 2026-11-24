@@ -416,6 +416,7 @@ object SafRepository {
         input.use { src -> output.use { dst -> copyStream(src, dst, control) } }
         true
     } catch (_: Exception) {
+        runCatching { document(context, destinationUri)?.delete() }
         false
     }
 
