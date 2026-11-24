@@ -15,9 +15,18 @@ class StorageTransferRepository {
         policy: Conflict, control: FileOps.TransferControl,
         onProgress: (Int, Int, String, Long, Long) -> Unit = { _, _, _, _, _ -> }): Result<Outcome> = runCatching {
         val destination = location(destinationKey)
-        if (destination is StorageLocation.Saf) {
-            require(SafRepository.hasWriteAccess(context, Uri.parse(destination.treeUri))) {
-                "Selected SAF destination is read-only or its write permission was revoked"
+        when (destination) {
+            is StorageLocation.Local -> require(destination.directory.isDirectory && destination.directory.canWrite()) {
+                "Local destination folder is unavailable or not writable"
+            }
+            is StorageLocation.Saf -> {
+                val tree = Uri.parse(destination.treeUri)
+                require(SafRepository.hasWriteAccess(context, tree)) {
+                    "Selected SAF destination is read-only or its write permission was revoked"
+                }
+                require(SafRepository.findByRelativePath(context, tree, destination.relativePath)?.isDirectory == true) {
+                    "Selected SAF destination folder is unavailable"
+                }
             }
         }
         require(sourceKeys.isNotEmpty()) { "No source items selected" }
