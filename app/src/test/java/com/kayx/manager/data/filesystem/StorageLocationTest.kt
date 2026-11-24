@@ -45,6 +45,21 @@ class StorageLocationTest {
         assertNull(StorageLocation.fromStableKey("file:///storage/emulated/0"))
         assertNull(StorageLocation.fromStableKey("saf://location/%ZZ?path="))
     }
+    @Test
+    fun safStableKeyPreservesReservedUriAndPathCharacters() {
+        val original = StorageLocation.Saf(
+            "content://provider/tree/volume%3Afolder?mode=read%2Bwrite#document",
+            "Books/100% complete + notes?/हिंदी"
+        )
+
+        assertEquals(original, StorageLocation.fromStableKey(original.stableKey()))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun safLocationRejectsBackslashAndControlCharacters() {
+        StorageLocation.Saf("content://provider/tree/root", "folder\\\\child")
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun childRejectsPathSeparators() {
         StorageLocation.Saf("content://provider/tree/root").child("../outside")
