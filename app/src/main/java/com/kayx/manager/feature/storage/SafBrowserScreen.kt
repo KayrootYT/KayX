@@ -44,6 +44,8 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     var deleteTarget by remember { mutableStateOf<SafRepository.Entry?>(null) }
     var name by remember { mutableStateOf("") }
     var exportSource by remember { mutableStateOf<Uri?>(null) }
+    var transferEntry by remember { mutableStateOf<SafRepository.Entry?>(null) }
+    var moveTransfer by remember { mutableStateOf(false) }
     suspend fun refresh() {
         loading = true
         error = null
@@ -76,6 +78,21 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                 if (!ok) error = "Export failed"
             }
         }
+    }
+    val destinationTreePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { destinationTree ->
+        val source = transferEntry
+        transferEntry = null
+        if (destinationTree != null && source != null) {
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    if (moveTransfer) SafRepository.moveDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
+                    else SafRepository.copyDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
+                }
+                moveTransfer = false
+                if (result == null) error = if (source.isDirectory) "Folder transfer failed. Check destination permission and available space." else "File transfer failed."
+                else if (source.uri in entries.map { it.uri }) scope.launch { refresh() }
+            }
+        } else moveTransfer = false
     }
 
     LaunchedEffect(treeUri, relativePath) { refresh() }
@@ -141,6 +158,18 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                                 menu = false
                                 exportSource = entry.uri
                                 exportPicker.launch(entry.name)
+                            })
+                            DropdownMenuItem(text = { Text("Copy to storage…") }, leadingIcon = { Icon(Icons.Default.FileUpload, null) }, onClick = {
+                                menu = false
+                                transferEntry = entry
+                                moveTransfer = false
+                                destinationTreePicker.launch(null)
+                            })
+                            DropdownMenuItem(text = { Text("Move to storage…") }, leadingIcon = { Icon(Icons.Default.FileDownload, null) }, onClick = {
+                                menu = false
+                                transferEntry = entry
+                                moveTransfer = true
+                                destinationTreePicker.launch(null)
                             })
                             DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = {
                                 menu = false; renameTarget = entry; name = entry.name
