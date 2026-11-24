@@ -183,7 +183,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     BackHandler { if (!vm.up()) onExit() }
 
     if (s.dualPane) DualPaneBrowser(
-        s, vm, snack, onExit, onSettings, onBrowseSaf = { safLocationPicker.launch(null) }, onOpenFile,
+        s, vm, snack, onExit, onSettings, onBrowseSaf = { safLocationPicker.launch(null) }, onOpenFile = onOpenFile,
         onDialog = { dlg = it }, onOpenItem = openItem, onOpenWith = { openFor = it }, onProperties = { infoFor = it },
         onItemMenu = { f, pane -> itemMenu = f to pane }
     ) else Scaffold(
