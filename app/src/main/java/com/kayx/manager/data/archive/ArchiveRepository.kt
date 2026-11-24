@@ -24,7 +24,7 @@ class ArchiveRepository {
 
     private fun normalizedEntryName(name: String): String {
         require(name.isNotBlank() && name.none { it.code == 0 }) { "Archive contains an invalid entry name" }
-        val normalized = name.replace('\\\\', '/')
+        val normalized = name.replace('\\', '/')
         require(!normalized.startsWith('/') && !Regex("^[A-Za-z]:").containsMatchIn(normalized)) {
             "Blocked absolute archive path: $name"
         }
