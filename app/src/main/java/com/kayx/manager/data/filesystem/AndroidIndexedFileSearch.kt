@@ -22,8 +22,30 @@ class AndroidIndexedFileSearch(private val context: Context) {
     suspend fun search(request: FileSearchRequest): FileSearchResult = withContext(Dispatchers.IO) {
         if (request.query.isBlank()) return@withContext FileSearchResult(emptyList(), 0, false)
         if (request.mode == SearchMode.REGEX) return@withContext fallback.search(request)
-        val indexed = queryMediaStore(request)
-        if (indexed.items.isNotEmpty()) indexed else fallback.search(request)
+        // MediaStore is fast but not complete: recently downloaded, app-created, and
+        // non-media files may not be indexed yet. Always merge it with the bounded
+        // filesystem index so a partial MediaStore hit never hides valid matches.
+        val filesystem = fallback.search(request)
+        val media = runCatching { queryMediaStore(request) }.getOrNull()
+            ?: return@withContext filesystem
+        val cap = request.maxResults.coerceIn(1, 100_000)
+        val merged = (media.items.asSequence() + filesystem.items.asSequence())
+            .distinctBy { it.path }
+            .toList()
+            .let { items ->
+                val sorted = when (request.sortBy) {
+                    SortBy.NAME -> items.sortedWith(compareBy<FileItem> { !it.isDir }.thenBy { it.name.lowercase(Locale.ROOT) })
+                    SortBy.TYPE -> items.sortedWith(compareBy<FileItem> { !it.isDir }.thenBy { it.name.substringAfterLast('.', "").lowercase(Locale.ROOT) })
+                    SortBy.SIZE -> items.sortedWith(compareBy<FileItem> { !it.isDir }.thenByDescending { it.size })
+                    SortBy.DATE -> items.sortedWith(compareBy<FileItem> { !it.isDir }.thenByDescending { it.modified })
+                }
+                sorted.take(cap)
+            }
+        FileSearchResult(
+            items = merged,
+            scannedEntries = maxOf(media.scannedEntries, filesystem.scannedEntries),
+            truncated = media.truncated || filesystem.truncated || media.items.size + filesystem.items.size > cap
+        )
     }
 
     suspend fun searchContents(request: FileSearchRequest): FileSearchResult =
