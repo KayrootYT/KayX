@@ -249,6 +249,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val saved = _s.value
         SettingsStore.updateDualPane(saved.dualPane)
         SettingsStore.updateBrowserSession(saved.dir, saved.secondaryDir, saved.activePane)
+        persistSafBrowserSession(saved)
         reload()
     }
 
@@ -273,6 +274,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                 st.copy(tabs = tabs, activeTab = active, dir = tab.path, primarySelected = tab.selected)
             }
         }
+        persistSafBrowserSession(_s.value)
         reload()
     }
 
@@ -286,6 +288,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                 primarySelected = tab.selected
             )
         }
+        persistSafBrowserSession(_s.value)
         reload()
     }
 
