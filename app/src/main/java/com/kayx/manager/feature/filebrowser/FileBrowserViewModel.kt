@@ -14,6 +14,8 @@ import com.kayx.manager.data.filesystem.FileOps
 import com.kayx.manager.data.filesystem.FileOperationSounds
 import com.kayx.manager.data.filesystem.FileActionSound
 import com.kayx.manager.data.filesystem.FileRepository
+import com.kayx.manager.data.filesystem.StorageLocation
+import com.kayx.manager.data.filesystem.StorageLocationRepository
 import com.kayx.manager.data.filesystem.FileSearchCategory
 import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.domain.model.FileItem
@@ -103,6 +105,7 @@ data class RetryTransfer(
 internal enum class NavMove { PUSH, BACK, FORWARD }
 
 class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), private val archive: ArchiveRepository = ArchiveRepository()) : ViewModel() {
+    private val storageLocations = StorageLocationRepository()
     private val _s = MutableStateFlow(BrowserState(showHidden = SettingsStore.showHidden, sort = SettingsStore.defaultSort, dualPane = SettingsStore.dualPane, tabMode = SettingsStore.dualTabs))
     private var applied = Triple(SettingsStore.showHidden, SettingsStore.defaultSort, SettingsStore.dualPane)
     private var appContext: Context? = null
@@ -127,6 +130,19 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
 
     fun open(path: String) = navigatePane(0, path, NavMove.PUSH)
+
+    /** Open a persisted SAF tree or a local directory in the active browser pane. */
+    fun openLocation(location: StorageLocation, pane: Int = _s.value.activeIdx) {
+        val key = location.stableKey()
+        if (pane == 1) openSecondary(key) else open(key)
+    }
+
+    private fun locationOf(key: String): StorageLocation =
+        StorageLocation.fromStableKey(key) ?: StorageLocation.Local(File(key))
+
+    fun activeLocation(): StorageLocation = locationOf(
+        if (_s.value.dualPane && _s.value.activePane == 1) _s.value.secondaryDir else _s.value.dir
+    )
 
     /** Change the folder of one pane and keep that pane's back/forward history. */
     private fun navigatePane(pane: Int, path: String, move: NavMove) {
@@ -253,7 +269,11 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         reload()
     }
 
-    private fun activeDirectory(s: BrowserState = _s.value): File = File(if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir)
+    private fun activeLocation(s: BrowserState = _s.value): StorageLocation =
+        locationOf(if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir)
+
+    private fun activeDirectory(s: BrowserState = _s.value): File =
+        (activeLocation(s) as? StorageLocation.Local)?.directory ?: File("/")
 
     fun navigateUpActive(): Boolean {
         val s = _s.value
@@ -301,17 +321,29 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             _s.update { it.copy(loading = true) }
             val (main, secondary) = coroutineScope {
                 val scope = this
-                suspend fun load(dir: String, pane: Int): List<FileItem> =
-                    if (searchActive && searchPane == pane) {
-                        if (snapshot.grep && !isFilenamePattern(snapshot.query)) repo.searchContents(File(dir), snapshot.query, snapshot.showHidden, isActive = { scope.isActive })
-                        else repo.search(File(dir), snapshot.query, snapshot.showHidden, SettingsStore.searchMode, SettingsStore.searchAgeMs, snapshot.searchCategory.extensions, snapshot.sort)
-                    } else repo.list(File(dir), snapshot.showHidden, snapshot.sort)
+                suspend fun load(dir: String, pane: Int): List<FileItem> {
+                    val location = locationOf(dir)
+                    if (location is StorageLocation.Saf) {
+                        val context = appContext ?: return emptyList()
+                        val listed = storageLocations.list(context, location, snapshot.showHidden, snapshot.sort)
+                        return if (searchActive && searchPane == pane) {
+                            listed.filter { it.name.contains(snapshot.query.trim(), ignoreCase = true) &&
+                                (snapshot.searchCategory.extensions.isEmpty() || it.isDir ||
+                                    it.name.substringAfterLast('.', "").lowercase() in snapshot.searchCategory.extensions) }
+                        } else listed
+                    }
+                    val local = (location as StorageLocation.Local).directory
+                    return if (searchActive && searchPane == pane) {
+                        if (snapshot.grep && !isFilenamePattern(snapshot.query)) repo.searchContents(local, snapshot.query, snapshot.showHidden, isActive = { scope.isActive })
+                        else repo.search(local, snapshot.query, snapshot.showHidden, SettingsStore.searchMode, SettingsStore.searchAgeMs, snapshot.searchCategory.extensions, snapshot.sort)
+                    } else repo.list(local, snapshot.showHidden, snapshot.sort)
+                }
                 val mainTask = async(Dispatchers.IO) { load(snapshot.dir, 0) }
                 val secondaryTask = if (snapshot.dualPane) async(Dispatchers.IO) { load(snapshot.secondaryDir, 1) } else null
                 mainTask.await() to (secondaryTask?.await() ?: snapshot.secondaryItems)
             }
-            if (main.isEmpty() && !snapshot.searching) {
-                val d = File(snapshot.dir)
+            if (main.isEmpty() && !snapshot.searching && locationOf(snapshot.dir) is StorageLocation.Local) {
+                val d = (locationOf(snapshot.dir) as StorageLocation.Local).directory
                 if (d.isDirectory && d.listFiles() == null) _s.update { it.copy(message = "Permission denied: this folder can't be read") }
             }
             _s.update { current ->
