@@ -346,7 +346,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     val location = locationOf(dir)
                     if (location is StorageLocation.Saf) {
                         val context = appContext ?: return emptyList()
-                        val listed = storageLocations.list(context, location, snapshot.showHidden, snapshot.sort)
+                        val listed = try {
+                            storageLocations.list(context, location, snapshot.showHidden, snapshot.sort)
+                        } catch (error: Exception) {
+                            _s.update { it.copy(message = "Storage unavailable: " + (error.message ?: "permission revoked or device disconnected")) }
+                            return emptyList()
+                        }
                         return if (searchActive && searchPane == pane) {
                             listed.filter { it.name.contains(snapshot.query.trim(), ignoreCase = true) &&
                                 (snapshot.searchCategory.extensions.isEmpty() || it.isDir ||
@@ -391,6 +396,10 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
 
     fun moveToPrivate(ctx: Context) {
+        if (_s.value.selected.any { locationOf(it) is StorageLocation.Saf }) {
+            notify("Move from SAF to Private space is not supported yet")
+            return
+        }
         if (!com.kayx.manager.data.storage.PrivateSpace.hasPin(ctx)) { notify("Open Private space on Home and create a PIN first"); return }
         if (!com.kayx.manager.data.storage.PrivateSpace.isUnlocked()) { notify("Unlock Private space before moving files into it"); return }
         val files = _s.value.selected.map(::File)
@@ -627,6 +636,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         }
     }
     fun zipSelected(name: String) {
+        if (_s.value.selected.any { locationOf(it) is StorageLocation.Saf }) { notify("Archive creation from SAF is not supported yet"); return }
         val f = _s.value.selected.map(::File)
         val n = name.trim().replace('/', '_').ifEmpty { "archive" }.let { if (it.endsWith(".zip", true)) it else "$it.zip" }
         val out = File(activeDirectory(), n)
@@ -670,14 +680,23 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val list = if (st.dualPane && st.activePane == 1) st.secondaryItems else st.items
         if (st.dualPane && st.activePane == 1) st.copy(secondarySelected = list.filter { rx.matches(it.name) }.map { it.path }.toSet()) else st.copy(primarySelected = list.filter { rx.matches(it.name) }.map { it.path }.toSet())
     }
-    fun duplicateSelected() { val f = _s.value.selected.map(::File); run({ FileOps.duplicate(f) }, "Duplicated ${f.size}", FileActionSound.COPY) }
+    fun duplicateSelected() {
+        if (_s.value.selected.any { locationOf(it) is StorageLocation.Saf }) { notify("Duplicate is not available for SAF items yet"); return }
+        val f = _s.value.selected.map(::File)
+        run({ FileOps.duplicate(f) }, "Duplicated ${f.size}", FileActionSound.COPY)
+    }
     fun batchRename(find: String, replace: String, regex: Boolean, start: Int) {
+        if (_s.value.selected.any { locationOf(it) is StorageLocation.Saf }) { notify("Batch rename is not available for SAF items yet"); return }
         val f = _s.value.selected.map(::File).sortedBy { it.name.lowercase() }
         run({ FileOps.batchRename(f, find, replace, regex, start) }, "Renamed ${f.size}", FileActionSound.RENAME)
     }
-    fun symlink(target: String, name: String) = run({ runCatching { FileOps.symlink(File(target), File(activeDirectory(), name)) } }, "Symlink created", FileActionSound.CREATE)
+    fun symlink(target: String, name: String) {
+        if (activeLocation() is StorageLocation.Saf || locationOf(target) is StorageLocation.Saf) { notify("Symbolic links are not supported by SAF storage"); return }
+        run({ runCatching { FileOps.symlink(File(target), File(activeDirectory(), name)) } }, "Symlink created", FileActionSound.CREATE)
+    }
 
     fun extractHere(path: String) {
+        if (locationOf(path) is StorageLocation.Saf) { notify("Extracting archives from SAF is not supported yet"); return }
         viewModelScope.launch {
             notify("Extracting…")
             val r = withContext(Dispatchers.IO) { MultiExtract.extract(File(path)) }
@@ -688,6 +707,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         }
     }
     fun alignZip(path: String) {
+        if (locationOf(path) is StorageLocation.Saf) { notify("ZIP alignment from SAF is not supported yet"); return }
         viewModelScope.launch {
             val r = withContext(Dispatchers.IO) { ArchiveEdit.rewrite(File(path)) }
             repo.invalidateSearchCache()
@@ -696,6 +716,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         }
     }
     fun signApk(ctx: Context, path: String) {
+        if (locationOf(path) is StorageLocation.Saf) { notify("APK signing from SAF is not supported yet"); return }
         viewModelScope.launch {
             notify("Signing…")
             val f = File(path)
@@ -707,6 +728,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
 
     fun convert(ctx: Context, path: String) {
+        if (locationOf(path) is StorageLocation.Saf) { notify("Conversion from SAF is not supported yet"); return }
         viewModelScope.launch {
             notify("Converting…")
             val result = withContext(Dispatchers.IO) {
