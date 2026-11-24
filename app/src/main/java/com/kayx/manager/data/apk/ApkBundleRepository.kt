@@ -30,14 +30,14 @@ object ApkBundleRepository {
             require(names.distinct().size == names.size) { "Bundle contains duplicate entry names" }
             names.forEach { name ->
                 require(name.isNotBlank() && !name.startsWith("/") && !name.startsWith("\\") &&
-                    !name.split('/', '\\').any { it == ".." } && name.indexOf(0) < 0) {
+                    !name.split('/', '\\').any { it == ".." } && name.none { it.code == 0 }) {
                     "Bundle contains an unsafe entry name"
                 }
             }
             val apkEntries = entries.filter { it.name.endsWith(".apk", ignoreCase = true) }
             require(apkEntries.isNotEmpty()) { "No APK payloads found in bundle" }
             require(apkEntries.size <= MAX_APK_COUNT) { "Bundle contains too many APK files" }
-            val totalBytes = apkEntries.fold(0L) { total, entry ->
+            apkEntries.fold(0L) { total, entry ->
                 require(entry.size > 0L) { "Bundle contains an empty or unknown-size APK payload" }
                 require(entry.size <= MAX_TOTAL_APK_BYTES - total) {
                     "APK payload is larger than the supported 1 GiB limit"
