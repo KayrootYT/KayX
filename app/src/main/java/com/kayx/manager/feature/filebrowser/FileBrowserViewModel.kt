@@ -458,8 +458,10 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         viewModelScope.launch {
             _s.update { it.copy(transferProgress = TransferProgress(0, files.size, "Preparing", cut)) }
             val before = withContext(Dispatchers.IO) { dst.list()?.toSet().orEmpty() }
+            var completedBeforeFailure = 0
             val result = withContext(Dispatchers.IO) {
                 FileOps.transfer(files, dst, cut, policy ?: Conflict.KEEP_BOTH, { completed, total, name ->
+                    completedBeforeFailure = maxOf(completedBeforeFailure, completed)
                     _s.update { it.copy(transferProgress = TransferProgress(completed, total, name, cut)) }
                 }, control).map { }
             }
@@ -475,8 +477,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     transferProgress = null,
                     recent = if (result.isSuccess) fresh else emptySet(),
                     transferControl = null,
-                    retryTransfer = if (result.isFailure) RetryTransfer(
-                        files.map { it.absolutePath }, dst.absolutePath, cut, sourcePane, fromClipboard, policy ?: Conflict.KEEP_BOTH
+                    retryTransfer = if (result.isFailure && completedBeforeFailure < files.size) RetryTransfer(
+                        files.drop(completedBeforeFailure).map { it.absolutePath }, dst.absolutePath, cut, sourcePane, fromClipboard, policy ?: Conflict.KEEP_BOTH
                     ) else null,
                     message = result.exceptionOrNull()?.message ?: (if (cut) "Moved ${files.size}" else "Copied ${files.size}")
                 )
