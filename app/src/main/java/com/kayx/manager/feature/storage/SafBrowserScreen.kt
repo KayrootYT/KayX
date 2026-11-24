@@ -82,10 +82,18 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             scope.launch {
                 val source = DocumentFile.fromSingleUri(context, sourceUri)
                 val displayName = source?.name ?: "imported-file"
+                val control = FileOps.TransferControl()
+                transferControl = control
+                transferPaused = false
+                transferProgress = "Importing: $displayName"
                 val copied = withContext(Dispatchers.IO) {
-                    SafRepository.copyIntoTree(context, sourceUri, treeUri, relativePath, displayName)
+                    SafRepository.copyIntoTree(context, sourceUri, treeUri, relativePath, displayName, control)
                 }
-                if (copied == null) error = "Import failed. Check write permission and available space."
+                transferProgress = null
+                control.state = if (control.isStopped()) FileOps.TransferState.CANCELLED else if (copied == null) FileOps.TransferState.FAILED else FileOps.TransferState.COMPLETE
+                transferControl = null
+                transferPaused = false
+                if (copied == null) error = if (control.isStopped()) "Import cancelled" else "Import failed. Check write permission and available space."
                 refresh()
             }
         }
@@ -95,8 +103,16 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         exportSource = null
         if (destinationUri != null && sourceUri != null) {
             scope.launch {
-                val ok = withContext(Dispatchers.IO) { SafRepository.exportDocument(context, sourceUri, destinationUri) }
-                if (!ok) error = "Export failed"
+                val control = FileOps.TransferControl()
+                transferControl = control
+                transferPaused = false
+                transferProgress = "Exporting selected file"
+                val ok = withContext(Dispatchers.IO) { SafRepository.exportDocument(context, sourceUri, destinationUri, control) }
+                transferProgress = null
+                control.state = if (control.isStopped()) FileOps.TransferState.CANCELLED else if (ok) FileOps.TransferState.COMPLETE else FileOps.TransferState.FAILED
+                transferControl = null
+                transferPaused = false
+                if (!ok) error = if (control.isStopped()) "Export cancelled" else "Export failed"
             }
         }
     }
