@@ -1,6 +1,7 @@
 package com.kayx.manager.data.filesystem
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,6 +28,27 @@ class FileTransferControlTest {
             assertTrue(control.isStopped())
             assertFalse(File(destination, source.name).exists())
             assertTrue(source.exists())
+        } finally {
+            base.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun reportsActualBytesWrittenDuringCopy() {
+        val base = createTempDir(prefix = "kayx-transfer-progress-")
+        try {
+            val source = File(base, "source.bin").apply { writeBytes(ByteArray(150_000) { 3 }) }
+            val destination = File(base, "destination").apply { mkdirs() }
+            var copiedBytes = 0L
+
+            val result = FileOps.transfer(
+                listOf(source), destination, move = false, policy = Conflict.KEEP_BOTH,
+                onBytesCopied = { copiedBytes += it }
+            )
+
+            assertTrue(result.isSuccess)
+            assertEquals(source.length(), copiedBytes)
+            assertEquals(source.length(), File(destination, source.name).length())
         } finally {
             base.deleteRecursively()
         }
