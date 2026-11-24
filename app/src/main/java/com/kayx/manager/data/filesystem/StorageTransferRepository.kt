@@ -30,23 +30,33 @@ class StorageTransferRepository {
                 failures.addAll(sourceKeys.drop(index))
                 break
             }
+            var currentItemBytes = 0L
+            val byteCallback: (Long) -> Unit = { delta ->
+                currentItemBytes += delta.coerceAtLeast(0L)
+                onProgress(index, sourceKeys.size, name, completedBytes + currentItemBytes, totalBytes)
+            }
             onProgress(index, sourceKeys.size, name, completedBytes, totalBytes)
-            val ok = try { transferOne(context, source, destination, move, policy, control, warnings) }
+            val ok = try { transferOne(context, source, destination, move, policy, control, warnings, byteCallback) }
                 catch (_: Exception) { false }
-            if (ok) { completed++; completedBytes += itemBytes } else failures += key
+            if (ok) {
+                completed++
+                completedBytes = (completedBytes + maxOf(itemBytes, currentItemBytes)).coerceAtMost(totalBytes)
+            } else failures += key
             onProgress(index + 1, sourceKeys.size, name, completedBytes, totalBytes)
         }
         Outcome(completed, failures, warnings)
     }
 
     private fun transferOne(context: Context, source: StorageLocation, destination: StorageLocation, move: Boolean,
-        policy: Conflict, control: FileOps.TransferControl, warnings: MutableList<String>): Boolean {
+        policy: Conflict, control: FileOps.TransferControl, warnings: MutableList<String>,
+        onBytesCopied: (Long) -> Unit): Boolean {
         if (source is StorageLocation.Local && destination is StorageLocation.Local) {
             var itemCompleted = false
             val result = FileOps.transfer(
                 listOf(source.directory), destination.directory, move, policy,
                 onProgress = { completed, _, _ -> if (completed > 0) itemCompleted = true },
-                control = control
+                control = control,
+                onBytesCopied = onBytesCopied
             )
             if (result.isSuccess) return true
             // FileOps reports source-cleanup failure after retaining the complete destination.
@@ -58,16 +68,17 @@ class StorageTransferRepository {
         }
         if (source is StorageLocation.Local && destination is StorageLocation.Saf) {
             val tree = Uri.parse(destination.treeUri)
-            if (!move) return SafRepository.copyLocalFileToTree(context, source.directory, tree, destination.relativePath, control) != null
+            if (!move) return SafRepository.copyLocalFileToTree(context, source.directory, tree, destination.relativePath, control, onBytesCopied) != null
             var cleanupFailed = false
-            val copied = SafRepository.moveLocalFileToTree(context, source.directory, tree, destination.relativePath, control) { cleanupFailed = true }
+            val copied = SafRepository.moveLocalFileToTree(context, source.directory, tree, destination.relativePath, control,
+                onSourceCleanupFailure = { cleanupFailed = true }, onBytesCopied = onBytesCopied)
             if (cleanupFailed) warnings += source.directory.name
             return copied != null
         }
         if (source is StorageLocation.Saf && destination is StorageLocation.Saf) {
             val doc = resolveDocument(context, source) ?: return false
-            val copied = if (move) SafRepository.moveDocumentToTree(context, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control)
-                else SafRepository.copyDocumentToTree(context, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control)
+            val copied = if (move) SafRepository.moveDocumentToTree(context, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control, onBytesCopied)
+                else SafRepository.copyDocumentToTree(context, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control, onBytesCopied)
             return copied != null
         }
         if (source is StorageLocation.Saf && destination is StorageLocation.Local) {
@@ -81,14 +92,14 @@ class StorageTransferRepository {
                     (destinationPath == sourcePath || destinationPath.toPath().startsWith(sourcePath.toPath()))) return false
             }
             val target = uniqueTarget(destination.directory, sourceName, policy) ?: return false
-            if (!copySafNode(context, doc, target, control)) return false
+            if (!copySafNode(context, doc, target, control, onBytesCopied)) return false
             if (move && !SafRepository.delete(context, doc.uri)) warnings += (doc.name ?: target.name)
             return true
         }
         return false
     }
 
-    private fun copySafNode(context: Context, source: DocumentFile, target: File, control: FileOps.TransferControl): Boolean {
+    private fun copySafNode(context: Context, source: DocumentFile, target: File, control: FileOps.TransferControl, onBytesCopied: (Long) -> Unit): Boolean {
         return try {
         await(control)
         if (source.isDirectory) {
@@ -97,13 +108,13 @@ class StorageTransferRepository {
                 await(control)
                 val name = child.name ?: error("Provider returned an unnamed item")
                 val childTarget = uniqueTarget(target, name, Conflict.KEEP_BOTH) ?: error("Cannot create child")
-                check(copySafNode(context, child, childTarget, control)) { "Could not copy " + name }
+                check(copySafNode(context, child, childTarget, control, onBytesCopied)) { "Could not copy " + name }
             }
         } else {
             val input = context.contentResolver.openInputStream(source.uri) ?: error("Cannot read source")
             input.use { src -> target.outputStream().use { dst ->
                 val buffer = ByteArray(64 * 1024)
-                while (true) { await(control); val count = src.read(buffer); if (count < 0) break; dst.write(buffer, 0, count) }
+                while (true) { await(control); val count = src.read(buffer); if (count < 0) break; dst.write(buffer, 0, count); onBytesCopied(count.toLong()) }
                 dst.flush()
             } }
         }
