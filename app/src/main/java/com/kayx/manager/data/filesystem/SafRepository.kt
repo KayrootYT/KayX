@@ -112,6 +112,18 @@ object SafRepository {
         return current
     }
 
+    /** Prevent recursive copies when a folder is targeted inside itself through another tree URI. */
+    private fun isSameOrDescendant(targetParent: DocumentFile, source: DocumentFile): Boolean {
+        var current: DocumentFile? = targetParent
+        val visited = HashSet<String>()
+        while (current != null) {
+            val key = current.uri.toString()
+            if (!visited.add(key)) return false
+            if (current.uri == source.uri) return true
+            current = current.parentFile
+        }
+        return false
+    }
     fun createFolder(context: Context, treeUri: Uri, parentRelativePath: String, name: String): Uri? {
         if (!isSafeName(name)) return null
         return findByRelativePath(context, treeUri, parentRelativePath)
@@ -190,6 +202,7 @@ object SafRepository {
         if (!isSafeName(name)) return null
         val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
             ?.takeIf { it.isDirectory } ?: return null
+        if (source.isDirectory && isSameOrDescendant(parent, source)) return null
 
         fun copyNode(src: DocumentFile, dstParent: DocumentFile, dstName: String): DocumentFile? {
             if (!isSafeName(dstName)) return null
