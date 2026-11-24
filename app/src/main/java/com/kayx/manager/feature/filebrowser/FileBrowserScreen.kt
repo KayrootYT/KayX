@@ -111,20 +111,27 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
+    var moveSelectionToSaf by remember { mutableStateOf(false) }
     val safDestinationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { destinationTree ->
         val selectedPaths = s.selected.toList()
         if (destinationTree != null && selectedPaths.isNotEmpty()) {
+            SafRepository.persistTreePermission(ctx, destinationTree)
             scope.launch {
+                val moving = moveSelectionToSaf
+                moveSelectionToSaf = false
                 val results = withContext(Dispatchers.IO) {
                     selectedPaths.map { path ->
-                        SafRepository.copyLocalFileToTree(ctx, File(path), destinationTree) != null
+                        val file = File(path)
+                        if (moving) SafRepository.moveLocalFileToTree(ctx, file, destinationTree) != null
+                        else SafRepository.copyLocalFileToTree(ctx, file, destinationTree) != null
                     }
                 }
-                val copied = results.count { it }
-                snack.showSnackbar("Copied $copied of ${results.size} item(s) to selected storage")
-                if (copied == results.size) vm.clearSelection()
+                val completed = results.count { it }
+                val action = if (moving) "Moved" else "Copied"
+                snack.showSnackbar("$action $completed of ${results.size} item(s) to selected storage")
+                if (completed == results.size) vm.clearSelection()
             }
-        }
+        } else moveSelectionToSaf = false
     }
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -287,8 +294,11 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             }
                         }
                     } else {
-                        IconButton({ safDestinationPicker.launch(null) }) {
+                        IconButton({ moveSelectionToSaf = false; safDestinationPicker.launch(null) }) {
                             Icon(Icons.Default.SdCard, "Copy selection to SD card or SAF folder")
+                        }
+                        IconButton({ moveSelectionToSaf = true; safDestinationPicker.launch(null) }) {
+                            Icon(Icons.Default.DriveFileMove, "Move selection to SD card or SAF folder")
                         }
                         IconButton(vm::selectAll) { Icon(Icons.Default.SelectAll, "Select all") }
                         IconButton(vm::clearSelection) { Icon(Icons.Default.Close, "Clear selection") }
