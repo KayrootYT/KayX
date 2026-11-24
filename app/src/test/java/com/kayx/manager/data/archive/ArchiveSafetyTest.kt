@@ -130,7 +130,7 @@ class ArchiveSafetyTest {
             val result = ArchiveEdit.rewrite(zip, rename = mapOf("safe.txt" to "../escape.txt"))
             assertTrue(result.isFailure)
             assertEquals("original", ArchiveEdit.readEntry(zip, "safe.txt").toString(Charsets.UTF_8))
-            assertTrue(!File(root.parentFile, "escape.txt").exists())
+            assertTrue(!File(root, "escape.txt").exists())
         } finally {
             root.deleteRecursively()
         }
