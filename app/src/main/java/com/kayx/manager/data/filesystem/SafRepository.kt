@@ -140,11 +140,14 @@ object SafRepository {
     fun children(context: Context, treeUri: Uri, relativePath: String): List<DocumentFile> =
         findByRelativePath(context, treeUri, relativePath)?.takeIf { it.isDirectory }?.listFiles()?.toList().orEmpty()
 
-    fun entries(context: Context, treeUri: Uri, relativePath: String = ""): List<Entry> =
-        children(context, treeUri, relativePath).mapNotNull { file ->
+    fun entries(context: Context, treeUri: Uri, relativePath: String = ""): List<Entry> {
+        val parent = findByRelativePath(context, treeUri, relativePath)
+            ?.takeIf { it.isDirectory } ?: error("Storage folder is unavailable or permission was revoked")
+        return parent.listFiles().mapNotNull { file ->
             val name = file.name ?: return@mapNotNull null
             Entry(file.uri, name, file.isDirectory, file.length().coerceAtLeast(0L), file.lastModified(), file.type)
         }
+    }
 
     fun findByRelativePath(context: Context, treeUri: Uri, relativePath: String): DocumentFile? {
         var current = tree(context, treeUri) ?: return null
