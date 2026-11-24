@@ -152,16 +152,20 @@ class StorageTransferRepository {
         name.isNotBlank() && name != "." && name != ".." && !name.contains('/') &&
             !name.contains('\\') && name.none { it.code < 32 }
 
-    private fun externalStoragePath(context: Context, location: StorageLocation.Saf): File? = runCatching {
-        val tree = Uri.parse(location.treeUri)
-        if (tree.authority != "com.android.externalstorage.documents") return null
-        val documentId = DocumentsContract.getTreeDocumentId(tree)
-        val volume = documentId.substringBefore(':')
-        val selected = documentId.substringAfter(':', "")
-        val root = if (volume.equals("primary", true)) Environment.getExternalStorageDirectory()
-            else File("/storage", volume)
-        File(root, listOf(selected, location.relativePath).filter { it.isNotBlank() }.joinToString("/")).canonicalFile
-    }.getOrNull()
+    private fun externalStoragePath(context: Context, location: StorageLocation.Saf): File? {
+        return runCatching {
+            val tree = Uri.parse(location.treeUri)
+            if (tree.authority != "com.android.externalstorage.documents") null
+            else {
+                val documentId = DocumentsContract.getTreeDocumentId(tree)
+                val volume = documentId.substringBefore(':')
+                val selected = documentId.substringAfter(':', "")
+                val root = if (volume.equals("primary", true)) Environment.getExternalStorageDirectory()
+                    else File("/storage", volume)
+                File(root, listOf(selected, location.relativePath).filter { it.isNotBlank() }.joinToString("/")).canonicalFile
+            }
+        }.getOrNull()
+    }
 
     private fun location(key: String): StorageLocation = StorageLocation.fromStableKey(key) ?: StorageLocation.Local(File(key))
     private fun await(control: FileOps.TransferControl) {
