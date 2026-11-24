@@ -129,46 +129,14 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
         }
     }
     val safDestinationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { destinationTree ->
-        val selectedPaths = s.selected.toList()
-        if (destinationTree != null && selectedPaths.isNotEmpty()) {
+        if (destinationTree != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            runCatching { ctx.contentResolver.takePersistableUriPermission(destinationTree, flags) }
             if (!SafRepository.persistTreePermission(ctx, destinationTree) && !SafRepository.hasWriteAccess(ctx, destinationTree)) {
                 scope.launch { snack.showSnackbar("Could not save destination permission. Select the storage folder again and allow write access.") }
-            } else scope.launch {
-                val moving = moveSelectionToSaf
+            } else {
+                vm.transferSelectedToSaf(destinationTree, moveSelectionToSaf)
                 moveSelectionToSaf = false
-                val control = FileOps.TransferControl()
-                safTransferControl = control
-                safTransferPaused = false
-                var completed = 0
-                var failed = 0
-                var cleanupWarnings = 0
-                var cancelled = false
-                val retryPaths = linkedSetOf<String>()
-                for ((index, path) in selectedPaths.withIndex()) {
-                    if (control.isStopped()) { retryPaths.addAll(selectedPaths.drop(index)); cancelled = true; break }
-                    val file = File(path)
-                    safTransferProgress = "${if (moving) "Moving" else "Copying"} ${index + 1}/${selectedPaths.size}: ${file.name}"
-                    val result = withContext(Dispatchers.IO) {
-                        if (moving) SafRepository.moveLocalFileToTree(ctx, file, destinationTree, control = control, onSourceCleanupFailure = { cleanupWarnings++ })
-                        else SafRepository.copyLocalFileToTree(ctx, file, destinationTree, control = control)
-                    }
-                    if (result == null) {
-                        if (control.isStopped()) { retryPaths.addAll(selectedPaths.drop(index)); cancelled = true; break }
-                        failed++
-                        retryPaths += path
-                    } else completed++
-                }
-                safTransferProgress = null
-                control.state = when { cancelled -> FileOps.TransferState.CANCELLED; failed > 0 -> FileOps.TransferState.FAILED; else -> FileOps.TransferState.COMPLETE }
-                safTransferControl = null
-                safTransferPaused = false
-                val action = if (moving) "Moved" else "Copied"
-                val summary = if (cancelled) "$action cancelled: $completed of ${selectedPaths.size} item(s) completed" else "$action $completed of ${selectedPaths.size} item(s); $failed failed"
-                val warning = if (cleanupWarnings > 0) "; $cleanupWarnings source cleanup warning(s), destination copies were kept" else ""
-                snack.showSnackbar(summary + warning)
-                val stillAvailable = retryPaths.filterTo(linkedSetOf()) { File(it).exists() }
-                if (stillAvailable.isEmpty()) vm.clearSelection() else vm.selectPaths(stillAvailable)
-                vm.reload()
             }
         } else moveSelectionToSaf = false
     }
