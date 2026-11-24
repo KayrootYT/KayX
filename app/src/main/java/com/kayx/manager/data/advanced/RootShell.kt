@@ -122,7 +122,7 @@ object RootShell {
 
 
 /** Parse the conventional id output from both toybox and toolbox implementations. */
-internal fun isRootIdentity(output: String): Boolean = Regex("uid=0(?:\\\\(|,)").containsMatchIn(output)
+internal fun isRootIdentity(output: String): Boolean = Regex("uid=0(?:\\(|,)").containsMatchIn(output)
 /** Pure path guard shared with JVM tests. */
 internal fun isSafeRecursiveDeleteTarget(path: String): Boolean {
     if (path.isBlank()) return false
