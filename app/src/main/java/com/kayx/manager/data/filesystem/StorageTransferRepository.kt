@@ -111,7 +111,7 @@ class StorageTransferRepository {
 
     private fun isSafeName(name: String): Boolean =
         name.isNotBlank() && name != "." && name != ".." && !name.contains('/') &&
-            !name.contains('\\\\') && name.none { it.code < 32 }
+            !name.contains('\\') && name.none { it.code < 32 }
 
     private fun externalStoragePath(context: Context, location: StorageLocation.Saf): File? = runCatching {
         val tree = Uri.parse(location.treeUri)
