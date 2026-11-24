@@ -329,10 +329,10 @@ fun ZipScreen(path: String, onBack: () -> Unit, onOpenTool: (String, com.kayx.ma
             snack.showSnackbar(bundleError ?: "APK bundle is still being inspected")
             return@launch
         }
-        if (bundleInspection?.apkFiles?.none {
+        if (bundleInspection!!.apkFiles.none {
                 it.substringAfterLast('/').equals("base.apk", true) ||
                     it.substringAfterLast('/').equals("base-master.apk", true)
-            } != false) {
+            }) {
             snack.showSnackbar("Bundle has no base.apk or base-master.apk and cannot be installed")
             return@launch
         }
