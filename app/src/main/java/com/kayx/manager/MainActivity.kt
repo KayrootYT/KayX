@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
             privateNeedsUnlock.value = true
         }
         selectedSafTree.value = savedInstanceState?.getString(ACTIVE_SAF_TREE_STATE)?.let { saved ->
-            com.kayx.manager.data.filesystem.SafRepository.persistedTrees(this)
+            com.kayx.manager.data.filesystem.SafRepository.persistedTrees(this@MainActivity)
                 .firstOrNull { it.toString() == saved }?.toString()
         }
         enableEdgeToEdge()
