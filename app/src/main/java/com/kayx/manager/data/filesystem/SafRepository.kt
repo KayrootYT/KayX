@@ -157,6 +157,77 @@ object SafRepository {
         }
     }
 
+    /**
+     * Recursively copy a SAF document (file or directory) into a destination tree.
+     * The destination is removed if any descendant fails, so callers never see a
+     * knowingly partial directory presented as a successful transfer.
+     */
+    fun copyDocumentToTree(
+        context: Context,
+        sourceUri: Uri,
+        targetTreeUri: Uri,
+        targetParentRelativePath: String = "",
+        targetName: String? = null
+    ): Uri? {
+        val source = document(context, sourceUri) ?: return null
+        val name = targetName ?: source.name ?: return null
+        if (!isSafeName(name)) return null
+        val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
+            ?.takeIf { it.isDirectory } ?: return null
+
+        fun copyNode(src: DocumentFile, dstParent: DocumentFile, dstName: String): DocumentFile? {
+            if (!isSafeName(dstName)) return null
+            if (src.isDirectory) {
+                val dst = dstParent.createDirectory(dstName) ?: return null
+                val children = runCatching { src.listFiles().toList() }.getOrElse {
+                    dst.delete()
+                    return null
+                }
+                for (child in children) {
+                    val childName = child.name ?: run { dst.delete(); return null }
+                    if (copyNode(child, dst, childName) == null) {
+                        dst.delete()
+                        return null
+                    }
+                }
+                return dst
+            }
+
+            val dst = dstParent.createFile(src.type ?: "application/octet-stream", dstName) ?: return null
+            return try {
+                val input = context.contentResolver.openInputStream(src.uri) ?: error("Cannot read source")
+                val output = context.contentResolver.openOutputStream(dst.uri, "wt") ?: error("Cannot write destination")
+                input.use { from -> output.use { to -> from.copyTo(to) } }
+                dst
+            } catch (_: Exception) {
+                runCatching { dst.delete() }
+                null
+            }
+        }
+
+        return copyNode(source, parent, name)?.uri
+    }
+
+    /** Move a SAF document only after its complete copy has succeeded. */
+    fun moveDocumentToTree(
+        context: Context,
+        sourceUri: Uri,
+        targetTreeUri: Uri,
+        targetParentRelativePath: String = "",
+        targetName: String? = null
+    ): Uri? {
+        if (sourceUri == targetTreeUri) return null
+        val copied = copyDocumentToTree(context, sourceUri, targetTreeUri, targetParentRelativePath, targetName)
+            ?: return null
+        val deleted = delete(context, sourceUri)
+        if (!deleted) {
+            // Do not silently report a move when the provider refused source deletion.
+            runCatching { document(context, copied)?.delete() }
+            return null
+        }
+        return copied
+    }
+
     fun exportDocument(context: Context, sourceUri: Uri, destinationUri: Uri): Boolean = try {
         val input = context.contentResolver.openInputStream(sourceUri) ?: error("Cannot read source")
         val output = context.contentResolver.openOutputStream(destinationUri, "wt") ?: error("Cannot write destination")
