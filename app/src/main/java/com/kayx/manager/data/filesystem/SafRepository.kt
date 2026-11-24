@@ -342,15 +342,18 @@ object SafRepository {
             if (source.isDirectory) {
                 val safeDestinationName = uniqueChildName(destination, source.name)
                 val folder = destination.createDirectory(safeDestinationName) ?: return null
-                val children = source.listFiles() ?: run { folder.delete(); return null }
-                for (child in children) {
-                    awaitTransfer(control)
-                    if (!isSafeName(child.name) || runCatching { copyNode(child, folder) }.getOrNull() == null) {
-                        folder.delete()
-                        return null
+                return try {
+                    val children = source.listFiles() ?: error("Cannot read folder: ${source.name}")
+                    for (child in children) {
+                        awaitTransfer(control)
+                        check(isSafeName(child.name)) { "Unsafe child name: ${child.name}" }
+                        check(runCatching { copyNode(child, folder) }.getOrNull() != null) { "Could not copy ${child.name}" }
                     }
+                    folder
+                } catch (_: Exception) {
+                    runCatching { folder.delete() }
+                    null
                 }
-                return folder
             }
             val target = destination.createFile(
                 android.webkit.MimeTypeMap.getSingleton()
@@ -384,7 +387,7 @@ object SafRepository {
         val copied = copyLocalFileToTree(context, sourceFile, targetTreeUri, targetParentRelativePath, control) ?: return null
         try { awaitTransfer(control) } catch (_: Exception) { runCatching { document(context, copied)?.delete() }; return null }
         // Keep the destination copy if source cleanup fails; never roll back the only complete copy.
-        if (!sourceFile.deleteRecursively()) return null
+        if (!runCatching { sourceFile.deleteRecursively() }.getOrDefault(false)) return null
         return copied
     }
 
