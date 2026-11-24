@@ -132,8 +132,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
         if (destinationTree != null) {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             runCatching { ctx.contentResolver.takePersistableUriPermission(destinationTree, flags) }
-            if (!SafRepository.persistTreePermission(ctx, destinationTree) && !SafRepository.hasWriteAccess(ctx, destinationTree)) {
-                scope.launch { snack.showSnackbar("Could not save destination permission. Select the storage folder again and allow write access.") }
+            val persisted = SafRepository.persistTreePermission(ctx, destinationTree)
+            if (!persisted || !SafRepository.hasWriteAccess(ctx, destinationTree)) {
+                scope.launch { snack.showSnackbar("This location is read-only or its write permission could not be saved. Select a writable folder.") }
             } else {
                 vm.transferSelectedToSaf(destinationTree, moveSelectionToSaf)
                 moveSelectionToSaf = false
