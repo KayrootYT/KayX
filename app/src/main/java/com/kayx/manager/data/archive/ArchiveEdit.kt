@@ -27,6 +27,16 @@ object ArchiveEdit {
         return name == n || name == "$n/" || name.startsWith("$n/")
     }
 
+    private fun safeEntryName(raw: String): String {
+        require(raw.isNotBlank() && raw.none { it.code == 0 }) { "Invalid archive entry name" }
+        val name = raw.replace('\\\\', '/')
+        require(!name.startsWith('/') && !Regex("^[A-Za-z]:").containsMatchIn(name)) {
+            "Archive entry must be a relative path"
+        }
+        require(name.split('/').none { it == ".." || it == "." }) { "Unsafe archive entry path" }
+        return name
+    }
+
     fun readEntry(zip: File, name: String): ByteArray = ZipFile(zip).use { z ->
         val e = z.getEntry(name) ?: error("Entry not found: $name")
         z.getInputStream(e).use { it.readBytes() }
@@ -84,6 +94,11 @@ object ArchiveEdit {
         zip: File, delete: Set<String> = emptySet(), replace: Map<String, ByteArray> = emptyMap(),
         rename: Map<String, String> = emptyMap(), add: Map<String, ByteArray> = emptyMap()
     ): Result<Int> = runCatching {
+        require(zip.isFile) { "Archive file is missing" }
+        delete.forEach { safeEntryName(it) }
+        replace.keys.forEach { safeEntryName(it) }
+        add.keys.forEach { safeEntryName(it) }
+        rename.forEach { (old, new) -> safeEntryName(old); safeEntryName(new) }
         val tmp = File(zip.parentFile, zip.name + ".kayx-tmp")
         tmp.delete()
         var removed = 0
@@ -101,7 +116,8 @@ object ArchiveEdit {
                             val o = old.trimEnd('/'); val nn = new.trimEnd('/')
                             if (name == o) name = nn else if (name.startsWith("$o/")) name = nn + name.substring(o.length)
                         }
-                        if (!written.add(name)) continue
+                        safeEntryName(name)
+                        check(written.add(name)) { "Archive edit creates a duplicate entry: $name" }
                         val rep = replace[e.name] ?: add[e.name]
                         when {
                             rep != null -> putBytes(zos, cnt, name, e.method == ZipEntry.STORED, rep, e.time)
@@ -113,7 +129,10 @@ object ArchiveEdit {
                             }
                         }
                     }
-                    for ((n, b) in add) if (written.add(n)) putBytes(zos, cnt, n, n.endsWith(".arsc"), b, System.currentTimeMillis())
+                    for ((n, b) in add) {
+                        val safeName = safeEntryName(n)
+                        if (written.add(safeName)) putBytes(zos, cnt, safeName, safeName.endsWith(".arsc"), b, System.currentTimeMillis())
+                    }
                 }
             }
             check(tmp.renameTo(zip)) { "Could not replace original archive" }
