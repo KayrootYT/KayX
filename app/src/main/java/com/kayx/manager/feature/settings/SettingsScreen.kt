@@ -214,7 +214,7 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
                         icon = Icons.Default.FolderOpen,
                         iconBg = Teal,
                         chevron = true,
-                        subtitle = treeUri.lastPathSegment?.substringAfter(':')?.replace('/', ' / ') ?: treeUri.authority.orEmpty(),
+                        subtitle = treeUri.lastPathSegment?.substringAfter(':')?.replace("/", " / ") ?: treeUri.authority.orEmpty(),
                         onClick = { onOpenSaf(treeUri) }
                     )
                     IosDivider(58.dp)
