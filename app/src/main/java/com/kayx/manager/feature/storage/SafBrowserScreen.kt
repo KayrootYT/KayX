@@ -44,6 +44,16 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     var deleteTarget by remember { mutableStateOf<SafRepository.Entry?>(null) }
     var name by remember { mutableStateOf("") }
     var exportSource by remember { mutableStateOf<Uri?>(null) }
+    suspend fun refresh() {
+        loading = true
+        error = null
+        val result = withContext(Dispatchers.IO) {
+            runCatching { SafRepository.entries(context, treeUri, relativePath) }
+        }
+        entries = result.getOrDefault(emptyList())
+        if (result.isFailure) error = result.exceptionOrNull()?.message ?: "Unable to read this folder"
+        loading = false
+    }
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { sourceUri ->
         if (sourceUri != null) {
             scope.launch {
@@ -68,16 +78,6 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         }
     }
 
-    suspend fun refresh() {
-        loading = true
-        error = null
-        val result = withContext(Dispatchers.IO) {
-            runCatching { SafRepository.entries(context, treeUri, relativePath) }
-        }
-        entries = result.getOrDefault(emptyList())
-        if (result.isFailure) error = result.exceptionOrNull()?.message ?: "Unable to read this folder"
-        loading = false
-    }
     LaunchedEffect(treeUri, relativePath) { refresh() }
     val goUp: () -> Unit = {
         relativePath = relativePath.substringBeforeLast('/', "").trim('/')
@@ -189,7 +189,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             confirmButton = { TextButton(onClick = {
                 if (!SafRepository.delete(context, target.uri)) error = "Delete failed"
                 deleteTarget = null
-                kotlinx.coroutines.MainScope().launch { refresh() }
+                scope.launch { refresh() }
             }) { Text("Delete") } },
             dismissButton = { TextButton({ deleteTarget = null }) { Text("Cancel") } }
         )
