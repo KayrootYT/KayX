@@ -3,6 +3,7 @@ package com.kayx.manager.data.archive
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -167,7 +168,9 @@ class ArchiveRepository {
                 for (file in files) {
                     check(file.exists()) { "Missing source: ${file.name}" }
                     val base = file.parentFile ?: file
+                    check(!Files.isSymbolicLink(file.toPath())) { "Symbolic-link sources are not added to archives" }
                     for (child in file.walkTopDown()) {
+                        check(!Files.isSymbolicLink(child.toPath())) { "Symbolic links are not added to archives: ${child.name}" }
                         if (child.canonicalPath == out.canonicalPath) continue
                         val relative = child.relativeTo(base).path.replace(File.separatorChar, '/')
                         if (relative.isEmpty()) continue
