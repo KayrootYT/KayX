@@ -1,5 +1,6 @@
 package com.kayx.manager.data.archive
 
+import com.github.junrar.Archive
 import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
@@ -26,10 +27,11 @@ object MultiExtract {
     private val zipLike = listOf(".zip", ".apk", ".jar", ".aar", ".xapk", ".apks", ".apkm")
     private val tarLike = listOf(".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tbz", ".tar.xz", ".txz")
     private val single = listOf(".gz", ".bz2", ".xz")
+    private const val RAR_SUFFIX = ".rar"
 
     fun canExtract(name: String): Boolean {
         val lower = name.lowercase()
-        return (zipLike + tarLike + single + ".7z").any { lower.endsWith(it) }
+        return (zipLike + tarLike + single + listOf(".7z", RAR_SUFFIX)).any { lower.endsWith(it) }
     }
 
     private fun unique(directory: File): File {
@@ -92,6 +94,7 @@ object MultiExtract {
         val baseName = suffix?.let { src.name.dropLast(it.length) } ?: src.nameWithoutExtension
         val isTar = tarLike.any { name.endsWith(it) }
         val isSevenZip = name.endsWith(".7z")
+        val isRar = name.endsWith(RAR_SUFFIX)
         val destination = unique(File(src.parentFile, baseName.ifEmpty { "extracted" }))
         var count = 0
         var totalBytes = 0L
@@ -107,12 +110,31 @@ object MultiExtract {
         try {
             check(destination.mkdirs()) { "Could not create output folder" }
             when {
-                !isTar && !isSevenZip -> {
+                !isTar && !isSevenZip && !isRar -> {
                     acceptEntry()
                     val output = safe(destination, baseName.ifEmpty { "out" })
                     BufferedInputStream(src.inputStream()).use { raw ->
                         decompress(name, raw).use { input ->
                             output.outputStream().buffered().use { stream -> copyEntry(input, stream) }
+                        }
+                    }
+                }
+                isRar -> {
+                    Archive(src).use { archive ->
+                        var entry = archive.nextFileHeader()
+                        while (entry != null) {
+                            acceptEntry()
+                            val output = safe(destination, entry.fileName)
+                            if (entry.isDirectory) {
+                                check(output.mkdirs() || output.isDirectory) { "Could not create directory: " + entry.fileName }
+                            } else {
+                                check(!output.exists() || output.isFile) { "Archive file/folder name conflict: " + entry.fileName }
+                                output.parentFile?.let { check(it.mkdirs() || it.isDirectory) { "Could not create parent directory" } }
+                                archive.getInputStream(entry).use { input ->
+                                    output.outputStream().buffered().use { stream -> copyEntry(input, stream) }
+                                }
+                            }
+                            entry = archive.nextFileHeader()
                         }
                     }
                 }
