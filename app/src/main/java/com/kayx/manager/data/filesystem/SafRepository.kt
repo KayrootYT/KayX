@@ -5,41 +5,70 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
+import java.io.InputStream
+import java.io.OutputStream
 
-/** Android Storage Access Framework support for document trees such as SD cards and protected folders. */
+/**
+ * SAF access for removable volumes and provider-protected directories.
+ *
+ * A tree URI is the durable permission boundary. Descendant document URIs are
+ * resolved from that tree instead of treating a single-document URI as a tree.
+ */
 object SafRepository {
     private const val PREFS = "kayx_saf"
     private const val TREE_URIS = "tree_uris"
 
-    fun persistTreePermission(context: Context, uri: Uri) {
-        val resolver = context.contentResolver
-        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        runCatching { resolver.takePersistableUriPermission(uri, flags) }
+    data class Entry(
+        val uri: Uri,
+        val name: String,
+        val isDirectory: Boolean,
+        val size: Long,
+        val lastModified: Long,
+        val mimeType: String?
+    )
 
-        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val saved = prefs.getStringSet(TREE_URIS, emptySet()).orEmpty().toMutableSet()
-        saved += uri.toString()
-        prefs.edit().putStringSet(TREE_URIS, saved).apply()
+    fun persistTreePermission(context: Context, uri: Uri, grantedFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION): Boolean {
+        val resolver = context.contentResolver
+        val flags = grantedFlags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        if (flags and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0) return false
+        return try {
+            resolver.takePersistableUriPermission(uri, flags)
+            val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val saved = prefs.getStringSet(TREE_URIS, emptySet()).orEmpty().toMutableSet()
+            saved += uri.toString()
+            prefs.edit().putStringSet(TREE_URIS, saved).apply()
+            true
+        } catch (_: SecurityException) {
+            false
+        } catch (_: IllegalArgumentException) {
+            false
+        }
     }
 
     fun persistedTrees(context: Context): List<Uri> {
         val granted = context.contentResolver.persistedUriPermissions
-            .filter { it.isReadPermission && it.isWritePermission }
-            .map { it.uri }
-            .associateBy { it.toString() }
-
+            .filter { it.isReadPermission }
+            .map { it.uri.toString() }
+            .toSet()
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return prefs.getStringSet(TREE_URIS, emptySet()).orEmpty()
-            .mapNotNull { runCatching { Uri.parse(it) }.getOrNull() }
-            .filter { granted[it.toString()] != null }
+        val saved = prefs.getStringSet(TREE_URIS, emptySet()).orEmpty()
+        val valid = saved.filter { it in granted }
+        // Prune stale records after users revoke access in Android settings.
+        if (valid.size != saved.size) prefs.edit().putStringSet(TREE_URIS, valid.toSet()).apply()
+        return valid.mapNotNull { runCatching { Uri.parse(it) }.getOrNull() }
     }
 
+    fun hasWriteAccess(context: Context, treeUri: Uri): Boolean =
+        context.contentResolver.persistedUriPermissions.any {
+            it.uri == treeUri && it.isReadPermission && it.isWritePermission
+        }
+
     fun removeTree(context: Context, uri: Uri) {
-        runCatching {
-            context.contentResolver.releasePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
+        val permission = context.contentResolver.persistedUriPermissions.firstOrNull { it.uri == uri }
+        permission?.let {
+            val flags = (if (it.isReadPermission) Intent.FLAG_GRANT_READ_URI_PERMISSION else 0) or
+                (if (it.isWritePermission) Intent.FLAG_GRANT_WRITE_URI_PERMISSION else 0)
+            runCatching { context.contentResolver.releasePersistableUriPermission(uri, flags) }
         }
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val saved = prefs.getStringSet(TREE_URIS, emptySet()).orEmpty().toMutableSet()
@@ -47,25 +76,92 @@ object SafRepository {
         prefs.edit().putStringSet(TREE_URIS, saved).apply()
     }
 
-    fun document(context: Context, uri: Uri): DocumentFile? =
-        if (DocumentsContract.isDocumentUri(context, uri)) DocumentFile.fromSingleUri(context, uri)
-        else DocumentFile.fromTreeUri(context, uri)
+    /** Resolve a tree root. Single-document URIs are deliberately not accepted as roots. */
+    fun tree(context: Context, treeUri: Uri): DocumentFile? {
+        if (!DocumentsContract.isTreeUri(treeUri)) return null
+        return DocumentFile.fromTreeUri(context, treeUri)
+    }
+
+    fun document(context: Context, uri: Uri): DocumentFile? = when {
+        DocumentsContract.isTreeUri(uri) -> DocumentFile.fromTreeUri(context, uri)
+        DocumentsContract.isDocumentUri(context, uri) -> DocumentFile.fromSingleUri(context, uri)
+        else -> null
+    }
 
     fun children(context: Context, treeUri: Uri): List<DocumentFile> =
-        document(context, treeUri)?.listFiles()?.toList().orEmpty()
+        tree(context, treeUri)?.listFiles()?.toList().orEmpty()
+
+    /** List descendants by a relative path within the persisted tree. */
+    fun children(context: Context, treeUri: Uri, relativePath: String): List<DocumentFile> =
+        findByRelativePath(context, treeUri, relativePath)?.takeIf { it.isDirectory }?.listFiles()?.toList().orEmpty()
+
+    fun entries(context: Context, treeUri: Uri, relativePath: String = ""): List<Entry> =
+        children(context, treeUri, relativePath).mapNotNull { file ->
+            val name = file.name ?: return@mapNotNull null
+            Entry(file.uri, name, file.isDirectory, file.length().coerceAtLeast(0L), file.lastModified(), file.type)
+        }
 
     fun findByRelativePath(context: Context, treeUri: Uri, relativePath: String): DocumentFile? {
-        var current = document(context, treeUri) ?: return null
-        if (relativePath.isBlank()) return current
-        for (part in relativePath.trim('/').split('/').filter { it.isNotBlank() }) {
+        var current = tree(context, treeUri) ?: return null
+        val parts = relativePath.trim('/').split('/').filter { it.isNotBlank() }
+        for (part in parts) {
+            // Never allow traversal outside the selected tree.
+            if (part == "." || part == ".." || part.contains('\u0000')) return null
             current = current.findFile(part) ?: return null
         }
         return current
     }
 
-    fun createTextFile(context: Context, parent: Uri, name: String, mime: String = "text/plain"): Uri? =
-        document(context, parent)?.createFile(mime, name)?.uri
+    fun createFolder(context: Context, treeUri: Uri, parentRelativePath: String, name: String): Uri? {
+        if (!isSafeName(name)) return null
+        return findByRelativePath(context, treeUri, parentRelativePath)
+            ?.takeIf { it.isDirectory }
+            ?.createDirectory(name)?.uri
+    }
+
+    fun createFile(context: Context, treeUri: Uri, parentRelativePath: String, name: String, mime: String = "application/octet-stream"): Uri? {
+        if (!isSafeName(name)) return null
+        return findByRelativePath(context, treeUri, parentRelativePath)
+            ?.takeIf { it.isDirectory }
+            ?.createFile(mime, name)?.uri
+    }
+
+    fun openInput(context: Context, documentUri: Uri): InputStream? =
+        runCatching { context.contentResolver.openInputStream(documentUri) }.getOrNull()
+
+    fun openOutput(context: Context, documentUri: Uri, truncate: Boolean = true): OutputStream? =
+        runCatching { context.contentResolver.openOutputStream(documentUri, if (truncate) "wt" else "wa") }.getOrNull()
+
+    /** Stream-copy so providers/SD cards work without assuming a real filesystem path. */
+    fun copy(context: Context, sourceUri: Uri, targetParent: Uri, targetName: String): Uri? {
+        if (!isSafeName(targetName)) return null
+        val source = document(context, sourceUri) ?: return null
+        val parent = document(context, targetParent)?.takeIf { it.isDirectory } ?: return null
+        val mime = source.type ?: "application/octet-stream"
+        val target = parent.createFile(mime, targetName) ?: return null
+        return try {
+            val input = context.contentResolver.openInputStream(source.uri) ?: error("Cannot read source")
+            val output = context.contentResolver.openOutputStream(target.uri, "wt") ?: error("Cannot write destination")
+            input.use { src -> output.use { dst -> src.copyTo(dst) } }
+            target.uri
+        } catch (_: Exception) {
+            runCatching { target.delete() }
+            null
+        }
+    }
+
+    fun rename(context: Context, documentUri: Uri, newName: String): Uri? {
+        if (!isSafeName(newName)) return null
+        return runCatching { document(context, documentUri)?.renameTo(newName) }
+            .getOrNull()
+            ?.takeIf { it }
+            ?.let { document(context, documentUri)?.uri }
+    }
 
     fun delete(context: Context, uri: Uri): Boolean =
-        document(context, uri)?.delete() == true
+        runCatching { document(context, uri)?.delete() == true }.getOrDefault(false)
+
+    private fun isSafeName(name: String): Boolean =
+        name.isNotBlank() && name != "." && name != ".." &&
+            !name.contains('/') && !name.contains('\\') && !name.any { it.code < 32 }
 }
