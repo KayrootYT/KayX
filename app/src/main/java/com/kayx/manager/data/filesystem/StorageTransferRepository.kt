@@ -139,6 +139,7 @@ class StorageTransferRepository {
             for (child in source.listFiles()) {
                 await(control)
                 val name = child.name ?: error("Provider returned an unnamed item")
+                check(isSafeName(name)) { "Provider returned an unsafe item name" }
                 val childTarget = uniqueTarget(target, name, Conflict.KEEP_BOTH) ?: error("Cannot create child")
                 check(copySafNode(context, child, childTarget, control, onBytesCopied)) { "Could not copy " + name }
             }
@@ -184,6 +185,7 @@ class StorageTransferRepository {
     }
 
     private fun uniqueTarget(parent: File, name: String, policy: Conflict): File? {
+        if (!isSafeName(name)) return null
         val target = File(parent, name)
         if (!target.exists()) return target
         if (policy == Conflict.SKIP) return null
