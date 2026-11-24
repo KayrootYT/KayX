@@ -161,7 +161,7 @@ private fun DualHeader(
     val activePath = if (s.activePane == 1) s.secondaryDir else s.dir
     val shown = if (s.activePane == 1) s.secondaryItems else s.items
     val folders = remember(shown) { shown.count { it.isDir } }
-    val disk = remember(activePath) { diskText(activePath) }
+    val disk = remember(activePath) { if (StorageLocation.fromStableKey(activePath) is StorageLocation.Saf) null else diskText(activePath) }
     val pathScroll = rememberScrollState()
     LaunchedEffect(activePath, pathScroll.maxValue) { pathScroll.scrollTo(pathScroll.maxValue) }
     var navOpen by remember { mutableStateOf(false) }
@@ -208,9 +208,11 @@ private fun DualHeader(
                     focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent
                 )
             ) else Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
+                val safLocation = StorageLocation.fromStableKey(activePath) as? StorageLocation.Saf
                 Text(
-                    activePath.trimEnd('/') + "/",
-                    Modifier.horizontalScroll(pathScroll).clickable { onDialog(Dlg.Jump) },
+                    if (safLocation != null) "SD Card · " + safLocation.relativePath.ifBlank { "Storage root" }
+                    else activePath.trimEnd('/') + "/",
+                    Modifier.horizontalScroll(pathScroll).clickable { if (safLocation == null) onDialog(Dlg.Jump) },
                     maxLines = 1, softWrap = false, style = MaterialTheme.typography.titleMedium
                 )
                 Text(info, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Fg.copy(.62f))
@@ -257,7 +259,10 @@ private fun DualHeader(
         s.transferProgress?.let { pr ->
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    "${if (pr.moving) "Moving" else "Copying"} ${pr.completed}/${pr.total}: ${pr.currentName}",
+                    "${if (pr.moving) "Moving" else "Copying"}: ${pr.currentName} · " +
+                        if (pr.totalBytes > 0L) "${dxSize(pr.completedBytes)} / ${dxSize(pr.totalBytes)} · ${dxSize(pr.bytesPerSecond)}/s" +
+                            (pr.etaSeconds?.let { " · ETA ${it / 60}m ${it % 60}s" } ?: "")
+                        else "${pr.completed}/${pr.total} items",
                     style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
                 LinearProgressIndicator(progress = { pr.fraction }, modifier = Modifier.fillMaxWidth())
