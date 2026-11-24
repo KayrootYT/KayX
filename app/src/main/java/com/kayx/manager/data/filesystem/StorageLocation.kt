@@ -31,9 +31,12 @@ sealed class StorageLocation {
         is Saf -> normalizeRelativePath(relativePath).substringAfterLast('/').ifBlank { "Storage" }
     }
 
-    fun child(name: String): StorageLocation = when (this) {
+    fun child(name: String): StorageLocation {
+        require(isSafeName(name)) { "Invalid child name" }
+        return when (this) {
         is Local -> Local(File(directory, name))
         is Saf -> Saf(treeUri, listOf(normalizeRelativePath(relativePath), name).filter { it.isNotBlank() }.joinToString("/"))
+        }
     }
 
     companion object {
@@ -58,6 +61,10 @@ sealed class StorageLocation {
 
         private fun normalizeRelativePath(path: String): String =
             path.trim('/').split('/').filter { it.isNotBlank() }.joinToString("/")
+
+        private fun isSafeName(name: String): Boolean =
+            name.isNotBlank() && name != "." && name != ".." &&
+                !name.contains("/") && !name.contains("\\") && name.none { it.code < 32 }
 
         private fun isSafeRelativePath(path: String): Boolean {
             if (path.any { it.code < 32 }) return false
