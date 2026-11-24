@@ -273,15 +273,23 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         val shownItems = if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items
                         val folders = remember(shownItems) { shownItems.count { it.isDir } }
                         val disk = remember(activePath) {
-                            runCatching { android.os.StatFs(activePath).let { it.totalBytes to (it.totalBytes - it.availableBytes) } }
+                            if (StorageLocation.fromStableKey(activePath) is StorageLocation.Saf) null
+                            else runCatching { android.os.StatFs(activePath).let { it.totalBytes to (it.totalBytes - it.availableBytes) } }
                                 .recoverCatching { android.os.StatFs(android.os.Environment.getExternalStorageDirectory().path).let { it.totalBytes to (it.totalBytes - it.availableBytes) } }
                                 .getOrNull()
                         }
                         if (s.selected.isNotEmpty()) {
                             Text("${s.selected.size} selected", maxLines = 1, style = MaterialTheme.typography.titleMedium)
                         } else {
-                            // Compact, tappable breadcrumbs replace the hard-to-read absolute path.
-                            Row(
+                            // Local paths use tappable breadcrumbs; SAF locations display their tree-relative path.
+                            val safLocation = StorageLocation.fromStableKey(activePath) as? StorageLocation.Saf
+                            if (safLocation != null) {
+                                Text(
+                                    "SD Card · " + safLocation.relativePath.ifBlank { "Storage root" },
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.titleSmall, color = Accent
+                                )
+                            } else Row(
                                 Modifier.horizontalScroll(rememberScrollState()).animateContentSize(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -291,14 +299,10 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                 parts.forEachIndexed { index, part ->
                                     val target = "/" + parts.take(index + 1).joinToString("/")
                                     Text("›", color = Fg.copy(.38f), style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        part,
-                                        Modifier.clip(RoundedCornerShape(7.dp)).clickable { vm.openActive(target) }
-                                            .padding(horizontal = 5.dp, vertical = 5.dp),
-                                        maxLines = 1, softWrap = false,
+                                    Text(part, Modifier.clip(RoundedCornerShape(7.dp)).clickable { vm.openActive(target) }
+                                        .padding(horizontal = 5.dp, vertical = 5.dp), maxLines = 1, softWrap = false,
                                         style = MaterialTheme.typography.titleSmall,
-                                        color = if (index == parts.lastIndex) Fg else Accent
-                                    )
+                                        color = if (index == parts.lastIndex) Fg else Accent)
                                 }
                             }
                         }
