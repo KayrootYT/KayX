@@ -505,6 +505,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         startStorageTransfer(s.selected.toList(), s.otherDir, cut, policy ?: Conflict.KEEP_BOTH, s.activePane, false)
     }
 
+    fun transferSelectedToSaf(treeUri: Uri, cut: Boolean) {
+        val selected = _s.value.selected.toList()
+        if (selected.isEmpty()) { notify("Select files first"); return }
+        startStorageTransfer(selected, StorageLocation.Saf(treeUri.toString(), "").stableKey(), cut, Conflict.KEEP_BOTH, _s.value.activeIdx, false)
+    }
+
     private fun startStorageTransfer(keys: List<String>, destinationKey: String, cut: Boolean, policy: Conflict, sourcePane: Int?, fromClipboard: Boolean) {
         val context = appContext
         if (context == null) { notify("Storage context is not ready"); return }
