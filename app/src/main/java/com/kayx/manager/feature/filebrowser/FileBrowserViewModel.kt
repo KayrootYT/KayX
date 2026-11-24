@@ -619,7 +619,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                         destinationKey, cut, sourcePane, fromClipboard, effectivePolicy
                     ) else null,
                     message = result.exceptionOrNull()?.message ?: buildString {
-                        append(if (cut) "Moved " else "Copied ")
+                        val cleanupIssue = outcome?.cleanupWarnings?.isNotEmpty() == true
+                        append(if (cut && !cleanupIssue) "Moved " else if (cleanupIssue) "Copied (source cleanup incomplete) " else "Copied ")
                         append(outcome?.completed ?: 0)
                         append(" item(s)")
                         if ((outcome?.skipped ?: 0) > 0) append("; " + outcome.skipped + " skipped")
