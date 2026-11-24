@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.os.Environment
 import androidx.documentfile.provider.DocumentFile
 import java.io.InputStream
 import java.io.OutputStream
@@ -124,6 +125,15 @@ object SafRepository {
         }
         return false
     }
+    /** Resolve the selected folder for Android's external-storage document provider when possible. */
+    private fun externalStorageTarget(context: Context, treeUri: Uri, relativePath: String): java.io.File? = runCatching {
+        if (treeUri.authority != "com.android.externalstorage.documents") return null
+        val documentId = DocumentsContract.getTreeDocumentId(treeUri)
+        val volume = documentId.substringBefore(':')
+        val selectedPath = documentId.substringAfter(':', "")
+        val volumeRoot = if (volume.equals("primary", ignoreCase = true)) Environment.getExternalStorageDirectory() else java.io.File("/storage", volume)
+        java.io.File(volumeRoot, listOf(selectedPath, relativePath).filter { it.isNotBlank() }.joinToString("/")).canonicalFile
+    }.getOrNull()
     private fun awaitTransfer(control: FileOps.TransferControl) {
         while (control.state == FileOps.TransferState.PAUSED) Thread.sleep(50)
         check(control.state != FileOps.TransferState.CANCELLED) { "Transfer cancelled" }
@@ -275,6 +285,11 @@ object SafRepository {
         val sourceRoot = runCatching { sourceFile.canonicalFile }.getOrNull() ?: return null
         if (sourceRoot.path != sourceFile.absolutePath) return null
         val rootPath = sourceRoot.path.trimEnd(java.io.File.separatorChar)
+        val resolvedTarget = externalStorageTarget(context, targetTreeUri, targetParentRelativePath)
+        if (sourceFile.isDirectory && resolvedTarget != null) {
+            val targetPath = resolvedTarget.path.trimEnd(java.io.File.separatorChar)
+            if (targetPath == rootPath || targetPath.startsWith(rootPath + java.io.File.separator)) return null
+        }
         val visited = mutableSetOf<String>()
 
         fun copyNode(source: java.io.File, destination: DocumentFile): DocumentFile? {
