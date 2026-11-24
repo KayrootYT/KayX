@@ -29,7 +29,7 @@ object ArchiveEdit {
 
     private fun safeEntryName(raw: String): String {
         require(raw.isNotBlank() && raw.none { it.code == 0 }) { "Invalid archive entry name" }
-        val name = raw.replace('\\\\', '/')
+        val name = raw.replace('\\', '/')
         require(!name.startsWith('/') && !Regex("^[A-Za-z]:").containsMatchIn(name)) {
             "Archive entry must be a relative path"
         }
