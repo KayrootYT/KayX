@@ -20,10 +20,13 @@ class AdvancedAccessRepository {
      */
     suspend fun checkAccessStatus(): AccessStatus = withContext(Dispatchers.IO) {
         val hasRootSu = checkSuBinary()
+        // This check is called only after the user taps "Check root" in Settings, so it is
+        // safe to let the configured root manager display its authorization prompt here.
+        val rootResult = if (hasRootSu) RootShell.runRoot("id", 5_000) else RootShell.Res(-1, "", "su not found")
         val shizukuState = runCatching { ShizukuShell.state() }.getOrNull()
         AccessStatus(
             rootAvailable = hasRootSu,
-            rootGranted = false,
+            rootGranted = rootResult.code == 0 && isRootIdentity(rootResult.out),
             shizukuAvailable = shizukuState != null &&
                 shizukuState != ShizukuShell.State.NOT_INSTALLED &&
                 shizukuState != ShizukuShell.State.NOT_RUNNING &&
