@@ -66,7 +66,7 @@ fun RootExplorerScreen(onBack: () -> Unit) {
     }
 
     LaunchedEffect(Unit) {
-        val ok = withContext(Dispatchers.IO) { RootShell.isRoot() }
+        val ok = withContext(Dispatchers.IO) { RootShell.isBackendReady() }
         rooted = ok
         if (ok) load("/")
     }
