@@ -145,8 +145,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         } else null
         val primary = restoredPrimarySaf ?: path
         if (_s.value.root == primary) { reload(); return }
-        val restoredSecondary = restoredSecondarySaf
-            ?: SettingsStore.browserSecondaryPath.takeIf { it.isNotBlank() && File(it).isDirectory }
+        val storedSecondary = SettingsStore.browserSecondaryPath
+        val restoredSecondary = restoredSecondarySaf ?: when (val storedLocation = StorageLocation.fromStableKey(storedSecondary)) {
+            is StorageLocation.Saf -> storedLocation.takeIf { it.treeUri in grantedTrees }?.stableKey()
+            is StorageLocation.Local -> storedLocation.directory.takeIf { it.isDirectory }?.absolutePath
+            null -> storedSecondary.takeIf { it.isNotBlank() && File(it).isDirectory }
+        }
             ?: primary
         val restoredActive = (saved?.getInt("active_pane", SettingsStore.browserActivePane) ?: SettingsStore.browserActivePane).coerceIn(0, 1)
         _s.update { it.copy(root = primary, dir = primary, secondaryDir = restoredSecondary, secondaryItems = emptyList(),
