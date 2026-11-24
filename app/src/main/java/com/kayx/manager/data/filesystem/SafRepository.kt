@@ -157,6 +157,21 @@ object SafRepository {
         }
     }
 
+    /** Pick a collision-free child name without replacing an existing document. */
+    private fun uniqueChildName(parent: DocumentFile, requestedName: String): String {
+        if (parent.findFile(requestedName) == null) return requestedName
+        val dot = requestedName.lastIndexOf('.')
+        val hasExtension = dot > 0 && dot < requestedName.lastIndex
+        val stem = if (hasExtension) requestedName.substring(0, dot) else requestedName
+        val extension = if (hasExtension) requestedName.substring(dot) else ""
+        var index = 1
+        while (true) {
+            val candidate = "$stem ($index)$extension"
+            if (parent.findFile(candidate) == null) return candidate
+            index++
+        }
+    }
+
     /**
      * Recursively copy a SAF document (file or directory) into a destination tree.
      * The destination is removed if any descendant fails, so callers never see a
@@ -178,7 +193,8 @@ object SafRepository {
         fun copyNode(src: DocumentFile, dstParent: DocumentFile, dstName: String): DocumentFile? {
             if (!isSafeName(dstName)) return null
             if (src.isDirectory) {
-                val dst = dstParent.createDirectory(dstName) ?: return null
+                val safeDestinationName = uniqueChildName(dstParent, dstName)
+                val dst = dstParent.createDirectory(safeDestinationName) ?: return null
                 val children = runCatching { src.listFiles().toList() }.getOrElse {
                     dst.delete()
                     return null
@@ -193,7 +209,8 @@ object SafRepository {
                 return dst
             }
 
-            val dst = dstParent.createFile(src.type ?: "application/octet-stream", dstName) ?: return null
+            val safeDestinationName = uniqueChildName(dstParent, dstName)
+            val dst = dstParent.createFile(src.type ?: "application/octet-stream", safeDestinationName) ?: return null
             return try {
                 val input = context.contentResolver.openInputStream(src.uri) ?: error("Cannot read source")
                 val output = context.contentResolver.openOutputStream(dst.uri, "wt") ?: error("Cannot write destination")
@@ -230,7 +247,8 @@ object SafRepository {
             if (canonical.path != rootPath && !canonical.path.startsWith(rootPath + java.io.File.separator)) return null
             if (!visited.add(canonical.path)) return null
             if (source.isDirectory) {
-                val folder = destination.createDirectory(source.name) ?: return null
+                val safeDestinationName = uniqueChildName(destination, source.name)
+                val folder = destination.createDirectory(safeDestinationName) ?: return null
                 val children = source.listFiles() ?: run { folder.delete(); return null }
                 for (child in children) {
                     if (!isSafeName(child.name) || copyNode(child, folder) == null) {
@@ -243,7 +261,7 @@ object SafRepository {
             val target = destination.createFile(
                 android.webkit.MimeTypeMap.getSingleton()
                     .getMimeTypeFromExtension(source.extension.lowercase()) ?: "application/octet-stream",
-                source.name
+                uniqueChildName(destination, source.name)
             ) ?: return null
             return try {
                 source.inputStream().use { input ->
