@@ -244,7 +244,7 @@ object SafRepository {
                 for (child in children) {
                     awaitTransfer(control)
                     val childName = child.name ?: run { dst.delete(); return null }
-                    if (copyNode(child, dst, childName) == null) {
+                    if (runCatching { copyNode(child, dst, childName) }.getOrNull() == null) {
                         dst.delete()
                         return null
                     }
@@ -265,7 +265,7 @@ object SafRepository {
             }
         }
 
-        return copyNode(source, parent, name)?.uri
+        return runCatching { copyNode(source, parent, name)?.uri }.getOrNull()
     }
 
     /**
@@ -304,7 +304,7 @@ object SafRepository {
                 val children = source.listFiles() ?: run { folder.delete(); return null }
                 for (child in children) {
                     awaitTransfer(control)
-                    if (!isSafeName(child.name) || copyNode(child, folder) == null) {
+                    if (!isSafeName(child.name) || runCatching { copyNode(child, folder) }.getOrNull() == null) {
                         folder.delete()
                         return null
                     }
@@ -329,7 +329,7 @@ object SafRepository {
             }
         }
 
-        return copyNode(sourceFile, parent)?.uri
+        return runCatching { copyNode(sourceFile, parent)?.uri }.getOrNull()
     }
 
     /** Move a local file into a SAF tree only after its complete stream-copy succeeds. */
