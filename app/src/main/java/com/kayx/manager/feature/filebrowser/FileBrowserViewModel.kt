@@ -82,8 +82,18 @@ data class BrowserState(
     val canForward: Boolean get() = fwdStacks[activeIdx].isNotEmpty()
 }
 
-data class TransferProgress(val completed: Int, val total: Int, val currentName: String, val moving: Boolean = false) {
-    val fraction: Float get() = if (total <= 0) 0f else completed.toFloat() / total
+data class TransferProgress(
+    val completed: Int,
+    val total: Int,
+    val currentName: String,
+    val moving: Boolean = false,
+    val completedBytes: Long = 0L,
+    val totalBytes: Long = 0L,
+    val bytesPerSecond: Long = 0L,
+    val etaSeconds: Long? = null
+) {
+    val fraction: Float get() = if (totalBytes > 0L) (completedBytes.toFloat() / totalBytes).coerceIn(0f, 1f)
+        else if (total <= 0) 0f else completed.toFloat() / total
 }
 
 data class BrowserTab(
@@ -547,9 +557,17 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         _s.update { it.copy(conflicts = emptyList(), pending = null, recent = emptySet(), transferControl = control, retryTransfer = null) }
         viewModelScope.launch {
             _s.update { it.copy(transferProgress = TransferProgress(0, keys.size, "Preparing", cut)) }
+            val transferStartedAt = System.currentTimeMillis()
             val result = withContext(Dispatchers.IO) {
-                storageTransfers.transfer(context, keys, destinationKey, cut, policy, control) { completed, total, name ->
-                    _s.update { it.copy(transferProgress = TransferProgress(completed, total, name, cut)) }
+                storageTransfers.transfer(context, keys, destinationKey, cut, policy, control) { completed, total, name, completedBytes, totalBytes ->
+                    val elapsedMs = (System.currentTimeMillis() - transferStartedAt).coerceAtLeast(1L)
+                    val speed = if (completedBytes > 0L) completedBytes * 1000L / elapsedMs else 0L
+                    val eta = if (speed > 0L && totalBytes > completedBytes) (totalBytes - completedBytes) / speed else null
+                    _s.update {
+                        it.copy(transferProgress = TransferProgress(
+                            completed, total, name, cut, completedBytes, totalBytes, speed, eta
+                        ))
+                    }
                 }
             }
             repo.invalidateSearchCache()
