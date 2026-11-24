@@ -133,10 +133,17 @@ object SafRepository {
         runCatching { context.contentResolver.openOutputStream(documentUri, if (truncate) "wt" else "wa") }.getOrNull()
 
     /** Stream-copy so providers/SD cards work without assuming a real filesystem path. */
-    fun copy(context: Context, sourceUri: Uri, targetParent: Uri, targetName: String): Uri? {
+    fun copyIntoTree(
+        context: Context,
+        sourceUri: Uri,
+        targetTreeUri: Uri,
+        targetParentRelativePath: String,
+        targetName: String
+    ): Uri? {
         if (!isSafeName(targetName)) return null
         val source = document(context, sourceUri) ?: return null
-        val parent = document(context, targetParent)?.takeIf { it.isDirectory } ?: return null
+        val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
+            ?.takeIf { it.isDirectory } ?: return null
         val mime = source.type ?: "application/octet-stream"
         val target = parent.createFile(mime, targetName) ?: return null
         return try {
@@ -152,10 +159,9 @@ object SafRepository {
 
     fun rename(context: Context, documentUri: Uri, newName: String): Uri? {
         if (!isSafeName(newName)) return null
-        return runCatching { document(context, documentUri)?.renameTo(newName) }
-            .getOrNull()
-            ?.takeIf { it }
-            ?.let { document(context, documentUri)?.uri }
+        return runCatching {
+            DocumentsContract.renameDocument(context.contentResolver, documentUri, newName)
+        }.getOrNull()
     }
 
     fun delete(context: Context, uri: Uri): Boolean =
