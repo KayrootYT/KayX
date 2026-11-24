@@ -629,52 +629,6 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         }
     }
 
-    private fun startTransfer(files: List<File>, dst: File, cut: Boolean, policy: Conflict?, sourcePane: Int?, fromClipboard: Boolean) {
-        if (files.isEmpty()) { notify("Nothing to ${if (cut) "move" else "copy"}"); return }
-        if (policy == null) {
-            val c = FileOps.conflicts(files, dst)
-            if (c.isNotEmpty()) {
-                _s.update { it.copy(conflicts = c, pending = PendingTransfer(files.map { f -> f.absolutePath }, dst.absolutePath, cut, sourcePane, fromClipboard)) }
-                return
-            }
-        }
-        val st = _s.value
-        val destinationPane = if (st.dualPane && st.activePane == 1) 1 else 0
-        val control = FileOps.TransferControl()
-        _s.update { it.copy(conflicts = emptyList(), pending = null, recent = emptySet(), transferControl = control, retryTransfer = null) }
-        viewModelScope.launch {
-            _s.update { it.copy(transferProgress = TransferProgress(0, files.size, "Preparing", cut)) }
-            val before = withContext(Dispatchers.IO) { dst.list()?.toSet().orEmpty() }
-            var completedBeforeFailure = 0
-            val result = withContext(Dispatchers.IO) {
-                FileOps.transfer(files, dst, cut, policy ?: Conflict.KEEP_BOTH, { completed, total, name ->
-                    completedBeforeFailure = maxOf(completedBeforeFailure, completed)
-                    _s.update { it.copy(transferProgress = TransferProgress(completed, total, name, cut)) }
-                }, control).map { }
-            }
-            repo.invalidateSearchCache()
-            // Everything new in the destination is highlighted so the user can see what just arrived.
-            val fresh = withContext(Dispatchers.IO) {
-                val after = dst.list()?.toSet().orEmpty()
-                ((after - before) + files.map { it.name }.filter { n -> File(dst, n).exists() }).map { n -> File(dst, n).absolutePath }.toSet()
-            }
-            clearPaneSelection(sourcePane ?: destinationPane)
-            _s.update {
-                it.copy(
-                    transferProgress = null,
-                    recent = if (result.isSuccess) fresh else emptySet(),
-                    transferControl = null,
-                    retryTransfer = if (result.isFailure && completedBeforeFailure < files.size) RetryTransfer(
-                        files.drop(completedBeforeFailure).map { it.absolutePath }, dst.absolutePath, cut, sourcePane, fromClipboard, policy ?: Conflict.KEEP_BOTH
-                    ) else null,
-                    message = result.exceptionOrNull()?.message ?: (if (cut) "Moved ${files.size}" else "Copied ${files.size}")
-                )
-            }
-            if (result.isSuccess) FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else if (fromClipboard) FileActionSound.PASTE else FileActionSound.COPY)
-            if (fromClipboard && cut && result.isSuccess) clearClipboard()
-            reload()
-        }
-    }
     fun dismissConflicts() = _s.update { it.copy(conflicts = emptyList(), pending = null) }
     fun pauseTransfer() { _s.value.transferControl?.pause() }
     fun resumeTransfer() { _s.value.transferControl?.resume() }
