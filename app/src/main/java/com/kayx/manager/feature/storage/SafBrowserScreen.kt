@@ -55,6 +55,9 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     var transferProgress by remember { mutableStateOf<String?>(null) }
     var transferControl by remember { mutableStateOf<FileOps.TransferControl?>(null) }
     var transferPaused by remember { mutableStateOf(false) }
+    var retryEntries by remember { mutableStateOf<List<SafRepository.Entry>>(emptyList()) }
+    var retryDestination by remember { mutableStateOf<Uri?>(null) }
+    var retryMove by remember { mutableStateOf(false) }
     var moveTransfer by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -116,19 +119,24 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                     var completed = 0
                     var failed = 0
                     var cancelled = false
+                    val retry = mutableListOf<SafRepository.Entry>()
                     for ((index, source) in sources.withIndex()) {
-                        if (control.isStopped()) { cancelled = true; break }
+                        if (control.isStopped()) { retry.addAll(sources.drop(index)); cancelled = true; break }
                         transferProgress = "${if (wasMove) "Moving" else "Copying"} ${index + 1}/${sources.size}: ${source.name}"
                         val result = withContext(Dispatchers.IO) {
                             if (wasMove) SafRepository.moveDocumentToTree(context, source.uri, destinationTree, targetName = source.name, control = control)
                             else SafRepository.copyDocumentToTree(context, source.uri, destinationTree, targetName = source.name, control = control)
                         }
                         if (result == null) {
-                            if (control.isStopped()) { cancelled = true; break }
+                            if (control.isStopped()) { retry.addAll(sources.drop(index)); cancelled = true; break }
                             failed++
+                            retry += source
                         } else completed++
                     }
                     transferProgress = null
+                    retryEntries = retry
+                    retryDestination = destinationTree.takeIf { retry.isNotEmpty() }
+                    retryMove = wasMove
                     control.state = when { cancelled -> FileOps.TransferState.CANCELLED; failed > 0 -> FileOps.TransferState.FAILED; else -> FileOps.TransferState.COMPLETE }
                     transferControl = null
                     transferPaused = false
@@ -210,6 +218,17 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (retryEntries.isNotEmpty() && transferProgress == null) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("${retryEntries.size} item(s) need retry", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
+                TextButton(onClick = {
+                    transferEntries = retryEntries
+                    retryEntries = emptyList()
+                    moveTransfer = retryMove
+                    destinationTreePicker.launch(retryDestination)
+                }) { Text("Retry") }
+            }
+        }
         transferProgress?.let { label ->
             LinearProgressIndicator(Modifier.fillMaxWidth())
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
