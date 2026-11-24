@@ -176,7 +176,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             confirmButton = { TextButton(onClick = {
                 if (SafRepository.rename(context, target.uri, name.trim()) == null) error = "Rename failed or provider does not support it"
                 renameTarget = null
-                kotlinx.coroutines.MainScope().launch { refresh() }
+                scope.launch { refresh() }
             }) { Text("Rename") } },
             dismissButton = { TextButton({ renameTarget = null }) { Text("Cancel") } }
         )
