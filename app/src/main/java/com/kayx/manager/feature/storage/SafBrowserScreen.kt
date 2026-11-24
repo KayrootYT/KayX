@@ -54,6 +54,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     var transferEntries by remember { mutableStateOf<List<SafRepository.Entry>>(emptyList()) }
     var transferProgress by remember { mutableStateOf<String?>(null) }
     var transferControl by remember { mutableStateOf<FileOps.TransferControl?>(null) }
+    var transferPaused by remember { mutableStateOf(false) }
     var moveTransfer by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -111,6 +112,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                     val wasMove = moveTransfer
                     val control = FileOps.TransferControl()
                     transferControl = control
+                    transferPaused = false
                     var completed = 0
                     var failed = 0
                     var cancelled = false
@@ -127,7 +129,9 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                         } else completed++
                     }
                     transferProgress = null
+                    control.state = when { cancelled -> FileOps.TransferState.CANCELLED; failed > 0 -> FileOps.TransferState.FAILED; else -> FileOps.TransferState.COMPLETE }
                     transferControl = null
+                    transferPaused = false
                     moveTransfer = false
                     if (!cancelled && failed == 0) selectedUris = emptySet()
                     error = when {
@@ -145,6 +149,12 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         context.getSharedPreferences("kayx_saf_browser", android.content.Context.MODE_PRIVATE)
             .edit().putString(treeUri.toString(), relativePath).apply()
         refresh()
+    }
+    DisposableEffect(transferControl) {
+        val activeControl = transferControl
+        onDispose {
+            if (activeControl?.state == FileOps.TransferState.RUNNING || activeControl?.state == FileOps.TransferState.PAUSED) activeControl.cancel()
+        }
     }
     val visibleEntries = remember(entries, query, sortMode, descending) {
         val filtered = entries.filter { it.name.contains(query.trim(), ignoreCase = true) }
@@ -204,8 +214,10 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f), maxLines = 1)
-                val paused = transferControl?.state == FileOps.TransferState.PAUSED
-                TextButton(onClick = { if (paused) transferControl?.resume() else transferControl?.pause() }) { Text(if (paused) "Resume" else "Pause") }
+                TextButton(onClick = {
+                    if (transferPaused) transferControl?.resume() else transferControl?.pause()
+                    transferPaused = !transferPaused
+                }) { Text(if (transferPaused) "Resume" else "Pause") }
                 TextButton(onClick = { transferControl?.cancel() }) { Text("Cancel") }
             }
         }
