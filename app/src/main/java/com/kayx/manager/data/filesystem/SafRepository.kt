@@ -253,11 +253,13 @@ object SafRepository {
         val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
             ?.takeIf { it.isDirectory } ?: return null
         val sourceRoot = runCatching { sourceFile.canonicalFile }.getOrNull() ?: return null
+        if (sourceRoot.path != sourceFile.absolutePath) return null
         val rootPath = sourceRoot.path.trimEnd(java.io.File.separatorChar)
         val visited = mutableSetOf<String>()
 
         fun copyNode(source: java.io.File, destination: DocumentFile): DocumentFile? {
             val canonical = runCatching { source.canonicalFile }.getOrNull() ?: return null
+            if (canonical.path != source.absolutePath) return null
             if (canonical.path != rootPath && !canonical.path.startsWith(rootPath + java.io.File.separator)) return null
             if (!visited.add(canonical.path)) return null
             if (source.isDirectory) {
