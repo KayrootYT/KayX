@@ -84,12 +84,45 @@ object SafRepository {
     }
 
     fun document(context: Context, uri: Uri): DocumentFile? = when {
-        // Descendant URIs created by a tree provider contain both /tree/ and /document/.
-        // Resolve those as the selected document, not as the tree root.
-        DocumentsContract.isDocumentUri(context, uri) -> DocumentFile.fromSingleUri(context, uri)
+        DocumentsContract.isTreeUri(uri) && DocumentsContract.isDocumentUri(context, uri) -> treeDescendant(context, uri)
         DocumentsContract.isTreeUri(uri) -> DocumentFile.fromTreeUri(context, uri)
+        DocumentsContract.isDocumentUri(context, uri) -> DocumentFile.fromSingleUri(context, uri)
         else -> null
     }
+
+    /** Resolve a document URI back into its tree-backed DocumentFile so directory children remain listable. */
+    private fun treeDescendant(context: Context, documentUri: Uri): DocumentFile? = runCatching {
+        val authority = documentUri.authority ?: return null
+        val rootId = DocumentsContract.getTreeDocumentId(documentUri)
+        val targetId = DocumentsContract.getDocumentId(documentUri)
+        val rootUri = DocumentsContract.buildTreeDocumentUri(authority, rootId)
+        val root = DocumentFile.fromTreeUri(context, rootUri) ?: return null
+        if (targetId == rootId) return root
+        if (targetId.startsWith(rootId.trimEnd('/') + "/")) {
+            var current = root
+            val relative = targetId.removePrefix(rootId.trimEnd('/') + "/")
+            for (part in relative.split('/').filter { it.isNotEmpty() }) current = current.findFile(part) ?: return null
+            return current
+        }
+        val single = DocumentFile.fromSingleUri(context, documentUri)
+        if (single?.isDirectory != true) return single
+        // Some providers use opaque document IDs. Resolve those by walking the granted tree,
+        // with a hard cap so an unusual provider cannot make this operation scan forever.
+        val pending = java.util.ArrayDeque<DocumentFile>()
+        pending.add(root)
+        var visited = 0
+        while (pending.isNotEmpty() && visited < 50_000) {
+            val current = pending.removeFirst()
+            visited++
+            val children = runCatching { current.listFiles().toList() }.getOrDefault(emptyList())
+            for (child in children) {
+                val childId = runCatching { DocumentsContract.getDocumentId(child.uri) }.getOrNull()
+                if (childId == targetId) return child
+                if (child.isDirectory) pending.addLast(child)
+            }
+        }
+        null
+    }.getOrNull()
 
     fun children(context: Context, treeUri: Uri): List<DocumentFile> =
         tree(context, treeUri)?.listFiles()?.toList().orEmpty()
