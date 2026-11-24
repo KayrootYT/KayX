@@ -76,6 +76,8 @@ class StorageTransferRepository {
             return copied != null
         }
         if (source is StorageLocation.Saf && destination is StorageLocation.Saf) {
+            val sourceParent = source.relativePath.substringBeforeLast('/', "")
+            if (move && source.treeUri == destination.treeUri && sourceParent == destination.relativePath) return true
             val doc = resolveDocument(context, source) ?: return false
             val copied = if (move) SafRepository.moveDocumentToTree(context, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control, onBytesCopied)
                 else SafRepository.copyDocumentToTree(context, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control, onBytesCopied)
