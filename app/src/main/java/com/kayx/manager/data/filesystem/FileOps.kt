@@ -112,6 +112,7 @@ object FileOps {
                 awaitTransfer(control)
                 copyAny(child, File(dest, child.name), control, onBytesCopied)
             }
+            awaitTransfer(control)
         } else copyFileControlled(src, dest, control, onBytesCopied)
     }
 
