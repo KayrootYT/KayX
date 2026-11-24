@@ -79,9 +79,47 @@ object FileOps {
         else src.copyTo(dest, overwrite = false)
     }
 
+    private fun awaitTransfer(control: TransferControl) {
+        while (control.state == TransferState.PAUSED) Thread.sleep(50)
+        check(control.state != TransferState.CANCELLED) { "Transfer cancelled" }
+    }
+
+    /** Stream files in bounded chunks so pause/cancel also works during a single large file. */
+    private fun copyFileControlled(src: File, dest: File, control: TransferControl) {
+        dest.parentFile?.let { check(it.exists() || it.mkdirs()) { "Cannot create destination folder: ${it.path}" } }
+        java.io.FileInputStream(src).use { input ->
+            java.io.FileOutputStream(dest, false).use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    awaitTransfer(control)
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    output.write(buffer, 0, count)
+                }
+                output.fd.sync()
+            }
+        }
+    }
+
+    private fun copyAny(src: File, dest: File, control: TransferControl) {
+        awaitTransfer(control)
+        if (src.isDirectory) {
+            check(dest.mkdir()) { "Cannot create folder: ${dest.name}" }
+            val children = src.listFiles() ?: error("Cannot read folder: ${src.name}")
+            for (child in children) {
+                awaitTransfer(control)
+                copyAny(child, File(dest, child.name), control)
+            }
+        } else copyFileControlled(src, dest, control)
+    }
+
     /** Like [copyAny], but removes a half-written destination when the copy fails. */
     private fun copyClean(src: File, dest: File) {
         try { copyAny(src, dest) } catch (e: Exception) { dest.deleteRecursively(); throw e }
+    }
+
+    private fun copyClean(src: File, dest: File, control: TransferControl) {
+        try { copyAny(src, dest, control) } catch (e: Exception) { dest.deleteRecursively(); throw e }
     }
 
     /** Copy or move [files] into [dst] using [policy] for name conflicts. Returns number of items processed. */
@@ -121,8 +159,8 @@ object FileOps {
             }
             try {
                 if (move) {
-                    if (!f.renameTo(dest)) { copyClean(f, dest); check(f.deleteRecursively()) { "Could not remove source: ${f.name}" } }
-                } else copyClean(f, dest)
+                    if (!f.renameTo(dest)) { copyClean(f, dest, control); check(f.deleteRecursively()) { "Could not remove source: ${f.name}" } }
+                } else copyClean(f, dest, control)
                 replaceBackup?.deleteRecursively()
             } catch (e: Exception) {
                 dest.deleteRecursively()
