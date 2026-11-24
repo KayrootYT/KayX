@@ -180,7 +180,14 @@ class StorageTransferRepository {
         }.getOrNull()
     }
 
-    private fun location(key: String): StorageLocation = StorageLocation.fromStableKey(key) ?: StorageLocation.Local(File(key))
+    private fun location(key: String): StorageLocation {
+        return StorageLocation.fromStableKey(key) ?: run {
+            require(!key.startsWith("saf:", ignoreCase = true) && !key.startsWith("local:", ignoreCase = true)) {
+                "Invalid storage location key"
+            }
+            StorageLocation.Local(File(key))
+        }
+    }
     private fun await(control: FileOps.TransferControl) {
         while (control.state == FileOps.TransferState.PAUSED) Thread.sleep(50)
         check(control.state != FileOps.TransferState.CANCELLED) { "Transfer cancelled" }
