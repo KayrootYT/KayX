@@ -107,7 +107,8 @@ object RootShell {
 
     /** Refuse catastrophic roots and critical mount roots; paths are still quoted and passed after --. */
     fun delete(path: String): Res {
-        val target = runCatching { File(path).toPath().toAbsolutePath().normalize().toFile() }.getOrElse { return Res(-1, "", "Invalid path") }
+        // Resolve symlinks before applying the deletion guard.
+        val target = runCatching { File(path).canonicalFile }.getOrElse { return Res(-1, "", "Invalid path") }
         if (!isSafeRecursiveDeleteTarget(target.path)) return Res(-1, "", "Refusing to recursively delete a protected system root")
         return run("rm -rf -- ${q(target.path)}")
     }
@@ -125,7 +126,13 @@ object RootShell {
 /** Pure path guard shared with JVM tests. */
 internal fun isSafeRecursiveDeleteTarget(path: String): Boolean {
     if (path.isBlank()) return false
-    val target = runCatching { File(path).toPath().toAbsolutePath().normalize().toString() }.getOrNull() ?: return false
-    val protected = setOf("/", "/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex")
-    return target.isNotBlank() && target !in protected
+    val target = runCatching { File(path).canonicalFile.toPath().toAbsolutePath().normalize().toString() }.getOrNull() ?: return false
+    val protected = setOf("/", "/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex", "/storage", "/sdcard", "/mnt/media_rw")
+    if (target in protected) return false
+    // Never allow a recursive delete of an entire mounted user volume.
+    val parts = target.trim('/').split('/').filter { it.isNotEmpty() }
+    if (parts.firstOrNull() == "storage" && parts.size <= 3) return false
+    if (parts.take(2) == listOf("mnt", "media_rw") && parts.size <= 3) return false
+    if (parts.take(3) == listOf("mnt", "user", "0") && parts.size <= 4) return false
+    return target.isNotBlank()
 }
