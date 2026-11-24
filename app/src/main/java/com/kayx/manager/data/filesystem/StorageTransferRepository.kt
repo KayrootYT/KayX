@@ -13,14 +13,18 @@ class StorageTransferRepository {
 
     fun transfer(context: Context, sourceKeys: List<String>, destinationKey: String, move: Boolean,
         policy: Conflict, control: FileOps.TransferControl,
-        onProgress: (Int, Int, String) -> Unit = { _, _, _ -> }): Result<Outcome> = runCatching {
+        onProgress: (Int, Int, String, Long, Long) -> Unit = { _, _, _, _, _ -> }): Result<Outcome> = runCatching {
         val destination = location(destinationKey)
         require(sourceKeys.isNotEmpty()) { "No source items selected" }
         val failures = mutableListOf<String>()
         val warnings = mutableListOf<String>()
         var completed = 0
+        val itemSizes = sourceKeys.map { itemSize(context, location(it)) }
+        val totalBytes = itemSizes.sum()
+        var completedBytes = 0L
         for ((index, key) in sourceKeys.withIndex()) {
             val source = location(key)
+            val itemBytes = itemSizes[index]
             val name = when (source) { is StorageLocation.Local -> source.directory.name; is StorageLocation.Saf -> source.relativePath.substringAfterLast('/') }
             if (control.isStopped()) {
                 sourceKeys.drop(index).forEach { remaining ->
@@ -29,11 +33,11 @@ class StorageTransferRepository {
                 }
                 break
             }
-            onProgress(index, sourceKeys.size, name)
+            onProgress(index, sourceKeys.size, name, completedBytes, totalBytes)
             val ok = try { transferOne(context, source, destination, move, policy, control, warnings) }
                 catch (_: Exception) { false }
-            if (ok) completed++ else failures += name
-            onProgress(index + 1, sourceKeys.size, name)
+            if (ok) { completed++; completedBytes += itemBytes } else failures += name
+            onProgress(index + 1, sourceKeys.size, name, completedBytes, totalBytes)
         }
         Outcome(completed, failures, warnings)
     }
@@ -112,6 +116,29 @@ class StorageTransferRepository {
 
     private fun resolveDocument(context: Context, location: StorageLocation.Saf): DocumentFile? =
         SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)
+
+    private fun itemSize(context: Context, location: StorageLocation): Long = when (location) {
+        is StorageLocation.Local -> {
+            val root = location.directory
+            if (root.isFile) root.length().coerceAtLeast(0L)
+            else runCatching { root.walkTopDown().filter { it.isFile }.sumOf { it.length().coerceAtLeast(0L) } }.getOrDefault(0L)
+        }
+        is StorageLocation.Saf -> {
+            val root = resolveDocument(context, location) ?: return 0L
+            if (!root.isDirectory) return root.length().coerceAtLeast(0L)
+            var total = 0L
+            val queue = java.util.ArrayDeque<DocumentFile>()
+            val visited = mutableSetOf<String>()
+            queue.add(root)
+            while (queue.isNotEmpty() && visited.size < 100_000) {
+                val item = queue.removeFirst()
+                if (!visited.add(item.uri.toString())) continue
+                if (item.isDirectory) item.listFiles().forEach { queue.addLast(it) }
+                else total += item.length().coerceAtLeast(0L)
+            }
+            total
+        }
+    }
 
     private fun uniqueTarget(parent: File, name: String, policy: Conflict): File? {
         val target = File(parent, name)
