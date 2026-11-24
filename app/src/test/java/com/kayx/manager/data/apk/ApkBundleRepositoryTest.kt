@@ -1,5 +1,7 @@
 package com.kayx.manager.data.apk
 
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -45,6 +47,7 @@ class ApkBundleRepositoryTest {
             root.deleteRecursively()
         }
     }
+
     @Test
     fun rejectsPathTraversalEntries() {
         val root = createTempDir(prefix = "kayx-apk-bundle-traversal-")
@@ -99,4 +102,46 @@ class ApkBundleRepositoryTest {
         }
     }
 
+    @Test
+    fun boundedPayloadCopyWritesExactBytes() {
+        val bytes = "valid-apk-payload".toByteArray()
+        val output = ByteArrayOutputStream()
+        val copied = ApkBundleRepository.copyApkPayload(
+            ByteArrayInputStream(bytes), output, bytes.size.toLong(), bytes.size.toLong()
+        )
+        assertEquals(bytes.size.toLong(), copied)
+        assertTrue(bytes.contentEquals(output.toByteArray()))
+    }
+
+    @Test
+    fun boundedPayloadCopyRejectsExpandedEntry() {
+        val output = ByteArrayOutputStream()
+        val result = runCatching {
+            ApkBundleRepository.copyApkPayload(
+                ByteArrayInputStream(ByteArray(128)), output, 64L, 128L
+            )
+        }
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun boundedPayloadCopyRejectsTruncatedEntry() {
+        val output = ByteArrayOutputStream()
+        val result = runCatching {
+            ApkBundleRepository.copyApkPayload(
+                ByteArrayInputStream(ByteArray(32)), output, 64L, 128L
+            )
+        }
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun boundedPayloadCopyRejectsAggregateBudgetOverflow() {
+        val result = runCatching {
+            ApkBundleRepository.copyApkPayload(
+                ByteArrayInputStream(ByteArray(16)), ByteArrayOutputStream(), 16L, 8L
+            )
+        }
+        assertTrue(result.isFailure)
+    }
 }

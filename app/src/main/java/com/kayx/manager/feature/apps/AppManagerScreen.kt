@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import com.kayx.manager.data.apk.ApkBackupRepository
 import com.kayx.manager.data.filesystem.ExternalOps
 import com.kayx.manager.feature.tools.ToolScaffold
 import com.kayx.manager.ui.glass.GlassCard
@@ -77,12 +78,22 @@ fun AppManagerScreen(onBack: () -> Unit, onOpenApk: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     var apps by remember { mutableStateOf<List<AppRow>?>(null) }
+    var loadError by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableIntStateOf(0) }
     var q by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf(0) }
-    var sortBy by remember { mutableStateOf(0) }
+    var filter by remember { mutableIntStateOf(0) }
+    var sortBy by remember { mutableIntStateOf(0) }
     var sel by remember { mutableStateOf<AppRow?>(null) }
-    LaunchedEffect(reloadKey) { apps = null; apps = withContext(Dispatchers.IO) { loadApps(pm) } }
+
+    LaunchedEffect(reloadKey) {
+        apps = null
+        loadError = null
+        val result = withContext(Dispatchers.IO) { runCatching { loadApps(pm) } }
+        apps = result.getOrElse {
+            loadError = it.message ?: "Unable to load installed applications"
+            emptyList()
+        }
+    }
 
     val shown = remember(apps, q, filter, sortBy) {
         apps.orEmpty().filter {
@@ -94,19 +105,18 @@ fun AppManagerScreen(onBack: () -> Unit, onOpenApk: (String) -> Unit) {
     }
 
     fun extract(a: AppRow) = scope.launch {
-        val r = withContext(Dispatchers.IO) {
-            runCatching {
-                val safe = (a.label + "_" + a.version).replace(Regex("[^\\w.\\-]"), "_")
-                val dir = File(Environment.getExternalStorageDirectory(), "KayX/apk").apply { mkdirs() }
-                if (a.splits.isEmpty()) File(a.apk).copyTo(File(dir, "$safe.apk"), overwrite = true).name
-                else {
-                    val d = File(dir, safe).apply { mkdirs() }
-                    (listOf(a.apk) + a.splits).forEach { File(it).copyTo(File(d, File(it).name), overwrite = true) }
-                    "$safe/ (${a.splits.size + 1} files)"
-                }
-            }
+        val result = withContext(Dispatchers.IO) {
+            ApkBackupRepository.backup(
+                appLabel = a.label,
+                versionName = a.version,
+                apkPaths = listOf(a.apk) + a.splits,
+                destinationRoot = File(Environment.getExternalStorageDirectory(), "KayX/apk")
+            )
         }
-        snack.showSnackbar(r.fold({ "Saved to /KayX/apk/$it" }, { it.message ?: "Extract failed" }))
+        snack.showSnackbar(result.fold(
+            { "Backup saved: ${it.name}" },
+            { it.message ?: "APK backup failed" }
+        ))
     }
 
     ToolScaffold("Apps (${shown.size})", onBack, snack) { pad ->
@@ -121,7 +131,11 @@ fun AppManagerScreen(onBack: () -> Unit, onOpenApk: (String) -> Unit) {
                 listOf("A–Z", "Size", "Date").forEachIndexed { i, l -> FilterChip(sortBy == i, { sortBy = i }, { Text(l, maxLines = 1, softWrap = false) }) }
             }
             if (apps == null) Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Accent) }
-            else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            else if (shown.isEmpty()) {
+                Box(Modifier.fillMaxSize(), Alignment.Center) {
+                    Text(loadError ?: if (q.isBlank()) "No installed applications found" else "No apps match your search", color = Fg.copy(.65f))
+                }
+            } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(shown, key = { it.pkg }) { a ->
                     GlassCard(Modifier.fillMaxWidth(), onClick = { sel = a }) {
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -153,6 +167,7 @@ fun AppManagerScreen(onBack: () -> Unit, onOpenApk: (String) -> Unit) {
                 Text("Package: ${a.pkg}", style = MaterialTheme.typography.bodySmall)
                 Text("Version: ${a.version} (${a.versionCode})", style = MaterialTheme.typography.bodySmall)
                 Text("Target SDK: ${a.targetSdk} · APK size: ${fmt(a.size)}", style = MaterialTheme.typography.bodySmall)
+                Text("Installed APK parts: ${1 + a.splits.size}", style = MaterialTheme.typography.bodySmall)
                 Text("${a.permissions.size} requested permission(s)", style = MaterialTheme.typography.bodySmall)
                 a.permissions.forEach { permission -> Text("• $permission", style = MaterialTheme.typography.labelSmall, color = Fg.copy(.65f)) }
                 Spacer(Modifier.height(8.dp))

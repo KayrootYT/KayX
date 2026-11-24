@@ -266,6 +266,21 @@ fun ZipScreen(path: String, onBack: () -> Unit, onOpenTool: (String, com.kayx.ma
     var renameFor by remember { mutableStateOf<ZipItem?>(null) }
     var zmenu by remember { mutableStateOf(false) }
     var pendingReplace by remember { mutableStateOf<String?>(null) }
+    val isApkBundle = file.extension.lowercase() in setOf("apks", "apkm", "xapk")
+    var bundleInspection by remember { mutableStateOf<com.kayx.manager.data.apk.ApkBundleInspection?>(null) }
+    var bundleError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(path, isApkBundle) {
+        bundleInspection = null
+        bundleError = null
+        if (isApkBundle) {
+            val result = withContext(Dispatchers.IO) {
+                com.kayx.manager.data.apk.ApkBundleRepository.inspect(file)
+            }
+            result.onSuccess { bundleInspection = it }
+                .onFailure { bundleError = it.message ?: "Cannot inspect APK bundle" }
+        }
+    }
 
     fun refresh() = scope.launch {
         busy = true
@@ -309,6 +324,34 @@ fun ZipScreen(path: String, onBack: () -> Unit, onOpenTool: (String, com.kayx.ma
     }
     fun signOut() = com.kayx.manager.data.filesystem.FileOps.uniqueName(file.parentFile ?: file, file.nameWithoutExtension + "_signed.apk")
 
+    fun installApkBundle() = scope.launch {
+        if (bundleInspection == null) {
+            snack.showSnackbar(bundleError ?: "APK bundle is still being inspected")
+            return@launch
+        }
+        if (bundleInspection!!.apkFiles.none {
+                it.substringAfterLast('/').equals("base.apk", true) ||
+                    it.substringAfterLast('/').equals("base-master.apk", true)
+            }) {
+            snack.showSnackbar("Bundle has no base.apk or base-master.apk and cannot be installed")
+            return@launch
+        }
+        if (!ctx.packageManager.canRequestPackageInstalls()) {
+            ctx.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${ctx.packageName}")))
+            snack.showSnackbar("Allow Install unknown apps for KayX, then tap Install bundle again")
+            return@launch
+        }
+        busy = true
+        val result = withContext(Dispatchers.IO) {
+            com.kayx.manager.data.apk.ApkBundleRepository.install(ctx.applicationContext, file)
+        }
+        busy = false
+        snack.showSnackbar(result.fold(
+            { "Install session submitted (#$it). Complete the Android system prompt." },
+            { it.message ?: "APK bundle installation failed" }
+        ))
+    }
+
     ToolScaffold(file.name, onBack, snack, actions = {
         Box {
             IconButton(onClick = { zmenu = true }, enabled = !busy) { Icon(Icons.Default.MoreVert, "More") }
@@ -348,6 +391,36 @@ fun ZipScreen(path: String, onBack: () -> Unit, onOpenTool: (String, com.kayx.ma
                     Text("${list?.size ?: 0} items · ${fmt(file.length())}", color = Fg.copy(.55f), style = MaterialTheme.typography.labelSmall)
                 }
                 TextButton(onClick = { sel = if (sel.size == (list?.size ?: 0)) emptySet() else list.orEmpty().map { it.name }.toSet() }, enabled = !list.isNullOrEmpty()) { Text("Select all") }
+            }
+            if (isApkBundle) {
+                GlassCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("APK bundle installer", style = MaterialTheme.typography.titleSmall, color = Accent)
+                        when {
+                            bundleError != null -> Text(bundleError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            bundleInspection == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Accent)
+                                Text(" Inspecting bundle…", style = MaterialTheme.typography.bodySmall, color = Fg.copy(.7f))
+                            }
+                            else -> {
+                                Text("${bundleInspection!!.type} · ${bundleInspection!!.apkFiles.size} APK payload(s)", style = MaterialTheme.typography.bodySmall)
+                                bundleInspection!!.apkFiles.take(8).forEach { Text("• $it", style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                if (bundleInspection!!.apkFiles.size > 8) Text("…and ${bundleInspection!!.apkFiles.size - 8} more APKs", style = MaterialTheme.typography.labelSmall)
+                                if (bundleInspection!!.manifestFiles.isNotEmpty()) Text("Manifest: ${bundleInspection!!.manifestFiles.joinToString()}", style = MaterialTheme.typography.labelSmall, color = Fg.copy(.6f))
+                            }
+                        }
+                        Button(
+                            onClick = { installApkBundle() },
+                            enabled = !busy && bundleInspection != null && bundleError == null &&
+                                bundleInspection!!.apkFiles.any { it.substringAfterLast('/').equals("base.apk", true) || it.substringAfterLast('/').equals("base-master.apk", true) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Android, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Install bundle")
+                        }
+                    }
+                }
             }
             when {
                 error != null -> Center(PaddingValues(0.dp), error!!)
