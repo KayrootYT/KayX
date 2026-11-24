@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val canWrite = remember(treeUri) { SafRepository.hasWriteAccess(context, treeUri) }
     var relativePath by remember(treeUri) { mutableStateOf("") }
     var entries by remember(treeUri, relativePath) { mutableStateOf<List<SafRepository.Entry>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -108,11 +109,17 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                 Text("SD card / SAF", style = MaterialTheme.typography.titleLarge)
                 Text(if (relativePath.isBlank()) "Selected folder" else relativePath, style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
-            IconButton({ importPicker.launch(arrayOf("*/*")) }) { Icon(Icons.Default.FileUpload, "Import file") }
-            IconButton({ createDialog = true; name = "" }) { Icon(Icons.Default.CreateNewFolder, "New folder") }
+            IconButton(onClick = { importPicker.launch(arrayOf("*/*")) }, enabled = canWrite) { Icon(Icons.Default.FileUpload, "Import file") }
+            IconButton(onClick = { createDialog = true; name = "" }, enabled = canWrite) { Icon(Icons.Default.CreateNewFolder, "New folder") }
             IconButton({ scope.launch { refresh() } }) { Icon(Icons.Default.Refresh, "Refresh") }
         }
         HorizontalDivider()
+        if (!canWrite) Text(
+            "Read-only access. Choose a folder with write permission to create, import, rename or delete items.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
         if (!loading && entries.isEmpty() && error == null) {
@@ -165,16 +172,16 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                                 moveTransfer = false
                                 destinationTreePicker.launch(null)
                             })
-                            DropdownMenuItem(text = { Text("Move to storage…") }, leadingIcon = { Icon(Icons.Default.FileDownload, null) }, onClick = {
+                            DropdownMenuItem(enabled = canWrite, text = { Text("Move to storage…") }, leadingIcon = { Icon(Icons.Default.FileDownload, null) }, onClick = {
                                 menu = false
                                 transferEntry = entry
                                 moveTransfer = true
                                 destinationTreePicker.launch(null)
                             })
-                            DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = {
+                            DropdownMenuItem(enabled = canWrite, text = { Text("Rename") }, leadingIcon = { Icon(Icons.Default.Edit, null) }, onClick = {
                                 menu = false; renameTarget = entry; name = entry.name
                             })
-                            DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Icon(Icons.Default.Delete, null) }, onClick = {
+                            DropdownMenuItem(enabled = canWrite, text = { Text("Delete") }, leadingIcon = { Icon(Icons.Default.Delete, null) }, onClick = {
                                 menu = false; deleteTarget = entry
                             })
                         }
