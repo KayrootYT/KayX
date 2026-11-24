@@ -71,7 +71,7 @@ class ArchiveSafetyTest {
         try {
             val zip = File(root, "windows.zip")
             ZipOutputStream(zip.outputStream()).use { out ->
-                out.putNextEntry(ZipEntry("..\\\\escape.txt"))
+                out.putNextEntry(ZipEntry("..\\escape.txt"))
                 out.write("bad".toByteArray())
                 out.closeEntry()
             }
