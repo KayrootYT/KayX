@@ -55,4 +55,28 @@ class FileTransferControlTest {
             base.deleteRecursively()
         }
     }
+
+    @Test
+    fun copyRefusesToFollowSymbolicLinkSources() {
+        val base = createTempDir(prefix = "kayx-transfer-symlink-")
+        try {
+            val outside = File(base, "outside.txt").apply { writeText("keep") }
+            val link = File(base, "linked.txt")
+            try {
+                java.nio.file.Files.createSymbolicLink(link.toPath(), outside.toPath())
+            } catch (_: UnsupportedOperationException) {
+                return
+            } catch (_: SecurityException) {
+                return
+            }
+            val destination = File(base, "destination").apply { mkdirs() }
+            val result = FileOps.transfer(listOf(link), destination, move = false, policy = Conflict.KEEP_BOTH)
+            assertTrue(result.isFailure)
+            assertFalse(File(destination, link.name).exists())
+            assertTrue(outside.readText() == "keep")
+            assertTrue(link.exists())
+        } finally {
+            base.deleteRecursively()
+        }
+    }
 }
