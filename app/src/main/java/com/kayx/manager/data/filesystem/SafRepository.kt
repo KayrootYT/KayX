@@ -382,12 +382,16 @@ object SafRepository {
         sourceFile: java.io.File,
         targetTreeUri: Uri,
         targetParentRelativePath: String = "",
-        control: FileOps.TransferControl = FileOps.TransferControl()
+        control: FileOps.TransferControl = FileOps.TransferControl(),
+        onSourceCleanupFailure: () -> Unit = {}
     ): Uri? {
         val copied = copyLocalFileToTree(context, sourceFile, targetTreeUri, targetParentRelativePath, control) ?: return null
         try { awaitTransfer(control) } catch (_: Exception) { runCatching { document(context, copied)?.delete() }; return null }
-        // Keep the destination copy if source cleanup fails; never roll back the only complete copy.
-        if (!runCatching { sourceFile.deleteRecursively() }.getOrDefault(false)) return null
+        // The copy is complete. Preserve it and report cleanup separately if source removal fails.
+        if (!runCatching { sourceFile.deleteRecursively() }.getOrDefault(false)) {
+            onSourceCleanupFailure()
+            return copied
+        }
         return copied
     }
 
