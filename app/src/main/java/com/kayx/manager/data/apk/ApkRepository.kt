@@ -43,8 +43,16 @@ data class ApkComponent(
 
 class ApkRepository(private val context: Context) {
 
+    companion object {
+        private const val MAX_APK_ARCHIVE_BYTES = 2L shl 30
+        private const val MAX_APK_ZIP_ENTRIES = 100_000
+    }
+
     fun getApkInfo(apkFile: File): Result<ApkInfo> = runCatching {
-        check(apkFile.exists()) { "APK file does not exist" }
+        require(apkFile.isFile && apkFile.canRead()) { "APK file is missing or unreadable" }
+        require(apkFile.length() in 1..MAX_APK_ARCHIVE_BYTES) {
+            "APK file is empty or exceeds the supported 2 GiB inspection limit"
+        }
 
         val pm = context.packageManager
         val signingFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
@@ -109,6 +117,10 @@ class ApkRepository(private val context: Context) {
             }
         }
 
+        // Read the ZIP central directory once. Reopening and walking it separately for
+        // each category multiplies work on large APKs and can amplify malformed archives.
+        val entries = readApkEntries(apkFile) { true }
+
         ApkInfo(
             appName = appLabel,
             packageName = pkgInfo.packageName ?: "Unknown",
@@ -125,10 +137,10 @@ class ApkRepository(private val context: Context) {
             services = pkgInfo.services.orEmpty().map { ApkComponent(it.name, it.exported, it.permission, it.enabled) },
             receivers = pkgInfo.receivers.orEmpty().map { ApkComponent(it.name, it.exported, it.permission, it.enabled) },
             providers = pkgInfo.providers.orEmpty().map { ApkComponent(it.name, it.exported, it.readPermission ?: it.writePermission, it.enabled) },
-            dexFiles = readApkEntries(apkFile) { it.matches(Regex("classes(\\d+)?\\.dex")) },
-            nativeLibraries = readApkEntries(apkFile) { it.startsWith("lib/") && it.endsWith(".so") },
-            resourceCount = readApkEntries(apkFile) { it.startsWith("res/") }.size,
-            assetCount = readApkEntries(apkFile) { it.startsWith("assets/") }.size,
+            dexFiles = entries.filter { it.matches(Regex("classes(\\d+)?\\.dex")) },
+            nativeLibraries = entries.filter { it.startsWith("lib/") && it.endsWith(".so") },
+            resourceCount = entries.count { it.startsWith("res/") },
+            assetCount = entries.count { it.startsWith("assets/") },
             certDetails = certDetails
         )
     }
@@ -137,8 +149,13 @@ class ApkRepository(private val context: Context) {
         ZipFile(file).use { zip ->
             val result = mutableListOf<String>()
             val entries = zip.entries()
+            var entryCount = 0
             while (entries.hasMoreElements()) {
                 val name = entries.nextElement().name
+                entryCount++
+                require(entryCount <= MAX_APK_ZIP_ENTRIES) {
+                    "APK contains too many ZIP entries to inspect safely"
+                }
                 if (accept(name)) result += name
             }
             result
