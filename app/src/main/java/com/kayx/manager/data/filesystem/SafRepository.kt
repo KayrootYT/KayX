@@ -141,16 +141,16 @@ object SafRepository {
     }
     fun createFolder(context: Context, treeUri: Uri, parentRelativePath: String, name: String): Uri? {
         if (!isSafeName(name)) return null
-        return findByRelativePath(context, treeUri, parentRelativePath)
-            ?.takeIf { it.isDirectory }
-            ?.createDirectory(name)?.uri
+        val parent = findByRelativePath(context, treeUri, parentRelativePath)?.takeIf { it.isDirectory } ?: return null
+        if (parent.findFile(name) != null) return null
+        return parent.createDirectory(name)?.uri
     }
 
     fun createFile(context: Context, treeUri: Uri, parentRelativePath: String, name: String, mime: String = "application/octet-stream"): Uri? {
         if (!isSafeName(name)) return null
-        return findByRelativePath(context, treeUri, parentRelativePath)
-            ?.takeIf { it.isDirectory }
-            ?.createFile(mime, name)?.uri
+        val parent = findByRelativePath(context, treeUri, parentRelativePath)?.takeIf { it.isDirectory } ?: return null
+        if (parent.findFile(name) != null) return null
+        return parent.createFile(mime, name)?.uri
     }
 
     fun openInput(context: Context, documentUri: Uri): InputStream? =
@@ -365,9 +365,11 @@ object SafRepository {
 
     fun rename(context: Context, documentUri: Uri, newName: String): Uri? {
         if (!isSafeName(newName)) return null
-        return runCatching {
-            DocumentsContract.renameDocument(context.contentResolver, documentUri, newName)
-        }.getOrNull()
+        val source = document(context, documentUri) ?: return null
+        val parent = source.parentFile
+        val existing = parent?.findFile(newName)
+        if (existing != null && existing.uri != source.uri) return null
+        return runCatching { DocumentsContract.renameDocument(context.contentResolver, documentUri, newName) }.getOrNull()
     }
 
     fun delete(context: Context, uri: Uri): Boolean =
