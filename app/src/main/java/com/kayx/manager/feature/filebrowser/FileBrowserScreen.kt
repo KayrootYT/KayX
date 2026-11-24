@@ -441,7 +441,11 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
             s.transferProgress?.let { progress ->
                 GlassCard(Modifier.fillMaxWidth().padding(top = 6.dp)) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text("${if (progress.moving) "Moving" else "Copying"} ${progress.completed}/${progress.total}: ${progress.currentName}",
+                        val transferDetails = if (progress.totalBytes > 0L) {
+                            "${fmtSize(progress.completedBytes)} / ${fmtSize(progress.totalBytes)} · ${fmtSize(progress.bytesPerSecond)}/s" +
+                                (progress.etaSeconds?.let { " · ETA ${it / 60}m ${it % 60}s" } ?: "")
+                        } else "${progress.completed}/${progress.total} items"
+                        Text("${if (progress.moving) "Moving" else "Copying"}: ${progress.currentName} · $transferDetails",
                             style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         LinearProgressIndicator(progress = { progress.fraction }, modifier = Modifier.fillMaxWidth())
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
