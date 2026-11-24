@@ -32,15 +32,24 @@ object SafRepository {
         val resolver = context.contentResolver
         val flags = grantedFlags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         if (flags and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0) return false
-        return try {
-            resolver.takePersistableUriPermission(uri, flags)
+        fun rememberGrant() {
             val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val saved = prefs.getStringSet(TREE_URIS, emptySet()).orEmpty().toMutableSet()
             saved += uri.toString()
             prefs.edit().putStringSet(TREE_URIS, saved).apply()
+        }
+        return try {
+            resolver.takePersistableUriPermission(uri, flags)
+            rememberGrant()
             true
         } catch (_: SecurityException) {
-            false
+            // Some document providers grant read-only access. Keep that useful grant instead
+            // of rejecting the location entirely; write actions are separately gated.
+            if (flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0 &&
+                runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }.isSuccess) {
+                rememberGrant()
+                true
+            } else false
         } catch (_: IllegalArgumentException) {
             false
         }
