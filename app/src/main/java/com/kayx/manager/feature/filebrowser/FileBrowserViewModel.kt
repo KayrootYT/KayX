@@ -609,7 +609,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             repo.invalidateSearchCache()
             val outcome = result.getOrNull()
             val failed = outcome?.failed.orEmpty()
-            clearPaneSelection(sourcePane ?: _s.value.activeIdx)
+            if (result.isSuccess && !fromClipboard) clearPaneSelection(sourcePane ?: _s.value.activeIdx)
             _s.update { current ->
                 current.copy(
                     transferProgress = null,
