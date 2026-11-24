@@ -159,4 +159,28 @@ class ArchiveSafetyTest {
         }
     }
 
+    @Test
+    fun rarFilesAreRecognizedForExtraction() {
+        assertTrue(MultiExtract.canExtract("sample.rar"))
+        assertTrue(MultiExtract.canExtract("sample.RAR"))
+    }
+
+    @Test
+    fun zipExtractionRejectsDuplicateCanonicalPaths() {
+        val root = createTempDir(prefix = "kayx-archive-duplicate-path-")
+        try {
+            val zip = File(root, "duplicate-path.zip")
+            ZipOutputStream(zip.outputStream()).use { out ->
+                listOf("folder/file.txt", "folder//file.txt").forEach { name ->
+                    out.putNextEntry(ZipEntry(name))
+                    out.write(name.toByteArray())
+                    out.closeEntry()
+                }
+            }
+            assertTrue(ArchiveRepository().extract(zip, null).isFailure)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
 }
