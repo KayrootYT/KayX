@@ -66,9 +66,7 @@ object RootShell {
     fun q(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
     /** True when the selected backend responds; Root mode additionally requires uid 0. */
-    fun isRoot(): Boolean = run("id", 5_000).let {
-        it.code == 0 && Regex("uid=0(?:\\\\(|,)").containsMatchIn(it.out)
-    }
+    fun isRoot(): Boolean = run("id", 5_000).let { it.code == 0 && isRootIdentity(it.out) }
 
     private val lsLine = Regex(
         "^([a-z\\-][rwxsStTl\\-]{9})\\s+(?:\\d+\\s+)?(\\S+)\\s+(\\S+)\\s+(?:(\\d+)(?:,\\s*\\d+)?\\s+)?(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{2}:\\d{2})(?::\\d{2})?\\s+(.+)$"
@@ -123,6 +121,8 @@ object RootShell {
 }
 
 
+/** Parse the conventional id output from both toybox and toolbox implementations. */
+internal fun isRootIdentity(output: String): Boolean = Regex("uid=0(?:\\\\(|,)").containsMatchIn(output)
 /** Pure path guard shared with JVM tests. */
 internal fun isSafeRecursiveDeleteTarget(path: String): Boolean {
     if (path.isBlank()) return false
