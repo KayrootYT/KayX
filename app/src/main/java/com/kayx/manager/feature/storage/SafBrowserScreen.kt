@@ -124,8 +124,9 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                 error = "Choose a different storage location to avoid copying items into the same tree."
                 moveTransfer = false
             } else {
-                if (!SafRepository.persistTreePermission(context, destinationTree) && !SafRepository.hasWriteAccess(context, destinationTree)) {
-                    error = "Destination permission could not be saved. Choose the storage folder again and allow write access."
+                val persisted = SafRepository.persistTreePermission(context, destinationTree)
+                if (!persisted || !SafRepository.hasWriteAccess(context, destinationTree)) {
+                    error = "Destination is read-only or its write permission could not be saved. Choose a writable folder."
                     moveTransfer = false
                 } else scope.launch {
                     val wasMove = moveTransfer
