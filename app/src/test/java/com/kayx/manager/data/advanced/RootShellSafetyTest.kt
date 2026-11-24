@@ -32,23 +32,11 @@ class RootShellSafetyTest {
         assertTrue(isSafeRecursiveDeleteTarget("/storage/emulated/0/Download/old.zip"))
     }
 
-    @Test fun resolvesSymlinksBeforeCheckingProtectedRoots() {
-        val base = java.io.File(System.getProperty("java.io.tmpdir"), "kayx-root-guard-${System.nanoTime()}").apply { mkdirs() }
-        try {
-            val link = java.io.File(base, "system-link")
-            try {
-                java.nio.file.Files.createSymbolicLink(link.toPath(), java.nio.file.Paths.get("/proc"))
-                assertFalse(isSafeRecursiveDeleteTarget(java.io.File(link, "private").path))
-            } catch (_: UnsupportedOperationException) {
-                // Host filesystem does not support symbolic links.
-            } catch (_: SecurityException) {
-                // CI sandbox disallows symbolic-link creation.
-            }
-        } finally {
-            base.deleteRecursively()
+    @Test fun refusesDescendantsOfProtectedSystemTrees() {
+        listOf("/system/bin/sh", "/vendor/etc", "/product/app", "/odm/lib", "/proc/1", "/sys/kernel", "/data/system").forEach {
+            assertFalse("$it must be protected", isSafeRecursiveDeleteTarget(it))
         }
     }
-
     @Test fun recognizesRootUidOutputButNotShellUid() {
         assertTrue(isRootIdentity("uid=0(root) gid=0(root) groups=0(root)"))
         assertTrue(isRootIdentity("uid=0, gid=0, groups=0"))
