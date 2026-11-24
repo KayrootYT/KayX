@@ -668,6 +668,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     val doc = SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)
                     doc?.let { SafRepository.rename(context, it.uri, n) }
                 }
+                if (result != null) clearSelection()
                 notify(if (result != null) "Renamed to $n" else "Rename failed")
                 reload()
             }
