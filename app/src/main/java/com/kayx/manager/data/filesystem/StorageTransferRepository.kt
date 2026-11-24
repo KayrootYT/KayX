@@ -40,8 +40,21 @@ class StorageTransferRepository {
 
     private fun transferOne(context: Context, source: StorageLocation, destination: StorageLocation, move: Boolean,
         policy: Conflict, control: FileOps.TransferControl, warnings: MutableList<String>): Boolean {
-        if (source is StorageLocation.Local && destination is StorageLocation.Local)
-            return FileOps.transfer(listOf(source.directory), destination.directory, move, policy, control = control).isSuccess
+        if (source is StorageLocation.Local && destination is StorageLocation.Local) {
+            var itemCompleted = false
+            val result = FileOps.transfer(
+                listOf(source.directory), destination.directory, move, policy,
+                onProgress = { completed, _, _ -> if (completed > 0) itemCompleted = true },
+                control = control
+            )
+            if (result.isSuccess) return true
+            // FileOps reports source-cleanup failure after retaining the complete destination.
+            if (move && itemCompleted) {
+                warnings += source.directory.name
+                return true
+            }
+            return false
+        }
         if (source is StorageLocation.Local && destination is StorageLocation.Saf) {
             val tree = Uri.parse(destination.treeUri)
             if (!move) return SafRepository.copyLocalFileToTree(context, source.directory, tree, destination.relativePath, control) != null
