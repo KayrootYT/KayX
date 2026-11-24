@@ -327,10 +327,13 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         title = { Text("Create folder") },
         text = { OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Folder name") }) },
         confirmButton = { TextButton(onClick = {
-            val created = SafRepository.createFolder(context, treeUri, relativePath, name.trim())
-            if (created == null) error = "Could not create folder"
+            val folderName = name.trim()
             createDialog = false
-            scope.launch { refresh() }
+            scope.launch {
+                val created = withContext(Dispatchers.IO) { SafRepository.createFolder(context, treeUri, relativePath, folderName) }
+                if (created == null) error = "Could not create folder. Check the name and storage permission."
+                refresh()
+            }
         }) { Text("Create") } },
         dismissButton = { TextButton({ createDialog = false }) { Text("Cancel") } }
     )
@@ -340,9 +343,13 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             title = { Text("Rename") },
             text = { OutlinedTextField(name, { name = it }, singleLine = true) },
             confirmButton = { TextButton(onClick = {
-                if (SafRepository.rename(context, target.uri, name.trim()) == null) error = "Rename failed or provider does not support it"
+                val newName = name.trim()
                 renameTarget = null
-                scope.launch { refresh() }
+                scope.launch {
+                    val renamed = withContext(Dispatchers.IO) { SafRepository.rename(context, target.uri, newName) }
+                    if (renamed == null) error = "Rename failed, the name may already exist, or this provider does not support it"
+                    refresh()
+                }
             }) { Text("Rename") } },
             dismissButton = { TextButton({ renameTarget = null }) { Text("Cancel") } }
         )
@@ -353,9 +360,12 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             title = { Text("Delete ${target.name}?") },
             text = { Text("This removes the item from the selected storage folder.") },
             confirmButton = { TextButton(onClick = {
-                if (!SafRepository.delete(context, target.uri)) error = "Delete failed"
                 deleteTarget = null
-                scope.launch { refresh() }
+                scope.launch {
+                    val deleted = withContext(Dispatchers.IO) { SafRepository.delete(context, target.uri) }
+                    if (!deleted) error = "Delete failed. The storage provider may have denied this operation."
+                    refresh()
+                }
             }) { Text("Delete") } },
             dismissButton = { TextButton({ deleteTarget = null }) { Text("Cancel") } }
         )
