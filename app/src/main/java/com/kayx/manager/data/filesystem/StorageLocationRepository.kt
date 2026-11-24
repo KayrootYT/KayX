@@ -42,6 +42,12 @@ class StorageLocationRepository {
 
             is StorageLocation.Saf -> {
                 val tree = Uri.parse(location.treeUri)
+                check(SafRepository.persistedTrees(context).contains(tree)) {
+                    "Storage permission was revoked. Select the storage folder again."
+                }
+                check(SafRepository.tree(context, tree)?.exists() == true) {
+                    "Storage is disconnected or no longer available."
+                }
                 SafRepository.entries(context, tree, location.relativePath)
                     .asSequence()
                     .filter { showHidden || !it.name.startsWith('.') }
