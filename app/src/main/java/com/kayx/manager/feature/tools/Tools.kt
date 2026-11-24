@@ -6,6 +6,11 @@ import com.kayx.manager.ui.theme.Fg
 import androidx.compose.ui.platform.LocalContext
 
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.content.Intent
+import android.provider.Settings
+import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -526,6 +531,37 @@ fun ApkInspectorScreen(path: String, onBack: () -> Unit, onOpenDex: () -> Unit =
                         Icon(Icons.Default.Code, null)
                         Spacer(Modifier.width(8.dp))
                         Text("Open DEX Inspector (${info.dexFiles.size} files)")
+                    }
+                }
+
+                item {
+                    Button(
+                        onClick = {
+                            runCatching {
+                                if (Build.VERSION.SDK_INT >= 26 && !context.packageManager.canRequestPackageInstalls()) {
+                                    context.startActivity(Intent(
+                                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                        Uri.parse("package:${context.packageName}")
+                                    ))
+                                } else {
+                                    val apkUri = FileProvider.getUriForFile(
+                                        context, "${context.packageName}.fileprovider", file
+                                    )
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_INSTALL_PACKAGE)
+                                            .setDataAndType(apkUri, "application/vnd.android.package-archive")
+                                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    )
+                                }
+                            }.onFailure {
+                                Toast.makeText(context, it.message ?: "Unable to start APK installer", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.InstallMobile, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Install this APK")
                     }
                 }
 
