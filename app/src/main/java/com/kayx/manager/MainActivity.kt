@@ -116,7 +116,17 @@ class MainActivity : ComponentActivity() {
                 val safTree by selectedSafTree
                 var path by rememberSaveable {
                     mutableStateOf<String?>(
-                        startDir ?: SettingsStore.browserPath.takeIf { saved -> saved.isNotBlank() && java.io.File(saved).isDirectory }
+                        startDir ?: SettingsStore.browserPath.takeIf { saved ->
+                            saved.isNotBlank() && (
+                                java.io.File(saved).isDirectory ||
+                                    runCatching {
+                                        val saf = com.kayx.manager.data.filesystem.StorageLocation.fromStableKey(saved)
+                                            as? com.kayx.manager.data.filesystem.StorageLocation.Saf
+                                        saf != null && com.kayx.manager.data.filesystem.SafRepository.persistedTrees(this)
+                                            .contains(android.net.Uri.parse(saf.treeUri))
+                                    }.getOrDefault(false)
+                                )
+                        }
                     )
                 }
                 var stack by rememberSaveable(stateSaver = ToolStackSaver) { mutableStateOf(listOf<Pair<String, Tool>>()) }
