@@ -280,6 +280,19 @@ object SafRepository {
         return copyNode(sourceFile, parent)?.uri
     }
 
+    /** Move a local file into a SAF tree only after its complete stream-copy succeeds. */
+    fun moveLocalFileToTree(
+        context: Context,
+        sourceFile: java.io.File,
+        targetTreeUri: Uri,
+        targetParentRelativePath: String = ""
+    ): Uri? {
+        val copied = copyLocalFileToTree(context, sourceFile, targetTreeUri, targetParentRelativePath) ?: return null
+        // Keep the destination copy if source cleanup fails; never roll back the only complete copy.
+        if (!sourceFile.deleteRecursively()) return null
+        return copied
+    }
+
     /** Move a SAF document only after its complete copy has succeeded. */
     fun moveDocumentToTree(
         context: Context,
