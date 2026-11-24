@@ -48,4 +48,11 @@ class RootShellSafetyTest {
             base.deleteRecursively()
         }
     }
+
+    @Test fun recognizesRootUidOutputButNotShellUid() {
+        assertTrue(isRootIdentity("uid=0(root) gid=0(root) groups=0(root)"))
+        assertTrue(isRootIdentity("uid=0, gid=0, groups=0"))
+        assertFalse(isRootIdentity("uid=2000(shell) gid=2000(shell)"))
+        assertFalse(isRootIdentity("uid=10000(com.example.app)"))
+    }
 }
