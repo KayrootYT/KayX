@@ -581,12 +581,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     transferProgress = null,
                     transferControl = null,
                     retryTransfer = if (failed.isNotEmpty()) RetryTransfer(
-                        keys.filter { key ->
-                            when (val location = locationOf(key)) {
-                                is StorageLocation.Local -> location.directory.name
-                                is StorageLocation.Saf -> location.relativePath.substringAfterLast('/')
-                            } in failed
-                        },
+                        keys.filter { it in failed },
                         destinationKey, cut, sourcePane, fromClipboard, policy
                     ) else null,
                     message = result.exceptionOrNull()?.message ?: buildString {
