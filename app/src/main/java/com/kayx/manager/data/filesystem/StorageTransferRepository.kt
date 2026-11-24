@@ -167,6 +167,7 @@ class StorageTransferRepository {
             input.use { src -> target.outputStream().use { dst ->
                 val buffer = ByteArray(64 * 1024)
                 while (true) { await(control); val count = src.read(buffer); if (count < 0) break; dst.write(buffer, 0, count); onBytesCopied(count.toLong()) }
+                await(control)
                 dst.flush()
                 dst.fd.sync()
             } }
