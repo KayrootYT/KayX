@@ -295,20 +295,19 @@ object SafRepository {
             if (src.isDirectory) {
                 val safeDestinationName = uniqueChildName(dstParent, dstName)
                 val dst = dstParent.createDirectory(safeDestinationName) ?: return null
-                val children = runCatching { src.listFiles().toList() }.getOrElse {
-                    dst.delete()
-                    return null
-                }
-                for (child in children) {
-                    awaitTransfer(control)
-                    val childName = child.name ?: run { dst.delete(); return null }
-                    if (runCatching { copyNode(child, dst, childName) }.getOrNull() == null) {
-                        dst.delete()
-                        return null
+                return try {
+                    val children = src.listFiles().toList()
+                    for (child in children) {
+                        awaitTransfer(control)
+                        val childName = child.name ?: error("Provider returned an unnamed item")
+                        check(copyNode(child, dst, childName) != null) { "Could not copy $childName" }
                     }
+                    awaitTransfer(control)
+                    dst
+                } catch (_: Exception) {
+                    runCatching { dst.delete() }
+                    null
                 }
-                awaitTransfer(control)
-                return dst
             }
 
             val safeDestinationName = uniqueChildName(dstParent, dstName)
