@@ -28,10 +28,13 @@ class ArchiveRepository {
         require(!normalized.startsWith('/') && !Regex("^[A-Za-z]:").containsMatchIn(normalized)) {
             "Blocked absolute archive path: $name"
         }
-        require(normalized.split('/').none { it == ".." || it == "." }) {
+        val segments = normalized.split('/')
+        require(segments.none { it == ".." || it == "." }) {
             "Blocked unsafe archive path: $name"
         }
-        return normalized
+        val clean = segments.filter { it.isNotEmpty() }.joinToString("/")
+        require(clean.isNotEmpty()) { "Archive entry resolves to an empty path" }
+        return clean + if (normalized.endsWith('/')) "/" else ""
     }
 
     private fun copyLimited(input: InputStream, output: OutputStream, remaining: Long): Long {
