@@ -549,18 +549,10 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val s = _s.value
         val pending = s.pending
         if (policy != null && pending != null) {
-            val allLocal = pending.files.all { locationOf(it) is StorageLocation.Local } &&
-                locationOf(pending.dst) is StorageLocation.Local
-            if (allLocal) startTransfer(pending.files.map { (locationOf(it) as StorageLocation.Local).directory },
-                (locationOf(pending.dst) as StorageLocation.Local).directory, pending.cut, policy, pending.sourcePane, pending.fromClipboard)
-            else startStorageTransfer(pending.files, pending.dst, pending.cut, policy, pending.sourcePane, pending.fromClipboard)
+            startStorageTransfer(pending.files, pending.dst, pending.cut, policy, pending.sourcePane, pending.fromClipboard)
             return
         }
-        val destination = activeLocation(s)
-        val allLocal = s.clipboard.all { locationOf(it) is StorageLocation.Local } && destination is StorageLocation.Local
-        if (allLocal) startTransfer(s.clipboard.map { (locationOf(it) as StorageLocation.Local).directory },
-            (destination as StorageLocation.Local).directory, s.cut, policy, null, true)
-        else startStorageTransfer(s.clipboard, destination.stableKey(), s.cut, policy ?: Conflict.KEEP_BOTH, null, true)
+        startStorageTransfer(s.clipboard, activeLocation(s).stableKey(), s.cut, policy, null, true)
     }
 
     /**
@@ -570,12 +562,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun transferSelectedToOther(cut: Boolean, policy: Conflict? = null) {
         val s = _s.value
         if (!s.dualPane) { notify("Turn on dual pane first"); return }
-        val allLocal = s.selected.all { locationOf(it) is StorageLocation.Local } &&
-            locationOf(s.otherDir) is StorageLocation.Local
-        if (allLocal) startTransfer(
-            s.selected.map { (locationOf(it) as StorageLocation.Local).directory },
-            (locationOf(s.otherDir) as StorageLocation.Local).directory, cut, policy, s.activePane, false
-        ) else startStorageTransfer(s.selected.toList(), s.otherDir, cut, policy ?: Conflict.KEEP_BOTH, s.activePane, false)
+        startStorageTransfer(s.selected.toList(), s.otherDir, cut, policy, s.activePane, false)
     }
 
     fun transferSelectedToSaf(treeUri: Uri, cut: Boolean) {
@@ -584,17 +571,27 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         startStorageTransfer(selected, StorageLocation.Saf(treeUri.toString(), "").stableKey(), cut, Conflict.KEEP_BOTH, _s.value.activeIdx, false)
     }
 
-    private fun startStorageTransfer(keys: List<String>, destinationKey: String, cut: Boolean, policy: Conflict, sourcePane: Int?, fromClipboard: Boolean) {
+    private fun startStorageTransfer(keys: List<String>, destinationKey: String, cut: Boolean, policy: Conflict?, sourcePane: Int?, fromClipboard: Boolean) {
         val context = appContext
         if (context == null) { notify("Storage context is not ready"); return }
         if (keys.isEmpty()) { notify("Nothing selected to transfer"); return }
+        val destinationLocation = locationOf(destinationKey)
+        if (policy == null && destinationLocation is StorageLocation.Local && keys.all { locationOf(it) is StorageLocation.Local }) {
+            val sources = keys.map { (locationOf(it) as StorageLocation.Local).directory }
+            val conflicts = FileOps.conflicts(sources, destinationLocation.directory)
+            if (conflicts.isNotEmpty()) {
+                _s.update { it.copy(conflicts = conflicts, pending = PendingTransfer(keys, destinationKey, cut, sourcePane, fromClipboard)) }
+                return
+            }
+        }
+        val effectivePolicy = policy ?: Conflict.KEEP_BOTH
         val control = FileOps.TransferControl()
         _s.update { it.copy(conflicts = emptyList(), pending = null, recent = emptySet(), transferControl = control, retryTransfer = null) }
         viewModelScope.launch {
             _s.update { it.copy(transferProgress = TransferProgress(0, keys.size, "Preparing", cut)) }
             val transferStartedAt = System.currentTimeMillis()
             val result = withContext(Dispatchers.IO) {
-                storageTransfers.transfer(context, keys, destinationKey, cut, policy, control) { completed, total, name, completedBytes, totalBytes ->
+                storageTransfers.transfer(context, keys, destinationKey, cut, effectivePolicy, control) { completed, total, name, completedBytes, totalBytes ->
                     val elapsedMs = (System.currentTimeMillis() - transferStartedAt).coerceAtLeast(1L)
                     val speed = if (completedBytes > 0L) completedBytes * 1000L / elapsedMs else 0L
                     val eta = if (speed > 0L && totalBytes > completedBytes) (totalBytes - completedBytes) / speed else null
@@ -615,7 +612,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     transferControl = null,
                     retryTransfer = if (failed.isNotEmpty()) RetryTransfer(
                         keys.filter { it in failed },
-                        destinationKey, cut, sourcePane, fromClipboard, policy
+                        destinationKey, cut, sourcePane, fromClipboard, effectivePolicy
                     ) else null,
                     message = result.exceptionOrNull()?.message ?: buildString {
                         append(if (cut) "Moved " else "Copied ")
