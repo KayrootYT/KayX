@@ -154,7 +154,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 val summary = if (cancelled) "$action cancelled: $completed of ${selectedPaths.size} item(s) completed" else "$action $completed of ${selectedPaths.size} item(s); $failed failed"
                 val warning = if (cleanupWarnings > 0) "; $cleanupWarnings source cleanup warning(s), destination copies were kept" else ""
                 snack.showSnackbar(summary + warning)
-                if (retryPaths.isEmpty()) vm.clearSelection() else vm.selectPaths(retryPaths)
+                val stillAvailable = retryPaths.filterTo(linkedSetOf()) { File(it).exists() }
+                if (stillAvailable.isEmpty()) vm.clearSelection() else vm.selectPaths(stillAvailable)
                 vm.reload()
             }
         } else moveSelectionToSaf = false
