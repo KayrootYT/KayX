@@ -48,7 +48,8 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     var deleteTarget by remember { mutableStateOf<SafRepository.Entry?>(null) }
     var name by remember { mutableStateOf("") }
     var exportSource by remember { mutableStateOf<Uri?>(null) }
-    var transferEntry by remember { mutableStateOf<SafRepository.Entry?>(null) }
+    var transferEntries by remember { mutableStateOf<List<SafRepository.Entry>>(emptyList()) }
+    var transferProgress by remember { mutableStateOf<String?>(null) }
     var moveTransfer by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -92,19 +93,33 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         }
     }
     val destinationTreePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { destinationTree ->
-        val source = transferEntry
-        transferEntry = null
-        if (destinationTree != null && source != null) {
+        val sources = transferEntries
+        transferEntries = emptyList()
+        if (destinationTree != null && sources.isNotEmpty()) {
             if (destinationTree == treeUri) {
-                error = "Choose a different storage folder to avoid copying an item into its own tree."
+                error = "Choose a different storage location to avoid copying items into the same tree."
                 moveTransfer = false
-            } else scope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    if (moveTransfer) SafRepository.moveDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
-                    else SafRepository.copyDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
+            } else {
+                SafRepository.persistTreePermission(context, destinationTree)
+                scope.launch {
+                    var completed = 0
+                    var failed = 0
+                    for (source in sources) {
+                        transferProgress = "${if (moveTransfer) "Moving" else "Copying"} ${completed + 1}/${sources.size}: ${source.name}"
+                        val result = withContext(Dispatchers.IO) {
+                            if (moveTransfer) SafRepository.moveDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
+                            else SafRepository.copyDocumentToTree(context, source.uri, destinationTree, targetName = source.name)
+                        }
+                        if (result == null) failed++ else completed++
+                    }
+                    transferProgress = null
+                    val wasMove = moveTransfer
+                    moveTransfer = false
+                    selectedUris = emptySet()
+                    error = if (failed == 0) "${if (wasMove) "Moved" else "Copied"} $completed item(s) successfully"
+                        else "$completed item(s) transferred; $failed failed. Check destination permissions and free space."
+                    refresh()
                 }
-                moveTransfer = false
-                if (result == null) error = if (source.isDirectory) "Folder transfer failed. Check destination permission and available space." else "File transfer failed."
             }
         } else moveTransfer = false
     }
@@ -129,6 +144,16 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             }
             if (selectedUris.isNotEmpty()) {
                 Text("${selectedUris.size} selected", style = MaterialTheme.typography.labelMedium)
+                IconButton(onClick = {
+                    transferEntries = entries.filter { it.uri.toString() in selectedUris }
+                    moveTransfer = false
+                    destinationTreePicker.launch(null)
+                }) { Icon(Icons.Default.FileUpload, "Copy selected to storage") }
+                IconButton(onClick = {
+                    transferEntries = entries.filter { it.uri.toString() in selectedUris }
+                    moveTransfer = true
+                    destinationTreePicker.launch(null)
+                }, enabled = canWrite) { Icon(Icons.Default.FileDownload, "Move selected to storage") }
                 IconButton(onClick = { confirmBulkDelete = true }, enabled = canWrite) { Icon(Icons.Default.Delete, "Delete selected") }
                 IconButton(onClick = { selectedUris = emptySet() }) { Icon(Icons.Default.Close, "Clear selection") }
             } else {
@@ -154,6 +179,10 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        transferProgress?.let { label ->
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
         if (!loading && visibleEntries.isEmpty() && error == null && relativePath.isBlank()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -212,7 +241,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                             })
                             DropdownMenuItem(text = { Text("Copy to storage…") }, leadingIcon = { Icon(Icons.Default.FileUpload, null) }, onClick = {
                                 menu = false
-                                transferEntry = entry
+                                transferEntries = listOf(entry)
                                 moveTransfer = false
                                 destinationTreePicker.launch(null)
                             })
