@@ -70,7 +70,12 @@ object ApkBundleRepository {
         val installer = ctx.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         val sessionId = installer.createSession(params)
-        val session = installer.openSession(sessionId)
+        val session = try {
+            installer.openSession(sessionId)
+        } catch (t: Throwable) {
+            runCatching { installer.abandonSession(sessionId) }
+            throw t
+        }
         try {
             var totalWritten = 0L
             ZipFile(bundle).use { zip ->
@@ -111,7 +116,7 @@ object ApkBundleRepository {
             session.commit(pending.intentSender)
             sessionId
         } catch (t: Throwable) {
-            runCatching { session.abandon() }
+            runCatching { installer.abandonSession(sessionId) }
             throw t
         } finally {
             runCatching { session.close() }
