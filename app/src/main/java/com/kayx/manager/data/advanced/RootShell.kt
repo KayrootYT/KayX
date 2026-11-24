@@ -132,8 +132,10 @@ internal fun isRootIdentity(output: String): Boolean = Regex("uid=0(?:\\(|,)").c
 internal fun isSafeRecursiveDeleteTarget(path: String): Boolean {
     if (path.isBlank()) return false
     val target = runCatching { File(path).canonicalFile.toPath().toAbsolutePath().normalize().toString() }.getOrNull() ?: return false
-    val protected = setOf("/", "/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex", "/storage", "/sdcard", "/mnt/media_rw")
-    if (target in protected) return false
+    val protectedTrees = setOf("/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex")
+    val isDataTemp = target.startsWith("/data/local/tmp/")
+    if (target == "/" || target == "/storage" || target == "/sdcard" || target == "/mnt/media_rw") return false
+    if (!isDataTemp && protectedTrees.any { target == it || target.startsWith(it + "/") }) return false
     // Never allow a recursive delete of an entire mounted user volume.
     val parts = target.trim('/').split('/').filter { it.isNotEmpty() }
     if (parts.firstOrNull() == "storage" && parts.size <= 3) return false
