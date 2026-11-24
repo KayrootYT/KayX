@@ -125,7 +125,13 @@ class StorageTransferRepository {
             }
             val target = uniqueTarget(destination.directory, sourceName, policy) ?: return false
             if (!copySafNode(context, doc, target, control, onBytesCopied)) return false
-            if (move && !SafRepository.delete(context, doc.uri)) warnings += (doc.name ?: target.name)
+            if (move) {
+                try { await(control) } catch (_: Exception) {
+                    target.deleteRecursively()
+                    return false
+                }
+                if (!SafRepository.delete(context, doc.uri)) warnings += (doc.name ?: target.name)
+            }
             return true
         }
         return false
