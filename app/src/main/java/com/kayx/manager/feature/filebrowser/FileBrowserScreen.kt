@@ -493,7 +493,10 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                 color = if (enabled) Fg else Fg.copy(alpha = .38f))
                         }
                     }
-                    Act(Icons.Default.Share, "Share") { ExternalOps.share(ctx, s.selected.map(::File).filter { it.isFile }) }
+                    Act(Icons.Default.Share, "Share") {
+                        if (s.selected.any { StorageLocation.fromStableKey(it) is StorageLocation.Saf }) vm.notify("Sharing SAF items is not available from this menu yet")
+                        else ExternalOps.share(ctx, s.selected.map(::File).filter { it.isFile })
+                    }
                     Act(Icons.Default.ContentCopy, "Copy") { vm.copySelected(false) }
                     Act(Icons.Default.ContentCut, "Move") { vm.copySelected(true) }
                     Act(Icons.Default.Delete, "Delete", Color(0xFFFF6B6B)) { if (SettingsStore.confirmDelete) dlg = Dlg.Delete else vm.deleteSelected() }
@@ -512,7 +515,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             if (isArchive) It("Decompress file") { vm.extractHere(one!!); vm.clearSelection() } else It("Compress") { dlg = Dlg.Zip }
                             if (one != null) It("Rename") { dlg = Dlg.Rename(one, one.substringAfterLast('/')) }
                             It("Tags") { dlg = Dlg.Tag }
-                            if (oneFile != null && oneFile.isFile && !isArchive) It("Open with") { oneItem?.let { openFor = it } }
+                            if (oneFile != null && oneFile.isFile && !isArchive && StorageLocation.fromStableKey(one.orEmpty()) !is StorageLocation.Saf) It("Open with") { oneItem?.let { openFor = it } }
                             It("Details") { if (oneItem != null) infoFor = oneItem else dlg = Dlg.MultiProps }
                             if (oneFile != null) It("Home screen shortcuts") { ExternalOps.pinShortcut(ctx, oneFile) }
                             It("Move to Private space") { vm.moveToPrivate(ctx) }
@@ -629,14 +632,17 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 vm.setActivePane(pane); vm.toggleSelect(f.path)
             })
             if (!f.isDir) add(MenuEntry("Open", Icons.Default.FileOpen) { openItem(f) })
-            if (!f.isDir) add(MenuEntry("Open with…", Icons.AutoMirrored.Filled.OpenInNew) { openFor = f })
+            if (!f.isDir && StorageLocation.fromStableKey(f.path) !is StorageLocation.Saf) add(MenuEntry("Open with…", Icons.AutoMirrored.Filled.OpenInNew) { openFor = f })
             add(MenuEntry("Copy", Icons.Default.ContentCopy) { only(); vm.copySelected(false) })
             add(MenuEntry("Cut", Icons.Default.ContentCut) { only(); vm.copySelected(true) })
             add(MenuEntry("Rename", Icons.Default.Edit) { vm.setActivePane(pane); dlg = Dlg.Rename(f.path, f.name) })
             add(MenuEntry("Delete", Icons.Default.Delete, danger = true) { only(); if (SettingsStore.confirmDelete) dlg = Dlg.Delete else vm.deleteSelected() })
             add(MenuEntry("Compress to ZIP", Icons.Default.Archive) { only(); dlg = Dlg.Zip })
             if (!f.isDir && MultiExtract.canExtract(f.path)) add(MenuEntry("Extract here", Icons.Default.Unarchive) { vm.extractHere(f.path) })
-            if (!f.isDir) add(MenuEntry("Share", Icons.Default.Share) { ExternalOps.share(ctx, listOf(File(f.path))) })
+            if (!f.isDir) add(MenuEntry("Share", Icons.Default.Share) {
+                if (StorageLocation.fromStableKey(f.path) is StorageLocation.Saf) vm.notify("Sharing SAF items is not available from this menu yet")
+                else ExternalOps.share(ctx, listOf(File(f.path)))
+            })
             add(MenuEntry("Copy path", Icons.Default.ContentPaste) { ExternalOps.copyText(ctx, f.path); vm.notify("Path copied") })
             if (f.isDir) add(MenuEntry("Add bookmark", Icons.Default.Bookmark) { vm.notify(if (SettingsStore.addBookmark(f.path)) "Bookmark added" else "Already bookmarked") })
             add(MenuEntry("Properties", Icons.Default.Info) { infoFor = f })
