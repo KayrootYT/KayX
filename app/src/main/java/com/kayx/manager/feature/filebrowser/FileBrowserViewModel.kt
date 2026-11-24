@@ -133,12 +133,15 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val context = appContext
         val saved = context?.getSharedPreferences("kayx_browser_storage", Context.MODE_PRIVATE)
         val grantedTrees = context?.let { SafRepository.persistedTrees(it).map(Uri::toString).toSet() }.orEmpty()
-        val restoredPrimarySaf = saved?.getString("primary_saf", null)?.let { key ->
+        // Restore SAF only when reopening the normal browser entry point. Never override an
+        // explicit path such as a Private Space session supplied by MainActivity.
+        val mayRestoreSaf = path == SettingsStore.browserPath || path == "/sdcard" || path == "/storage/emulated/0"
+        val restoredPrimarySaf = if (mayRestoreSaf) saved?.getString("primary_saf", null)?.let { key ->
             (StorageLocation.fromStableKey(key) as? StorageLocation.Saf)?.takeIf { it.treeUri in grantedTrees }?.stableKey()
-        }
-        val restoredSecondarySaf = saved?.getString("secondary_saf", null)?.let { key ->
+        } else null
+        val restoredSecondarySaf = if (mayRestoreSaf) saved?.getString("secondary_saf", null)?.let { key ->
             (StorageLocation.fromStableKey(key) as? StorageLocation.Saf)?.takeIf { it.treeUri in grantedTrees }?.stableKey()
-        }
+        } else null
         val primary = restoredPrimarySaf ?: path
         if (_s.value.root == primary) { reload(); return }
         val restoredSecondary = restoredSecondarySaf
