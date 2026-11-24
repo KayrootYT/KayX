@@ -25,10 +25,12 @@ import androidx.documentfile.provider.DocumentFile
 import com.kayx.manager.data.filesystem.SafRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 @Composable
 fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var relativePath by remember(treeUri) { mutableStateOf("") }
     var entries by remember(treeUri, relativePath) { mutableStateOf<List<SafRepository.Entry>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -62,7 +64,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                 Text(if (relativePath.isBlank()) "Selected folder" else relativePath, style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
             IconButton({ createDialog = true; name = "" }) { Icon(Icons.Default.CreateNewFolder, "New folder") }
-            IconButton({ kotlinx.coroutines.MainScope().launch { refresh() } }) { Icon(Icons.Default.Refresh, "Refresh") }
+            IconButton({ scope.launch { refresh() } }) { Icon(Icons.Default.Refresh, "Refresh") }
         }
         HorizontalDivider()
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -128,7 +130,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             val created = SafRepository.createFolder(context, treeUri, relativePath, name.trim())
             if (created == null) error = "Could not create folder"
             createDialog = false
-            kotlinx.coroutines.MainScope().launch { refresh() }
+            scope.launch { refresh() }
         }) { Text("Create") } },
         dismissButton = { TextButton({ createDialog = false }) { Text("Cancel") } }
     )
