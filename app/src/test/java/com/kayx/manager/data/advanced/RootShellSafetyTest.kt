@@ -10,7 +10,7 @@ class RootShellSafetyTest {
     }
 
     @Test fun refusesFilesystemAndSystemMountRoots() {
-        listOf("/", "/system", "/vendor", "/product", "/data", "/proc", "/sys", "/dev", "/apex").forEach {
+        listOf("/", "/system", "/system_ext", "/vendor", "/vendor_dlkm", "/product", "/odm", "/data", "/proc", "/sys", "/dev", "/apex", "/mnt").forEach {
             assertFalse("$it must be protected", isSafeRecursiveDeleteTarget(it))
         }
     }
