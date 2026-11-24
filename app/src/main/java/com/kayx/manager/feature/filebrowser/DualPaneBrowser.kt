@@ -41,6 +41,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.kayx.manager.data.filesystem.ExternalOps
+import com.kayx.manager.data.filesystem.StorageLocation
 import com.kayx.manager.data.filesystem.FileOps
 import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.domain.model.FileItem
@@ -559,19 +560,25 @@ private fun ActionPopup(
                 }
                 Row {
                     MenuCell(Icons.Default.Info, "Properties", Modifier.weight(1f)) {
-                        go { if (one != null) onProperties(one) else onDialog(Dlg.MultiProps) }
+                        go {
+                            if (sel.any { StorageLocation.fromStableKey(it) is StorageLocation.Saf }) vm.notify("Detailed multi-item properties are currently available for local files only")
+                            else if (one != null) onProperties(one) else onDialog(Dlg.MultiProps)
+                        }
                     }
                     MenuCell(Icons.Default.Share, "Share", Modifier.weight(1f)) {
-                        go { ExternalOps.share(ctx, sel.map(::File).filter { it.isFile }) }
+                        go {
+                            if (sel.any { StorageLocation.fromStableKey(it) is StorageLocation.Saf }) vm.notify("Sharing SAF items is not available from this menu yet")
+                            else ExternalOps.share(ctx, sel.map(::File).filter { it.isFile })
+                        }
                     }
                 }
                 Row {
-                    MenuCell(Icons.Default.Check, "Open with…", Modifier.weight(1f), enabled = one != null && !one.isDir) {
+                    MenuCell(Icons.Default.Check, "Open with…", Modifier.weight(1f), enabled = one != null && !one.isDir && StorageLocation.fromStableKey(one.path) !is StorageLocation.Saf) {
                         go { one?.let(onOpenWith) }
                     }
                     MenuCell(Icons.Default.Bookmark, "Add bookmark", Modifier.weight(1f)) {
                         go {
-                            val dirs = sel.filter { File(it).isDirectory }.ifEmpty { listOf(if (s.activePane == 1) s.secondaryDir else s.dir) }
+                            val dirs = sel.filter { byPath[it]?.isDir == true }.ifEmpty { listOf(if (s.activePane == 1) s.secondaryDir else s.dir) }
                             val added = dirs.count { SettingsStore.addBookmark(it) }
                             vm.notify(if (added > 0) "Bookmarked $added folder(s)" else "Already bookmarked")
                         }
