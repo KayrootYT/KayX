@@ -549,10 +549,18 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val s = _s.value
         val pending = s.pending
         if (policy != null && pending != null) {
-            startStorageTransfer(pending.files, pending.dst, pending.cut, policy, pending.sourcePane, pending.fromClipboard)
+            val allLocal = pending.files.all { locationOf(it) is StorageLocation.Local } &&
+                locationOf(pending.dst) is StorageLocation.Local
+            if (allLocal) startTransfer(pending.files.map { (locationOf(it) as StorageLocation.Local).directory },
+                (locationOf(pending.dst) as StorageLocation.Local).directory, pending.cut, policy, pending.sourcePane, pending.fromClipboard)
+            else startStorageTransfer(pending.files, pending.dst, pending.cut, policy, pending.sourcePane, pending.fromClipboard)
             return
         }
-        startStorageTransfer(s.clipboard, activeLocation(s).stableKey(), s.cut, policy ?: Conflict.KEEP_BOTH, null, true)
+        val destination = activeLocation(s)
+        val allLocal = s.clipboard.all { locationOf(it) is StorageLocation.Local } && destination is StorageLocation.Local
+        if (allLocal) startTransfer(s.clipboard.map { (locationOf(it) as StorageLocation.Local).directory },
+            (destination as StorageLocation.Local).directory, s.cut, policy, null, true)
+        else startStorageTransfer(s.clipboard, destination.stableKey(), s.cut, policy ?: Conflict.KEEP_BOTH, null, true)
     }
 
     /**
@@ -562,7 +570,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun transferSelectedToOther(cut: Boolean, policy: Conflict? = null) {
         val s = _s.value
         if (!s.dualPane) { notify("Turn on dual pane first"); return }
-        startStorageTransfer(s.selected.toList(), s.otherDir, cut, policy ?: Conflict.KEEP_BOTH, s.activePane, false)
+        val allLocal = s.selected.all { locationOf(it) is StorageLocation.Local } &&
+            locationOf(s.otherDir) is StorageLocation.Local
+        if (allLocal) startTransfer(
+            s.selected.map { (locationOf(it) as StorageLocation.Local).directory },
+            (locationOf(s.otherDir) as StorageLocation.Local).directory, cut, policy, s.activePane, false
+        ) else startStorageTransfer(s.selected.toList(), s.otherDir, cut, policy ?: Conflict.KEEP_BOTH, s.activePane, false)
     }
 
     fun transferSelectedToSaf(treeUri: Uri, cut: Boolean) {
