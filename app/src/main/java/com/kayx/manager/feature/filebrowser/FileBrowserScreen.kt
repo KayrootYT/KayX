@@ -45,6 +45,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import com.kayx.manager.data.archive.MultiExtract
 import com.kayx.manager.data.filesystem.ExternalOps
 import com.kayx.manager.data.filesystem.SafRepository
+import com.kayx.manager.data.filesystem.StorageLocation
+import android.content.Intent
+import android.net.Uri
 import com.kayx.manager.data.filesystem.FileOps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -116,6 +119,15 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     var safTransferProgress by remember { mutableStateOf<String?>(null) }
     var safTransferControl by remember { mutableStateOf<FileOps.TransferControl?>(null) }
     var safTransferPaused by remember { mutableStateOf(false) }
+    val safLocationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            runCatching { ctx.contentResolver.takePersistableUriPermission(tree, flags) }
+            if (!SafRepository.persistTreePermission(ctx, tree) && !SafRepository.hasWriteAccess(ctx, tree)) {
+                scope.launch { snack.showSnackbar("Storage permission was not granted. Please select the folder again.") }
+            } else vm.openLocation(StorageLocation.Saf(tree.toString(), ""))
+        }
+    }
     val safDestinationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { destinationTree ->
         val selectedPaths = s.selected.toList()
         if (destinationTree != null && selectedPaths.isNotEmpty()) {
@@ -168,7 +180,19 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
     val openItem: (FileItem) -> Unit = { f ->
         val ext = f.name.substringAfterLast('.', "").lowercase()
-        if (!openByDefault(ctx, f, onOpenFile)) {
+        val location = StorageLocation.fromStableKey(f.path)
+        if (location is StorageLocation.Saf) {
+            val opened = runCatching {
+                val doc = SafRepository.findByRelativePath(ctx, Uri.parse(location.treeUri), location.relativePath)
+                    ?: error("Storage item is no longer available")
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(doc.uri, doc.type ?: "*/*")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                ctx.startActivity(intent)
+            }
+            if (opened.isFailure) scope.launch { snack.showSnackbar(opened.exceptionOrNull()?.message ?: "Unable to open this item") }
+        } else if (!openByDefault(ctx, f, onOpenFile)) {
             if (ext == "apk") ExternalOps.installApk(ctx, File(f.path))
             else if (ExternalOps.isOfficeOrPdf(File(f.path))) { if (!ExternalOps.openWith(ctx, File(f.path))) openFor = f }
             else if (ext in WEB_TAP_EXTENSIONS) {
@@ -301,6 +325,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                     if (s.dualPane) DropdownMenuItem({ Text("Swap panes") }, { vm.swapPanes(); menu = false })
                                     HorizontalDivider()
                                     // Navigate
+                                    DropdownMenuItem({ Text("Browse SD card / SAF storage…") }, { safLocationPicker.launch(null); menu = false })
                                     DropdownMenuItem({ Text("Jump to path…") }, { dlg = Dlg.Jump; menu = false })
                                     DropdownMenuItem({ Text("Add bookmark") }, {
                                         val here = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
