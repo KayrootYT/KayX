@@ -13,7 +13,7 @@ class StorageTransferRepository {
 
     private enum class ItemResult { COMPLETED, SKIPPED, FAILED }
 
-    fun transfer(context: Context, sourceKeys: List<String>, destinationKey: String, move: Boolean,
+    fun transfer(context: Context?, sourceKeys: List<String>, destinationKey: String, move: Boolean,
         policy: Conflict, control: FileOps.TransferControl,
         onProgress: (Int, Int, String, Long, Long) -> Unit = { _, _, _, _, _ -> }): Result<Outcome> = runCatching {
         val destination = location(destinationKey)
@@ -22,11 +22,12 @@ class StorageTransferRepository {
                 "Local destination folder is unavailable or not writable"
             }
             is StorageLocation.Saf -> {
+                val ctx = requireNotNull(context) { "SAF operations require Android context" }
                 val tree = Uri.parse(destination.treeUri)
-                require(SafRepository.hasWriteAccess(context, tree)) {
+                require(SafRepository.hasWriteAccess(ctx, tree)) {
                     "Selected SAF destination is read-only or its write permission was revoked"
                 }
-                require(SafRepository.findByRelativePath(context, tree, destination.relativePath)?.isDirectory == true) {
+                require(SafRepository.findByRelativePath(ctx, tree, destination.relativePath)?.isDirectory == true) {
                     "Selected SAF destination folder is unavailable"
                 }
             }
@@ -68,7 +69,7 @@ class StorageTransferRepository {
         Outcome(completed, failures, warnings, skipped)
     }
 
-    private fun transferOne(context: Context, source: StorageLocation, destination: StorageLocation, move: Boolean,
+    private fun transferOne(context: Context?, source: StorageLocation, destination: StorageLocation, move: Boolean,
         policy: Conflict, control: FileOps.TransferControl, warnings: MutableList<String>,
         onBytesCopied: (Long) -> Unit): ItemResult {
         val sourceName = when (source) {
@@ -78,7 +79,7 @@ class StorageTransferRepository {
         val destinationExists = when (destination) {
             is StorageLocation.Local -> File(destination.directory, sourceName).exists()
             is StorageLocation.Saf -> SafRepository.findByRelativePath(
-                context, Uri.parse(destination.treeUri), destination.relativePath
+                requireNotNull(context) { "SAF operations require Android context" }, Uri.parse(destination.treeUri), destination.relativePath
             )?.findFile(sourceName) != null
         }
         val sameLocalPath = source is StorageLocation.Local && destination is StorageLocation.Local &&
@@ -107,9 +108,9 @@ class StorageTransferRepository {
         }
         if (source is StorageLocation.Local && destination is StorageLocation.Saf) {
             val tree = Uri.parse(destination.treeUri)
-            if (!move) return if (SafRepository.copyLocalFileToTree(context, source.directory, tree, destination.relativePath, control, onBytesCopied) != null) ItemResult.COMPLETED else ItemResult.FAILED
+            if (!move) return if (SafRepository.copyLocalFileToTree(requireNotNull(context) { "SAF operations require Android context" }, source.directory, tree, destination.relativePath, control, onBytesCopied) != null) ItemResult.COMPLETED else ItemResult.FAILED
             var cleanupFailed = false
-            val copied = SafRepository.moveLocalFileToTree(context, source.directory, tree, destination.relativePath, control,
+            val copied = SafRepository.moveLocalFileToTree(requireNotNull(context) { "SAF operations require Android context" }, source.directory, tree, destination.relativePath, control,
                 onSourceCleanupFailure = { cleanupFailed = true }, onBytesCopied = onBytesCopied)
             if (cleanupFailed) warnings += source.directory.name
             return if (copied != null) ItemResult.COMPLETED else ItemResult.FAILED
@@ -117,9 +118,9 @@ class StorageTransferRepository {
         if (source is StorageLocation.Saf && destination is StorageLocation.Saf) {
             val sourceParent = source.relativePath.substringBeforeLast('/', "")
             if (move && source.treeUri == destination.treeUri && sourceParent == destination.relativePath) return ItemResult.SKIPPED
-            val doc = resolveDocument(context, source) ?: return false
-            val copied = if (move) SafRepository.moveDocumentToTree(context, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control, onBytesCopied)
-                else SafRepository.copyDocumentToTree(context, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control, onBytesCopied)
+            val doc = resolveDocument(requireNotNull(context) { "SAF operations require Android context" }, source) ?: return false
+            val copied = if (move) SafRepository.moveDocumentToTree(requireNotNull(context) { "SAF operations require Android context" }, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control, onBytesCopied)
+                else SafRepository.copyDocumentToTree(requireNotNull(context) { "SAF operations require Android context" }, doc.uri, Uri.parse(destination.treeUri), destination.relativePath, doc.name, control, onBytesCopied)
             return if (copied != null) ItemResult.COMPLETED else ItemResult.FAILED
         }
         if (source is StorageLocation.Saf && destination is StorageLocation.Local) {
@@ -139,7 +140,7 @@ class StorageTransferRepository {
                     target.deleteRecursively()
                     return ItemResult.FAILED
                 }
-                if (!SafRepository.delete(context, doc.uri)) warnings += (doc.name ?: target.name)
+                if (!SafRepository.delete(requireNotNull(context) { "SAF operations require Android context" }, doc.uri)) warnings += (doc.name ?: target.name)
             }
             return ItemResult.COMPLETED
         }
@@ -174,7 +175,7 @@ class StorageTransferRepository {
     private fun resolveDocument(context: Context, location: StorageLocation.Saf): DocumentFile? =
         SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)
 
-    private fun itemSize(context: Context, location: StorageLocation): Long {
+    private fun itemSize(context: Context?, location: StorageLocation): Long {
         return when (location) {
         is StorageLocation.Local -> {
             val root = location.directory
@@ -182,7 +183,7 @@ class StorageTransferRepository {
             else runCatching { root.walkTopDown().filter { it.isFile }.sumOf { it.length().coerceAtLeast(0L) } }.getOrDefault(0L)
         }
         is StorageLocation.Saf -> {
-            val root = resolveDocument(context, location) ?: return 0L
+            val root = resolveDocument(requireNotNull(context) { "SAF operations require Android context" }, location) ?: return 0L
             if (!root.isDirectory) return root.length().coerceAtLeast(0L)
             var total = 0L
             val queue = java.util.ArrayDeque<DocumentFile>()
