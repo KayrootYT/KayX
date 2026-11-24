@@ -33,11 +33,22 @@ object RootShell {
         if (SettingsStore.backend == PrivilegedBackend.SHIZUKU) ShizukuShell.run(cmd, timeoutMs)
         else runRoot(cmd, timeoutMs)
 
-    /** Execute through su regardless of the currently selected privileged backend. */
+    private fun suExecutable(): String? {
+        val known = listOf("/system/bin/su", "/system/xbin/su", "/sbin/su", "/system/sd/xbin/su", "/vendor/bin/su")
+        val fromPath = System.getenv("PATH").orEmpty().split(File.pathSeparator).filter { it.isNotBlank() }.map { "$it/su" }
+        return (known + fromPath).distinct().firstOrNull { candidate ->
+            runCatching { File(candidate).let { it.isFile && it.canExecute() } }.getOrDefault(false)
+        }
+    }
+
+    fun hasSuBinary(): Boolean = suExecutable() != null
+
+    /** Execute through the discovered su binary regardless of the selected backend. */
     fun runRoot(cmd: String, timeoutMs: Long = 20_000): Res {
         require(cmd.isNotBlank()) { "Command is empty" }
         val timeout = timeoutMs.coerceIn(100L, 120_000L)
-        val process = try { ProcessBuilder("su", "-c", cmd).start() }
+        val executable = suExecutable() ?: return Res(-1, "", "su is not available")
+        val process = try { ProcessBuilder(executable, "-c", cmd).start() }
         catch (e: Exception) { return Res(-1, "", e.message ?: "su is not available") }
         runCatching { process.outputStream.close() }
         val stdout = ByteArrayOutputStream()
