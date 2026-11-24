@@ -171,6 +171,9 @@ object FileOps {
                                     check(backup.renameTo(preservedOld)) { "Copied destination, but could not preserve the replaced item" }
                                 }
                             }
+                            // The destination is complete even though the move could not remove
+                            // every source byte. Mark this item processed so retry never duplicates it.
+                            onProgress(index + 1, total, f.name)
                             error("Copied ${f.name}, but source cleanup failed; destination copy was retained")
                         }
                     }
