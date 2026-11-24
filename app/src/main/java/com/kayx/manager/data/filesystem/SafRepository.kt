@@ -221,10 +221,13 @@ object SafRepository {
         if (!sourceFile.exists() || !sourceFile.canRead() || !isSafeName(sourceFile.name)) return null
         val parent = findByRelativePath(context, targetTreeUri, targetParentRelativePath)
             ?.takeIf { it.isDirectory } ?: return null
+        val sourceRoot = runCatching { sourceFile.canonicalFile }.getOrNull() ?: return null
+        val rootPath = sourceRoot.path.trimEnd(java.io.File.separatorChar)
         val visited = mutableSetOf<String>()
 
         fun copyNode(source: java.io.File, destination: DocumentFile): DocumentFile? {
             val canonical = runCatching { source.canonicalFile }.getOrNull() ?: return null
+            if (canonical.path != rootPath && !canonical.path.startsWith(rootPath + java.io.File.separator)) return null
             if (!visited.add(canonical.path)) return null
             if (source.isDirectory) {
                 val folder = destination.createDirectory(source.name) ?: return null
