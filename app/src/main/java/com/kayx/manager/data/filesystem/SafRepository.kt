@@ -142,7 +142,7 @@ object SafRepository {
         val parts = relativePath.trim('/').split('/').filter { it.isNotBlank() }
         for (part in parts) {
             // Never allow traversal outside the selected tree.
-            if (part == "." || part == ".." || part.contains('\u0000')) return null
+            if (part == "." || part == ".." || part.contains('/') || part.contains('\\\\') || part.any { it.code < 32 }) return null
             current = current.findFile(part) ?: return null
         }
         return current
