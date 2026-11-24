@@ -37,9 +37,13 @@ object ApkBundleRepository {
             val apkEntries = entries.filter { it.name.endsWith(".apk", ignoreCase = true) }
             require(apkEntries.isNotEmpty()) { "No APK payloads found in bundle" }
             require(apkEntries.size <= MAX_APK_COUNT) { "Bundle contains too many APK files" }
-            val totalBytes = apkEntries.sumOf { it.size.coerceAtLeast(0L) }
-            require(totalBytes <= MAX_TOTAL_APK_BYTES) { "APK payload is larger than the supported 1 GiB limit" }
-            require(apkEntries.all { it.size > 0L }) { "Bundle contains an empty APK payload" }
+            val totalBytes = apkEntries.fold(0L) { total, entry ->
+                require(entry.size > 0L) { "Bundle contains an empty or unknown-size APK payload" }
+                require(entry.size <= MAX_TOTAL_APK_BYTES - total) {
+                    "APK payload is larger than the supported 1 GiB limit"
+                }
+                total + entry.size
+            }
 
             val apkFiles = apkEntries.map { it.name }.sortedWith(
                 compareBy<String> { if (it.substringAfterLast('/').let { base -> base.equals("base.apk", true) || base.equals("base-master.apk", true) }) 0 else 1 }
@@ -73,6 +77,7 @@ object ApkBundleRepository {
                     }
                 } ?: error("This bundle has no base.apk or base-master.apk; install requires a base APK")
                 val ordered = listOf(baseName) + inspection.apkFiles.filterNot { it == baseName }
+                val writtenNames = mutableSetOf<String>()
                 ordered.forEachIndexed { index, name ->
                     val entry = zip.getEntry(name) ?: error("Missing APK payload: $name")
                     val outName = if (index == 0) "base.apk" else {
@@ -81,6 +86,7 @@ object ApkBundleRepository {
                             .take(80).ifBlank { "split_$index" }
                         "split_$splitName.apk"
                     }
+                    check(writtenNames.add(outName)) { "Bundle contains duplicate split APK names" }
                     session.openWrite(outName, 0, entry.size).use { output ->
                         zip.getInputStream(entry).use { input -> input.copyTo(output) }
                         session.fsync(output)
