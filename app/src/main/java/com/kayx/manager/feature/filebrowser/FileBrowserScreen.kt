@@ -615,7 +615,12 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 if (one != null && MultiExtract.canExtract(one)) add("Extract here" to { vm.extractHere(one); vm.clearSelection() })
             }, { dlg = null })
         }
-        is Dlg.MultiProps -> MultiPropertiesDialog(s.selected.toList()) { dlg = null }
+        is Dlg.MultiProps -> {
+            if (s.selected.any { StorageLocation.fromStableKey(it) is StorageLocation.Saf }) {
+                vm.notify("Multi-item size calculation is currently available for local files only")
+                dlg = null
+            } else MultiPropertiesDialog(s.selected.toList()) { dlg = null }
+        }
         null -> {}
     }
     if (s.conflicts.isNotEmpty()) ConflictDialog(s.conflicts, { vm.paste(it) }, vm::dismissConflicts)
