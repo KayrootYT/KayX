@@ -31,11 +31,21 @@ object RecycleBin {
         return item
     }
 
+    private class SourceCleanupFailed(message: String, val completedCopy: File) : java.io.IOException(message)
+
     private fun move(src: File, dest: File) {
         if (src.renameTo(dest)) return
-        if (src.isDirectory) check(src.copyRecursively(dest, overwrite = false)) { "Copy failed: ${src.name}" }
-        else src.copyTo(dest, overwrite = false)
-        check(src.deleteRecursively()) { "Could not remove ${src.name}" }
+        try {
+            if (src.isDirectory) check(src.copyRecursively(dest, overwrite = false)) { "Copy failed: ${src.name}" }
+            else src.copyTo(dest, overwrite = false)
+        } catch (t: Throwable) {
+            runCatching { dest.deleteRecursively() }
+            throw t
+        }
+        // Keep the completed recovery copy and its index if source cleanup fails.
+        if (!src.deleteRecursively()) throw SourceCleanupFailed(
+            "Copied ${src.name}, but could not completely remove the original", dest
+        )
     }
 
     private fun rawEntries(): List<Triple<String, String, Long>> {
@@ -93,7 +103,7 @@ object RecycleBin {
                 "File path contains unsupported control characters"
             }
             val deletedAt = System.currentTimeMillis()
-            val id = System.nanoTime().toString(36) + "_" + f.name.take(60)
+            val id = java.util.UUID.randomUUID().toString().replace("-", "") + "_" + f.name.take(60)
             val record = Triple(id, f.absolutePath, deletedAt)
             // Commit intent first: after a crash the index still knows the original path.
             writeIndex(rawEntries() + record)
@@ -102,7 +112,10 @@ object RecycleBin {
                 move(f, target)
                 target.setLastModified(deletedAt)
             } catch (t: Throwable) {
-                writeIndex(rawEntries().filterNot { it.first == id })
+                if (t !is SourceCleanupFailed) {
+                    runCatching { target.deleteRecursively() }
+                    writeIndex(rawEntries().filterNot { it.first == id })
+                }
                 throw t
             }
         }
@@ -123,7 +136,8 @@ object RecycleBin {
 
     @Synchronized
     fun purge(e: Entry): Result<Unit> = runCatching {
-        payload(e.id).deleteRecursively()
+        val item = payload(e.id)
+        if (item.exists()) check(item.deleteRecursively()) { "Could not permanently delete ${e.name}" }
         writeIndex(rawEntries().filter { it.first != e.id })
     }
 
@@ -157,8 +171,13 @@ object RecycleBin {
 
     @Synchronized
     fun empty(): Result<Unit> = runCatching {
-        dir().listFiles()?.forEach { if (it.name != "index.tsv") it.deleteRecursively() }
-        index().delete()
+        val root = dir()
+        val contents = root.listFiles() ?: error("Could not read recycle bin")
+        for (item in contents) {
+            if (item.name != "index.tsv") check(item.deleteRecursively()) { "Could not remove ${item.name}" }
+        }
+        val indexFile = index()
+        if (indexFile.exists()) check(indexFile.delete()) { "Could not clear recycle-bin index" }
         Unit
     }
 }
