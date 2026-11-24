@@ -618,12 +618,13 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                         append(if (cut) "Moved " else "Copied ")
                         append(outcome?.completed ?: 0)
                         append(" item(s)")
+                        if (outcome?.skipped ?: 0 > 0) append("; " + outcome.skipped + " skipped")
                         if (failed.isNotEmpty()) append("; " + failed.size + " failed")
                         if (outcome?.cleanupWarnings?.isNotEmpty() == true) append("; source cleanup warning: " + outcome.cleanupWarnings.joinToString())
                     }
                 )
             }
-            if (result.isSuccess && failed.isEmpty()) FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else FileActionSound.COPY)
+            if (result.isSuccess && failed.isEmpty() && (outcome?.completed ?: 0) > 0) FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else FileActionSound.COPY)
             if (fromClipboard && cut && result.isSuccess && failed.isEmpty()) clearClipboard()
             reload()
         }
