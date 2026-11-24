@@ -559,7 +559,7 @@ fun ApkInspectorScreen(path: String, onBack: () -> Unit, onOpenDex: () -> Unit =
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.InstallMobile, null)
+                        Icon(Icons.Default.Android, null)
                         Spacer(Modifier.width(8.dp))
                         Text("Install this APK")
                     }
