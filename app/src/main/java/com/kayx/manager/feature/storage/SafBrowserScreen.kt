@@ -153,7 +153,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     DisposableEffect(transferControl) {
         val activeControl = transferControl
         onDispose {
-            if (activeControl?.state == FileOps.TransferState.RUNNING || activeControl?.state == FileOps.TransferState.PAUSED) activeControl.cancel()
+            activeControl?.takeIf { it.state == FileOps.TransferState.RUNNING || it.state == FileOps.TransferState.PAUSED }?.cancel()
         }
     }
     val visibleEntries = remember(entries, query, sortMode, descending) {
