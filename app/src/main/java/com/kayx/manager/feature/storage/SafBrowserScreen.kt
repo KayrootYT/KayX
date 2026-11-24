@@ -55,6 +55,8 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     var sortMenu by remember { mutableStateOf(false) }
     var sortMode by remember { mutableStateOf("Name") }
     var descending by remember { mutableStateOf(false) }
+    var selectedUris by remember(treeUri, relativePath) { mutableStateOf<Set<String>>(emptySet()) }
+    var confirmBulkDelete by remember { mutableStateOf(false) }
     suspend fun refresh() {
         loading = true
         error = null
@@ -62,6 +64,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             runCatching { SafRepository.entries(context, treeUri, relativePath) }
         }
         entries = result.getOrDefault(emptyList())
+        selectedUris = selectedUris.intersect(entries.map { it.uri.toString() }.toSet())
         if (result.isFailure) error = result.exceptionOrNull()?.message ?: "Unable to read this folder"
         loading = false
     }
@@ -124,7 +127,11 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                 if (searchOpen) OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search this folder") }, trailingIcon = { IconButton(onClick = { query = ""; searchOpen = false }) { Icon(Icons.Default.Close, "Close search") } })
                 else { Text("SD card / SAF", style = MaterialTheme.typography.titleLarge); Text(if (relativePath.isBlank()) "Selected folder" else relativePath, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
             }
-            if (!searchOpen) IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "Search") }
+            if (selectedUris.isNotEmpty()) {
+                Text("${selectedUris.size} selected", style = MaterialTheme.typography.labelMedium)
+                IconButton(onClick = { confirmBulkDelete = true }, enabled = canWrite) { Icon(Icons.Default.Delete, "Delete selected") }
+                IconButton(onClick = { selectedUris = emptySet() }) { Icon(Icons.Default.Close, "Clear selection") }
+            } else if (!searchOpen) IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "Search") }
             Box {
                 IconButton(onClick = { sortMenu = true }) { Icon(Icons.Default.Sort, "Sort") }
                 DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
@@ -180,6 +187,12 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                     }.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Checkbox(
+                        checked = entry.uri.toString() in selectedUris,
+                        onCheckedChange = { checked ->
+                            selectedUris = if (checked) selectedUris + entry.uri.toString() else selectedUris - entry.uri.toString()
+                        }
+                    )
                     Icon(if (entry.isDirectory) Icons.Default.Folder else Icons.Default.InsertDriveFile, null)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
@@ -219,6 +232,25 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
             }
         }
     }
+
+    if (confirmBulkDelete) AlertDialog(
+        onDismissRequest = { confirmBulkDelete = false },
+        title = { Text("Delete ${selectedUris.size} selected item(s)?") },
+        text = { Text("Selected files and folders will be removed from this storage location. Folder contents may also be deleted.") },
+        confirmButton = { TextButton(onClick = {
+            val targets = entries.filter { it.uri.toString() in selectedUris }
+            scope.launch {
+                val failures = withContext(Dispatchers.IO) {
+                    targets.count { !SafRepository.delete(context, it.uri) }
+                }
+                selectedUris = emptySet()
+                if (failures > 0) error = "$failures item(s) could not be deleted"
+                refresh()
+            }
+            confirmBulkDelete = false
+        }) { Text("Delete") } },
+        dismissButton = { TextButton(onClick = { confirmBulkDelete = false }) { Text("Cancel") } }
+    )
 
     if (createDialog) AlertDialog(
         onDismissRequest = { createDialog = false },
