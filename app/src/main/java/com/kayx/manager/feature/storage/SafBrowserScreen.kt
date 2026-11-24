@@ -19,6 +19,9 @@ import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +50,11 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     var exportSource by remember { mutableStateOf<Uri?>(null) }
     var transferEntry by remember { mutableStateOf<SafRepository.Entry?>(null) }
     var moveTransfer by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var sortMenu by remember { mutableStateOf(false) }
+    var sortMode by remember { mutableStateOf("Name") }
+    var descending by remember { mutableStateOf(false) }
     suspend fun refresh() {
         loading = true
         error = null
@@ -99,6 +107,11 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
     }
 
     LaunchedEffect(treeUri, relativePath) { refresh() }
+    val visibleEntries = remember(entries, query, sortMode, descending) {
+        val filtered = entries.filter { it.name.contains(query.trim(), ignoreCase = true) }
+        val sorted = when (sortMode) { "Date" -> filtered.sortedBy { it.lastModified }; "Size" -> filtered.sortedBy { it.size }; else -> filtered.sortedBy { it.name.lowercase() } }
+        if (descending) sorted.asReversed() else sorted
+    }
     val goUp: () -> Unit = {
         relativePath = relativePath.substringBeforeLast('/', "").trim('/')
     }
@@ -108,8 +121,16 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
             Column(Modifier.weight(1f)) {
-                Text("SD card / SAF", style = MaterialTheme.typography.titleLarge)
-                Text(if (relativePath.isBlank()) "Selected folder" else relativePath, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                if (searchOpen) OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search this folder") }, trailingIcon = { IconButton(onClick = { query = ""; searchOpen = false }) { Icon(Icons.Default.Close, "Close search") } })
+                else { Text("SD card / SAF", style = MaterialTheme.typography.titleLarge); Text(if (relativePath.isBlank()) "Selected folder" else relativePath, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+            }
+            if (!searchOpen) IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "Search") }
+            Box {
+                IconButton(onClick = { sortMenu = true }) { Icon(Icons.Default.Sort, "Sort") }
+                DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                    listOf("Name", "Date", "Size").forEach { mode -> DropdownMenuItem(text = { Text("Sort by $mode") }, onClick = { sortMode = mode; sortMenu = false }) }
+                    DropdownMenuItem(text = { Text(if (descending) "Ascending" else "Descending") }, onClick = { descending = !descending; sortMenu = false })
+                }
             }
             IconButton(onClick = { importPicker.launch(arrayOf("*/*")) }, enabled = canWrite) { Icon(Icons.Default.FileUpload, "Import file") }
             IconButton(onClick = { createDialog = true; name = "" }, enabled = canWrite) { Icon(Icons.Default.CreateNewFolder, "New folder") }
@@ -136,7 +157,7 @@ fun SafBrowserScreen(treeUri: Uri, onBack: () -> Unit) {
                     Text("..")
                 }
             }
-            items(entries, key = { it.uri.toString() }) { entry ->
+            items(visibleEntries, key = { it.uri.toString() }) { entry ->
                 var menu by remember(entry.uri) { mutableStateOf(false) }
                 Row(
                     Modifier.fillMaxWidth().clickable {
