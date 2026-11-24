@@ -110,6 +110,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     var infoFor by remember { mutableStateOf<FileItem?>(null) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    val snack = remember { SnackbarHostState() }
     val safDestinationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { destinationTree ->
         val selectedPaths = s.selected.toList()
         if (destinationTree != null && selectedPaths.isNotEmpty()) {
@@ -127,7 +128,6 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     }
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-    val snack = remember { SnackbarHostState() }
     val openItem: (FileItem) -> Unit = { f ->
         val ext = f.name.substringAfterLast('.', "").lowercase()
         if (!openByDefault(ctx, f, onOpenFile)) {
