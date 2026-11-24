@@ -26,8 +26,13 @@ class AndroidIndexedFileSearch(private val context: Context) {
         // non-media files may not be indexed yet. Always merge it with the bounded
         // filesystem index so a partial MediaStore hit never hides valid matches.
         val filesystem = fallback.search(request)
-        val media = runCatching { queryMediaStore(request) }.getOrNull()
-            ?: return@withContext filesystem
+        val media = try {
+            queryMediaStore(request)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        } ?: return@withContext filesystem
         val cap = request.maxResults.coerceIn(1, 100_000)
         val merged = (media.items.asSequence() + filesystem.items.asSequence())
             .distinctBy { it.path }
