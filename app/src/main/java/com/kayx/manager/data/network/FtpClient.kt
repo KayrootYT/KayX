@@ -218,3 +218,13 @@ class FtpClient {
         Entry(name, m.groupValues[1] == "d", m.groupValues[2].toLongOrNull()?.coerceAtLeast(0L) ?: 0L, m.groupValues[3])
     }
 }
+
+internal fun validateFtpRemoteName(name: String): String {
+    require(name.isNotBlank()) { "Remote name is required" }
+    require(name != "." && name != "..") { "Invalid remote name" }
+    require(name.length <= 255) { "Remote name is too long" }
+    require(name.none { it == '/' || it == '\\' || it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }) {
+        "Remote name must be a single safe path segment"
+    }
+    return name
+}
