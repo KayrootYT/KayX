@@ -113,7 +113,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
     }
 
     private fun readLegacyEntries(bytes: ByteArray): List<Entry> =
-        runCatching {
+        runCatching<List<Entry>> {
             String(bytes, Charsets.UTF_8).lineSequence().mapNotNull { line ->
                 val fields = line.split('\t', ignoreCase = false, limit = 4)
                 if (fields.size != 4) return@mapNotNull null
@@ -124,7 +124,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
                 val destination = decode(fields[2])
                 val fingerprint = decode(fields[3])
                 if (isValidEntry(kind, source, destination)) Entry(kind, source, destination, fingerprint) else null
-            }.takeLast(maxEntries).toList()
+            }.toList().takeLast(maxEntries)
         }.getOrDefault(emptyList())
 
     private fun isValidEntry(kind: Kind, source: String, destination: String): Boolean =
