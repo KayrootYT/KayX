@@ -209,10 +209,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         fun isPublicPath(key: String): Boolean = when (val location = StorageLocation.fromStableKey(key)) {
             is StorageLocation.Saf -> true
             is StorageLocation.Local -> {
-                val path = runCatching { location.directory.canonicalPath }.getOrNull() ?: return false
-                val privateRoots = listOf(context.filesDir, context.cacheDir, context.noBackupFilesDir)
-                    .mapNotNull { runCatching { it.canonicalPath.trimEnd(File.separatorChar) + File.separator }.getOrNull() }
-                privateRoots.none { path == it.removeSuffix(File.separator) || path.startsWith(it) }
+                val path = runCatching { location.directory.canonicalPath }.getOrNull()
+                if (path == null) false else {
+                    val privateRoots = listOf(context.filesDir, context.cacheDir, context.noBackupFilesDir)
+                        .mapNotNull { runCatching { it.canonicalPath.trimEnd(File.separatorChar) + File.separator }.getOrNull() }
+                    privateRoots.none { path == it.removeSuffix(File.separator) || path.startsWith(it) }
+                }
             }
             null -> false
         }
