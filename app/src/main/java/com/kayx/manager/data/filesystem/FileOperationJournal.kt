@@ -1,5 +1,6 @@
 package com.kayx.manager.data.filesystem
 
+import java.io.ByteArrayInputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
@@ -86,30 +87,27 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
         if (!file.isFile) return emptyList()
 
         return runCatching {
-            FileInputStream(file).use { raw ->
-                raw.mark(8)
-                val header = DataInputStream(raw)
-                val magic = runCatching { header.readInt() }.getOrNull()
-                if (magic == MAGIC) {
-                    val version = header.readInt()
-                    require(version == VERSION) { "Unsupported undo journal version" }
-                    val count = header.readInt()
-                    require(count in 0..MAX_READ_ENTRIES) { "Invalid undo journal entry count" }
-                    buildList {
-                        repeat(count) {
-                            val kind = Kind.valueOf(header.readUTF())
-                            val source = header.readUTF()
-                            val destination = header.readUTF()
-                            val fingerprint = header.readUTF()
-                            if (isValidEntry(kind, source, destination)) {
-                                add(Entry(kind, source, destination, fingerprint))
-                            }
+            val bytes = file.readBytes()
+            val header = DataInputStream(ByteArrayInputStream(bytes))
+            val magic = if (bytes.size >= 4) header.readInt() else 0
+            if (magic == MAGIC) {
+                val version = header.readInt()
+                require(version == VERSION) { "Unsupported undo journal version" }
+                val count = header.readInt()
+                require(count in 0..MAX_READ_ENTRIES) { "Invalid undo journal entry count" }
+                buildList {
+                    repeat(count) {
+                        val kind = Kind.valueOf(header.readUTF())
+                        val source = header.readUTF()
+                        val destination = header.readUTF()
+                        val fingerprint = header.readUTF()
+                        if (isValidEntry(kind, source, destination)) {
+                            add(Entry(kind, source, destination, fingerprint))
                         }
-                    }.takeLast(maxEntries)
-                } else {
-                    raw.reset()
-                    readLegacyEntries(raw.readBytes())
-                }
+                    }
+                }.takeLast(maxEntries)
+            } else {
+                readLegacyEntries(bytes)
             }
         }.getOrDefault(emptyList())
     }
