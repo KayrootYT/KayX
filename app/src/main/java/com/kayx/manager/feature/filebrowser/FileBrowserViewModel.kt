@@ -124,6 +124,14 @@ internal fun updateBrowserTabPath(tabs: List<BrowserTab>, index: Int, path: Stri
     }
 }
 
+internal fun updateBrowserTabSelection(tabs: List<BrowserTab>, index: Int, selected: Set<String>): List<BrowserTab> {
+    if (tabs.isEmpty()) return tabs
+    val safeIndex = index.coerceIn(0, tabs.lastIndex)
+    return tabs.toMutableList().also { current ->
+        current[safeIndex] = current[safeIndex].copy(selected = selected)
+    }
+}
+
 class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), private val archive: ArchiveRepository = ArchiveRepository()) : ViewModel() {
     private val storageLocations = StorageLocationRepository()
     private val storageTransfers = com.kayx.manager.data.filesystem.StorageTransferRepository()
@@ -512,17 +520,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun toggleHidden() { _s.update { it.copy(showHidden = !it.showHidden) }; reload() }
     fun setSort(s: SortBy) { _s.update { it.copy(sort = s) }; reload() }
     private fun updateActiveSelection(transform: (Set<String>) -> Set<String>) = _s.update { st ->
-        if (st.dualPane && st.activePane == 1) {
-            val selected = transform(st.secondarySelected)
-            val tabs = st.tabs.toMutableList()
-            if (tabs.size > 1) tabs[1] = tabs[1].copy(selected = selected)
-            st.copy(secondarySelected = selected, tabs = tabs)
-        } else {
-            val selected = transform(st.primarySelected)
-            val tabs = st.tabs.toMutableList()
-            if (tabs.isNotEmpty()) tabs[0] = tabs[0].copy(selected = selected)
-            st.copy(primarySelected = selected, tabs = tabs)
-        }
+        val secondary = st.dualPane && st.activePane == 1
+        val selected = transform(if (secondary) st.secondarySelected else st.primarySelected)
+        val tabIndex = if (secondary) 1 else if (st.dualPane) 0 else st.activeTab
+        val tabs = updateBrowserTabSelection(st.tabs, tabIndex, selected)
+        if (secondary) st.copy(secondarySelected = selected, tabs = tabs)
+        else st.copy(primarySelected = selected, tabs = tabs)
     }
     fun toggleSelect(path: String) = updateActiveSelection { if (path in it) it - path else it + path }
     /** Long-press menu: make [pane] active and select only [path] so Copy / Cut / Delete / Zip act on that one item. */
@@ -548,11 +551,18 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             from == to -> { swipeAnchor[pane] = null; sel - path }
             else -> { swipeAnchor[pane] = path; sel + paths.subList(minOf(from, to), maxOf(from, to) + 1) }
         }
-        _s.update { if (pane == 1) it.copy(secondarySelected = next, activePane = 1) else it.copy(primarySelected = next, activePane = 0) }
+        _s.update { st ->
+            val secondary = pane == 1 && st.dualPane
+            val tabIndex = if (secondary) 1 else if (st.dualPane) 0 else st.activeTab
+            val tabs = updateBrowserTabSelection(st.tabs, tabIndex, next)
+            if (secondary) st.copy(secondarySelected = next, activePane = 1, tabs = tabs)
+            else st.copy(primarySelected = next, activePane = 0, tabs = tabs)
+        }
     }
-    fun selectAll() = _s.update { st ->
+    fun selectAll() {
+        val st = _s.value
         val paths = (if (st.dualPane && st.activePane == 1) st.secondaryItems else st.items).map { it.path }.toSet()
-        if (st.dualPane && st.activePane == 1) st.copy(secondarySelected = paths) else st.copy(primarySelected = paths)
+        updateActiveSelection { paths }
     }
     fun selectPaths(paths: Set<String>) = updateActiveSelection { paths }
     fun clearSelection() = updateActiveSelection { emptySet() }
@@ -750,14 +760,17 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
 
     // ---- MT-Manager-style extras ----
     fun toggleGrep() { _s.update { it.copy(grep = !it.grep) }; reload() }
-    fun invertSelection() = _s.update { st ->
+    fun invertSelection() {
+        val st = _s.value
         val all = (if (st.dualPane && st.activePane == 1) st.secondaryItems else st.items).map { it.path }.toSet()
-        if (st.dualPane && st.activePane == 1) st.copy(secondarySelected = all - st.secondarySelected) else st.copy(primarySelected = all - st.primarySelected)
+        updateActiveSelection { all - it }
     }
-    fun selectPattern(p: String) = _s.update { st ->
+    fun selectPattern(p: String) {
+        val st = _s.value
         val rx = FileOps.globToRegex(p.trim())
         val list = if (st.dualPane && st.activePane == 1) st.secondaryItems else st.items
-        if (st.dualPane && st.activePane == 1) st.copy(secondarySelected = list.filter { rx.matches(it.name) }.map { it.path }.toSet()) else st.copy(primarySelected = list.filter { rx.matches(it.name) }.map { it.path }.toSet())
+        val selected = list.filter { rx.matches(it.name) }.map { it.path }.toSet()
+        updateActiveSelection { selected }
     }
     fun duplicateSelected() {
         if (_s.value.selected.any { locationOf(it) is StorageLocation.Saf }) { notify("Duplicate is not available for SAF items yet"); return }
