@@ -105,7 +105,7 @@ class WebDavClient(
         try {
             if (offset > 0L) {
                 connection.setRequestProperty("Range", "bytes=$offset-")
-                connection.setRequestProperty("If-Range", validator)
+                connection.setRequestProperty("If-Range", validator ?: throw WebDavException("Missing WebDAV resume validator"))
             } else {
                 if (strongEtag != null) connection.setRequestProperty("If-Match", strongEtag)
                 else if (lastModified != null) connection.setRequestProperty("If-Unmodified-Since", lastModified)
@@ -115,7 +115,7 @@ class WebDavClient(
                 if (code != 206) throw WebDavException("WebDAV server did not honor the resume range (HTTP $code)")
                 val range = parseWebDavContentRange(connection.getHeaderField("Content-Range"))
                     ?: throw WebDavException("WebDAV server returned an invalid Content-Range")
-                if (range.start != offset || range.total != totalLength || range.endInclusive < range.start) {
+                if (range.start != offset || range.total != totalLength || range.endInclusive != totalLength - 1L) {
                     throw WebDavException("WebDAV resource changed or returned a mismatched range")
                 }
             } else if (code != 200) {
