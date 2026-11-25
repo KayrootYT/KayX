@@ -180,7 +180,7 @@ class MainActivity : ComponentActivity() {
                             }
                             Tool.CLEANUP -> com.kayx.manager.feature.storage.CleanupScreen(close) { f, k -> push(f, k) }
                             Tool.ARSC -> ArscViewerScreen(t.first, close)
-                            Tool.FTP -> FtpScreen(close)
+                            Tool.FTP -> NetworkStorageScreen(close)
                             Tool.ROOT -> RootExplorerScreen(close)
                         }
                     } else if (safTree != null) {
