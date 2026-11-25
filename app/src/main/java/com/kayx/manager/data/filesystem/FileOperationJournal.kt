@@ -83,7 +83,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
                 val fields = line.split('\t', ignoreCase = false, limit = 5)
                 if (fields.size != 4) return@mapNotNull null
                 val kind = runCatching { Kind.valueOf(fields[0]) }.getOrNull() ?: return@mapNotNull null
-                fun decode(value: String) = String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8)
+                fun decode(value: String) = if (value == "-") "" else String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8)
                 val source = decode(fields[1])
                 val destination = decode(fields[2])
                 val fingerprint = decode(fields[3])
@@ -100,7 +100,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
         FileOutputStream(temp).use { output ->
             val text = entries.joinToString("\n") { entry ->
                 listOf(entry.kind.name, entry.source, entry.destination, entry.fingerprint).joinToString("\t") {
-                    Base64.getUrlEncoder().withoutPadding().encodeToString(it.toByteArray(Charsets.UTF_8))
+                    Base64.getUrlEncoder().withoutPadding().encodeToString(it.toByteArray(Charsets.UTF_8)).ifEmpty { "-" }
                 }
             }
             output.write(text.toByteArray(Charsets.UTF_8))
@@ -148,6 +148,13 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
                     }
                 }
         }
-        digest.digest().joinToString("") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
+        val hex = "0123456789abcdef"
+        buildString(64) {
+            digest.digest().forEach { byte ->
+                val value = byte.toInt() and 0xff
+                append(hex[value ushr 4])
+                append(hex[value and 0x0f])
+            }
+        }
     }.getOrNull()
 }
