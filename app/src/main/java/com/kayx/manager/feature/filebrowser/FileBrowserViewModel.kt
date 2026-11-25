@@ -708,6 +708,16 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             }
         }
         val effectivePolicy = policy ?: Conflict.KEEP_BOTH
+        // Resolve the exact local target before transfer mutates the destination directory.
+        val plannedUndoTargets = if (destinationLocation is StorageLocation.Local &&
+            keys.all { locationOf(it) is StorageLocation.Local } && effectivePolicy != Conflict.REPLACE) {
+            keys.map { key ->
+                val source = (locationOf(key) as StorageLocation.Local).directory
+                val candidate = File(destinationLocation.directory, source.name)
+                if (candidate.exists() && effectivePolicy == Conflict.KEEP_BOTH)
+                    FileOps.uniqueName(destinationLocation.directory, source.name) else candidate
+            }
+        } else emptyList()
         val control = FileOps.TransferControl()
         _s.update { it.copy(conflicts = emptyList(), pending = null, recent = emptySet(), transferControl = control, retryTransfer = null) }
         viewModelScope.launch {
@@ -734,10 +744,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                 failed.isEmpty() && effectivePolicy != Conflict.REPLACE &&
                 destinationLocation is StorageLocation.Local && keys.all { locationOf(it) is StorageLocation.Local }) {
                 withContext(Dispatchers.IO) {
-                    keys.forEach { key ->
+                    keys.zip(plannedUndoTargets).forEach { (key, target) ->
                         val source = (locationOf(key) as StorageLocation.Local).directory
-                        val target = if (effectivePolicy == Conflict.KEEP_BOTH) FileOps.uniqueName(destinationLocation.directory, source.name)
-                            else File(destinationLocation.directory, source.name)
                         if (cut) operationJournal?.recordMove(source, target) else operationJournal?.recordCopy(target)
                     }
                 }
