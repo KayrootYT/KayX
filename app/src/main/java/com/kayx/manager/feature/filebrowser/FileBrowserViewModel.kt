@@ -181,7 +181,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         }
             ?: primary
         fun restorable(key: String): Boolean = when (val location = StorageLocation.fromStableKey(key)
-            ?: File(key).takeIf { it.isAbsolute }?.let(StorageLocation::Local)) {
+            ?: File(key).takeIf { it.isAbsolute }?.let { StorageLocation.Local(it) }) {
             is StorageLocation.Saf -> location.treeUri in grantedTrees
             is StorageLocation.Local -> location.directory.isDirectory && location.directory.canRead()
             null -> false
@@ -208,7 +208,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     private fun persistSafBrowserSession(state: BrowserState) {
         val context = appContext ?: return
         fun isPublicPath(key: String): Boolean = when (val location = StorageLocation.fromStableKey(key)
-            ?: File(key).takeIf { it.isAbsolute }?.let(StorageLocation::Local)) {
+            ?: File(key).takeIf { it.isAbsolute }?.let { StorageLocation.Local(it) }) {
             is StorageLocation.Saf -> true
             is StorageLocation.Local -> {
                 val path = runCatching { location.directory.canonicalPath }.getOrNull()
