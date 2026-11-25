@@ -2,6 +2,7 @@ package com.kayx.manager.data.network
 
 import com.hierynomus.msdtyp.FileAttributes
 import com.hierynomus.mssmb2.SMB2CreateDisposition
+import com.hierynomus.mssmb2.SMB2Dialect
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.mssmb2.SMB2CreateOptions
 import com.hierynomus.mssmb2.SMB2CreateOptions.FILE_NON_DIRECTORY_FILE
@@ -11,6 +12,7 @@ import com.hierynomus.mssmb2.SMB2ShareAccess.FILE_SHARE_DELETE
 import com.hierynomus.mssmb2.SMB2ShareAccess.FILE_SHARE_READ
 import com.hierynomus.mssmb2.SMB2ShareAccess.FILE_SHARE_WRITE
 import com.hierynomus.smbj.SMBClient
+import com.hierynomus.smbj.SmbConfig
 import com.hierynomus.smbj.connection.Connection
 import com.hierynomus.smbj.session.AuthenticationContext
 import com.hierynomus.smbj.session.Session
@@ -20,6 +22,7 @@ import com.hierynomus.protocol.commons.EnumWithValue
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.EnumSet
+import java.util.concurrent.TimeUnit
 
 /** SMB2/3 client. Credentials are passed only to the SMB authentication exchange. */
 class SmbClient {
@@ -35,7 +38,15 @@ class SmbClient {
         require(host.isNotBlank() && host.length <= 253 && host.none { it.code < 0x20 }) { "Invalid SMB host" }
         require(shareName.isNotBlank() && shareName.length <= 80 && shareName.none { it == '/' || it == '\\' || it.code < 0x20 }) { "Invalid SMB share name" }
         require(username.isNotBlank() && username.none { it.code < 0x20 }) { "Invalid SMB username" }
-        val smbClient = SMBClient()
+        // Require SMB3 encryption and signing; do not silently downgrade to SMB2/unencrypted SMB.
+        val config = SmbConfig.builder()
+            .withDialects(SMB2Dialect.SMB_3_1_1, SMB2Dialect.SMB_3_0_2, SMB2Dialect.SMB_3_0)
+            .withEncryptData(true)
+            .withSigningRequired(true)
+            .withTimeout(30, TimeUnit.SECONDS)
+            .withSoTimeout(30, TimeUnit.SECONDS)
+            .build()
+        val smbClient = SMBClient(config)
         try {
             val conn = smbClient.connect(host)
             val session = conn.authenticate(AuthenticationContext(username, password.toCharArray(), domain))
