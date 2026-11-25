@@ -24,3 +24,8 @@
 # Expression Language API (javax.el), which is intentionally not shipped on Android.
 # KayX does not configure EL expression filters; keep the core event bus usable without EL.
 -dontwarn javax.el.**
+
+# SMBJ includes optional Kerberos/SPNEGO authentication support. KayX currently
+# authenticates SMB shares with username/password (NTLM); Android does not ship
+# the Java GSSAPI (org.ietf.jgss) module. Do not package a desktop Kerberos stack.
+-dontwarn org.ietf.jgss.**
