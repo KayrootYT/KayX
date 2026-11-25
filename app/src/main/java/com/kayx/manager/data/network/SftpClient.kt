@@ -3,6 +3,7 @@ package com.kayx.manager.data.network
 import com.jcraft.jsch.ChannelSftp
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
+import com.jcraft.jsch.SftpProgressMonitor
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.File
@@ -73,10 +74,17 @@ class SftpClient {
         val remoteSize = sftp.stat(remotePath).size
         validateSftpResumeOffset(offset, remoteSize)
         val mode = if (offset == 0L) ChannelSftp.OVERWRITE else ChannelSftp.RESUME
-        var transferred = offset
-        sftp.get(remotePath, output, null, mode, offset)
-        transferred = remoteSize
-        onBytes(transferred)
+        val monitor = object : SftpProgressMonitor {
+            private var transferred = offset
+            override fun init(op: Int, src: String?, dest: String?, max: Long) = Unit
+            override fun count(count: Long): Boolean {
+                transferred += count
+                onBytes(transferred)
+                return true
+            }
+            override fun end() = Unit
+        }
+        sftp.get(remotePath, output, monitor, mode, offset)
         return remoteSize
     }
 
