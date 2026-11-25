@@ -23,7 +23,7 @@ class FtpClient {
     private var secureControl = false
 
     private fun clean(s: String): String {
-        if (s.any { it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }) {
+        if (s.length > 4096 || s.any { it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }) {
             throw FtpException("FTP command contains an invalid control character")
         }
         return s
@@ -42,8 +42,9 @@ class FtpClient {
         val sb = StringBuilder(first)
         if (first.length > 3 && first[3] == '-') {
             while (true) {
-                val l = r.readLine() ?: break
+                val l = r.readLine() ?: throw FtpException("Connection closed during multiline reply")
                 sb.append('\n').append(l)
+                if (sb.length > MAX_REPLY_CHARS) throw FtpException("FTP reply is too large")
                 if (l.length >= 4 && l.startsWith(code.toString()) && l[3] == ' ') break
             }
         }
@@ -171,10 +172,22 @@ class FtpClient {
             val (c, _) = send(cmd)
             if (c != 150 && c != 125) return null
             val protected = protectDataSocket(ds)
-            val lines = protected.getInputStream().bufferedReader(Charsets.UTF_8).readLines()
-            protected.close()
+            var exceededLimit = false
+            val lines = protected.getInputStream().bufferedReader(Charsets.UTF_8).use { reader ->
+                val result = ArrayList<String>()
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.length > MAX_LISTING_LINE_CHARS || result.size >= MAX_LISTING_ENTRIES) {
+                        exceededLimit = true
+                    } else if (!exceededLimit) {
+                        result += line
+                    }
+                }
+                result
+            }
             val (c2, m2) = reply()
             if (c2 != 226 && c2 != 250) throw FtpException(m2)
+            if (exceededLimit) throw FtpException("FTP listing exceeds the safety limit")
             return lines
         } finally {
             runCatching { ds.close() }
@@ -211,6 +224,12 @@ class FtpClient {
         } finally {
             runCatching { ds.close() }
         }
+    }
+
+    private companion object {
+        const val MAX_REPLY_CHARS = 16 * 1024
+        const val MAX_LISTING_LINE_CHARS = 4 * 1024
+        const val MAX_LISTING_ENTRIES = 5_000
     }
 
     private fun copy(i: InputStream, o: OutputStream, onBytes: (Long) -> Unit) {
