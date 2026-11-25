@@ -112,7 +112,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
                 .sortedBy { it.relativeTo(target).invariantSeparatorsPath }
                 .forEach { item ->
                     digest.update(item.relativeTo(target).invariantSeparatorsPath.toByteArray(Charsets.UTF_8))
-                    digest.update(if (item.isDirectory) 1 else 0)
+                    digest.update((if (item.isDirectory) 1 else 0).toByte())
                     if (item.isFile) FileInputStream(item).use { input ->
                         val buffer = ByteArray(64 * 1024)
                         while (true) {
