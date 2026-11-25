@@ -43,6 +43,14 @@ class FtpClientSafetyTest {
         assertEquals(null, parseFtpEpsvPort("229 Entering Extended Passive Mode (|||70000|)"))
     }
 
+    @Test fun ftpResumeOffsetMustFitVerifiedRemoteSize() {
+        assertEquals(0L, validateFtpResumeOffset(0L, 100L))
+        assertEquals(100L, validateFtpResumeOffset(100L, 100L))
+        assertThrows(IllegalArgumentException::class.java) { validateFtpResumeOffset(-1L, 100L) }
+        assertThrows(IllegalArgumentException::class.java) { validateFtpResumeOffset(101L, 100L) }
+        assertThrows(IllegalArgumentException::class.java) { validateFtpResumeOffset(0L, -1L) }
+    }
+
     @Test fun pasvValidatesOctetsAndPort() {
         assertEquals(50000, parseFtpPasvPort("227 Entering Passive Mode (10,0,0,5,195,80)"))
         assertEquals(null, parseFtpPasvPort("227 Entering Passive Mode (999,0,0,5,195,80)"))
