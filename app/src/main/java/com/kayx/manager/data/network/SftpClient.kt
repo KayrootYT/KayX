@@ -126,7 +126,7 @@ class SftpClient {
             if (failure is com.jcraft.jsch.SftpException && failure.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) 0L
             else throw failure
         }
-        if (remoteSize != offset) throw SftpException("Temporary upload size changed; restart this upload")
+        try { validateSftpUploadResumeState(offset, totalSize, remoteSize) } catch (failure: IllegalArgumentException) { throw SftpException(failure.message ?: "Invalid upload resume state") }
         if (offset < totalSize) {
             val mode = if (offset == 0L) ChannelSftp.OVERWRITE else ChannelSftp.RESUME
             val buffer = ByteArray(64 * 1024)
@@ -211,4 +211,10 @@ internal fun validateSftpResumeOffset(offset: Long, remoteSize: Long): Long {
     require(remoteSize >= 0L) { "Remote file size is invalid" }
     require(offset <= remoteSize) { "Partial download is larger than the remote file; remove it and retry" }
     return offset
+}
+
+
+internal fun validateSftpUploadResumeState(offset: Long, totalSize: Long, remoteSize: Long) {
+    require(totalSize >= 0L && offset >= 0L && offset <= totalSize) { "Invalid upload resume range" }
+    require(remoteSize == offset) { "Temporary upload size changed; restart this upload" }
 }
