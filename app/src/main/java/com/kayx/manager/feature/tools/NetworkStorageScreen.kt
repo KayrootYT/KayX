@@ -144,12 +144,16 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
             val directory = File(Environment.getExternalStorageDirectory(), "KayX/network")
             check(directory.isDirectory || directory.mkdirs()) { "Cannot create KayX/network download folder" }
             val target = FileOps.uniqueName(directory, entry.name)
-            val partial = File(directory, ".${target.name}.kayx-${System.nanoTime()}.part")
+            // SFTP keeps a stable app-named partial so a retry can continue from its exact byte offset.
+            // Other protocols still use disposable partial files until their resume semantics are verified.
+            val resumableSftp = protocol == StorageProtocol.SFTP
+            val partial = File(directory, if (resumableSftp) ".${target.name}.kayx.part" else ".${target.name}.kayx-${System.nanoTime()}.part")
             try {
-                FileOutputStream(partial).use { output ->
+                val offset = if (resumableSftp && partial.isFile) partial.length() else 0L
+                FileOutputStream(partial, resumableSftp && offset > 0L).use { output ->
                     when (protocol) {
                         StorageProtocol.FTP, StorageProtocol.FTPS -> ftp.download(entry.name, output) { progress = "${entry.name}: ${formatBytes(it)}" }
-                        StorageProtocol.SFTP -> sftp.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
+                        StorageProtocol.SFTP -> sftp.downloadResumable(remote(entry.name), output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
                         StorageProtocol.SMB -> smb.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
                         StorageProtocol.WEBDAV -> webDav.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
                     }
@@ -157,7 +161,8 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
                 }
                 Files.move(partial.toPath(), target.toPath())
             } catch (failure: Throwable) {
-                partial.delete()
+                // Keep only SFTP partials: the client verifies the remote size before resuming.
+                if (!resumableSftp) partial.delete()
                 throw failure
             }
         }, { scope.launch { snack.showSnackbar("Saved to KayX/network/${entry.name}") } })
