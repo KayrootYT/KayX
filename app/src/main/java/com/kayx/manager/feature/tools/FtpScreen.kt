@@ -57,12 +57,11 @@ fun FtpScreen(onBack: () -> Unit) {
     var rememberPassword by remember { mutableStateOf(false) }
     val profileKey = remember(host, port, user) { "$host:$port:$user" }
     LaunchedEffect(profileKey) {
-        val saved = withContext(Dispatchers.IO) {
-            runCatching { credentialStore.read(profileKey) }.getOrElse {
-                snack.showSnackbar(it.message ?: "Saved password could not be read")
-                null
-            }
+        val result = withContext(Dispatchers.IO) {
+            runCatching { credentialStore.read(profileKey) }
         }
+        val saved = result.getOrNull()
+        if (result.isFailure) snack.showSnackbar(result.exceptionOrNull()?.message ?: "Saved password could not be read")
         rememberPassword = saved != null
         if (saved != null) pass = saved
     }
