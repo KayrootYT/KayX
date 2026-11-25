@@ -8,6 +8,7 @@ import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.Base64
+import java.util.UUID
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
 
@@ -63,11 +64,20 @@ class WebDavClient(
     }
 
     fun download(path: String, output: OutputStream, onBytes: (Long) -> Unit = {}) {
-        transfer("GET", resolve(path), null, output, onBytes)
-    }
-
+        transfer("GET", resolve(path), null, ou    /** Upload to a unique sibling and publish it with MOVE only after a complete PUT. */
     fun upload(path: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
-        transfer("PUT", resolve(path), input, null, onBytes)
+        val temporaryName = ".kayx-upload-${UUID.randomUUID()}.part"
+        val parent = path.substringBeforeLast('/', "")
+        val temporaryPath = if (parent.isEmpty()) temporaryName else "$parent/$temporaryName"
+        try {
+            transfer("PUT", resolve(temporaryPath), input, null, onBytes)
+            move(temporaryPath, path, overwrite = true)
+        } catch (failure: Throwable) {
+            runCatching { delete(temporaryPath) }
+            throw failure
+        }
+    }
+, null, onBytes)
     }
 
     /**
