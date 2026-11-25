@@ -63,14 +63,13 @@ class SftpClient {
         val sftp = requireChannel()
         val temporary = "$remotePath.kayx-part"
         try {
-            sftp.put(input, temporary)
+            sftp.put(temporary).use { output -> copy(input, output, onBytes) }
             // Rename only after a complete upload; do not overwrite an existing destination.
             sftp.rename(temporary, remotePath)
         } catch (failure: Throwable) {
             runCatching { sftp.rm(temporary) }
             throw failure
         }
-        onBytes(0L)
     }
 
     fun createDirectory(path: String) { validateSftpPath(path); requireChannel().mkdir(path) }
