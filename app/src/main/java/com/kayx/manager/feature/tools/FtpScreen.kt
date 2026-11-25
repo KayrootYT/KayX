@@ -51,6 +51,7 @@ fun FtpScreen(onBack: () -> Unit) {
     var port by remember { mutableStateOf(prefs.getString("port", "21") ?: "21") }
     var user by remember { mutableStateOf(prefs.getString("user", "anonymous") ?: "anonymous") }
     var pass by remember { mutableStateOf("") }
+    var useFtps by remember { mutableStateOf(false) }
 
     var connected by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -104,7 +105,7 @@ fun FtpScreen(onBack: () -> Unit) {
     }
 
     ToolScaffold(
-        if (connected) "FTP · $host" else "FTP client",
+        if (connected) (if (useFtps) "FTPS · $host" else "FTP · $host") else "FTP client",
         { if (connected) { Thread { client.disconnect() }.start(); connected = false } else onBack() },
         snack,
         actions = {
@@ -126,11 +127,20 @@ fun FtpScreen(onBack: () -> Unit) {
                 OutlinedTextField(user, { user = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Username") })
                 OutlinedTextField(pass, { pass = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Password") },
                     visualTransformation = PasswordVisualTransformation())
-                Text("Plain FTP is not encrypted. Use it only on networks you trust. The password is not saved.", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = useFtps, onCheckedChange = { useFtps = it })
+                    Text("Use explicit FTPS (TLS)", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    if (useFtps) "TLS certificate and hostname are verified. The password is not saved."
+                    else "Plain FTP sends credentials and files without encryption. Use only on trusted networks. The password is not saved.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted
+                )
                 Button({
                     prefs.edit().putString("host", host).putString("port", port).putString("user", user).apply()
                     run({
-                        client.connect(host, port.toIntOrNull() ?: 21, user, pass)
+                        client.connect(host, port.toIntOrNull() ?: 21, user, pass, secure = useFtps)
                         path = client.pwd(); entries = client.list(); connected = true
                     })
                 }, Modifier.fillMaxWidth(), enabled = !busy && host.isNotBlank()) {
