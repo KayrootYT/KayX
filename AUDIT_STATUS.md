@@ -61,7 +61,9 @@ No release-ready claim is made until the fresh CI run and physical-device tests 
 - WebDAV: HTTPS only, platform certificate/hostname verification, redirects disabled, response-size bounds, DOCTYPE/external entity protections, and same-origin response href checks.
 - Remembered network passwords are opt-in and encrypted with an Android Keystore AES-GCM key; credential ciphertext is bound to the connection profile ID.
 - The unified Network Storage screen supports browsing and common file operations; transfer cancellation closes the active protocol connection/request.
-- **Still pending before Phase 6 completion:** latest full Build & Test on the PR head, resumable transfer support, disposable real-server integration tests for all protocols, and physical-device/Keystore validation. CI success alone is not a substitute for server/device tests.
+- SFTP downloads now resume from a retained local partial file after checking the current remote file size against the local offset. A JVM test covers negative, valid, and oversized offsets.
+- FTP/FTPS, SMB and WebDAV resumable transfers, plus resumable uploads, remain unimplemented until their server-side offset/validator semantics can be safely verified.
+- **Still pending before Phase 6 completion:** disposable real-server integration tests for all protocols, Android Keystore/device tests, physical-device validation, and final CI on the completed PR head. CI success alone is not a substitute for server/device tests.
 
 
 ## Static scanner findings reviewed
