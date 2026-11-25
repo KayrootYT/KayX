@@ -119,6 +119,7 @@ class SftpClient {
 internal fun validateSftpPath(path: String): String {
     require(path.isNotBlank() && path.length <= 4096) { "Invalid SFTP path" }
     require(path.none { it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }) { "SFTP path contains control characters" }
+    require(path.split('/').none { it == ".." || it == "." }) { "SFTP path traversal is not allowed" }
     return path
 }
 
