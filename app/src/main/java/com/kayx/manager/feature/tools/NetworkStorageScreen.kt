@@ -40,6 +40,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
+import java.security.MessageDigest
 
 private enum class StorageProtocol(val title: String, val defaultPort: String) {
     FTP("FTP", "21"), FTPS("Explicit FTPS", "21"), SFTP("SFTP", "22"), SMB("SMB3", "445"), WEBDAV("WebDAV over HTTPS", "443")
@@ -150,8 +151,12 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
             val resumableSmb = protocol == StorageProtocol.SMB
             val resumableWebDav = protocol == StorageProtocol.WEBDAV
             val resumable = resumableSftp || resumableFtp || resumableSmb || resumableWebDav
-            val partial = File(directory, if (resumable) ".${target.name}.kayx.part" else ".${target.name}.kayx-${System.nanoTime()}.part")
-            val smbMetadata = File(directory, ".${target.name}.kayx.smbmeta")
+            val resumeIdentity = "$profileKey|$path|${entry.name}"
+            val resumeKey = MessageDigest.getInstance("SHA-256")
+                .digest(resumeIdentity.toByteArray(Charsets.UTF_8))
+                .take(12).joinToString("") { "%02x".format(it) }
+            val partial = File(directory, if (resumable) ".${target.name}.$resumeKey.kayx.part" else ".${target.name}.kayx-${System.nanoTime()}.part")
+            val smbMetadata = File(directory, ".${target.name}.$resumeKey.kayx.smbmeta")
             try {
                 val offset = if (resumable && partial.isFile) partial.length() else 0L
                 FileOutputStream(partial, resumable && offset > 0L).use { output ->
