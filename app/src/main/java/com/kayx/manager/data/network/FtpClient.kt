@@ -304,7 +304,7 @@ class FtpClient {
             550 -> 0L
             else -> throw FtpException("Cannot verify temporary upload size: $sizeReply")
         }
-        if (remoteSize != offset) throw FtpException("Temporary upload size changed; restart this upload")
+        validateFtpUploadResumeState(offset, totalSize, remoteSize)
         if (offset == totalSize) {
             rename(temp, destination)
             return
@@ -421,4 +421,10 @@ internal fun parseFtpPasvPort(reply: String): Int? {
         .find(reply)?.groupValues?.drop(1)?.mapNotNull { it.toIntOrNull() } ?: return null
     if (values.size != 6 || values.any { it !in 0..255 }) return null
     return (values[4] * 256 + values[5]).takeIf { it in 1..65535 }
+}
+
+
+internal fun validateFtpUploadResumeState(offset: Long, totalSize: Long, remoteSize: Long) {
+    require(totalSize >= 0L && offset >= 0L && offset <= totalSize) { "Invalid upload resume range" }
+    require(remoteSize == offset) { "Temporary upload size changed; restart this upload" }
 }
