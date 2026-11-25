@@ -35,8 +35,9 @@ class NetworkCredentialStore(context: Context) {
         require(payload.size > IV_LENGTH) { "Stored credentials are incomplete" }
         val iv = payload.copyOfRange(0, IV_LENGTH)
         val encrypted = payload.copyOfRange(IV_LENGTH, payload.size)
+        val key = getExistingKey() ?: throw IllegalStateException("Credential encryption key is missing; refusing to recreate it")
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
         return String(cipher.doFinal(encrypted), Charsets.UTF_8)
     }
 
@@ -45,9 +46,13 @@ class NetworkCredentialStore(context: Context) {
         preferences.edit().remove(storageKey(profileId)).commit()
     }
 
-    private fun getOrCreateKey(): SecretKey {
+    private fun getExistingKey(): SecretKey? {
         val store = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-        (store.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        return store.getKey(KEY_ALIAS, null) as? SecretKey
+    }
+
+    private fun getOrCreateKey(): SecretKey {
+        getExistingKey()?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
         generator.init(
             KeyGenParameterSpec.Builder(
@@ -62,7 +67,10 @@ class NetworkCredentialStore(context: Context) {
         return generator.generateKey()
     }
 
-    private fun storageKey(profileId: String): String = "credential_" + profileId.hashCode().toUInt().toString(16)
+    private fun storageKey(profileId: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(profileId.toByteArray(Charsets.UTF_8))
+        return "credential_" + digest.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
 
     private fun validateProfileId(profileId: String) {
         require(profileId.isNotBlank() && profileId.length <= MAX_PROFILE_ID_LENGTH) { "Invalid connection profile ID" }
