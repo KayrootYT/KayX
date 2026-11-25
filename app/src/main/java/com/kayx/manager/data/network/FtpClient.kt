@@ -21,6 +21,7 @@ class FtpClient {
     private var wr: BufferedWriter? = null
     private var host = ""
     private var secureControl = false
+    @Volatile private var activeDataSocket: Socket? = null
 
     private fun clean(s: String): String {
         if (s.length > 4096 || s.any { it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }) {
@@ -111,6 +112,17 @@ class FtpClient {
         }
     }
 
+    /** Abort an active transfer without sending QUIT concurrently with its control reply. */
+    fun cancelTransfer() {
+        runCatching { activeDataSocket?.close() }
+        activeDataSocket = null
+        // Closing the control socket unblocks a transfer waiting for its final FTP reply.
+        runCatching { sock?.close() }
+        sock = null; rd = null; wr = null
+        host = ""
+        secureControl = false
+    }
+
     fun disconnect() {
         runCatching { if (sock != null) send("QUIT") }
         runCatching { sock?.close() }
@@ -173,6 +185,7 @@ class FtpClient {
 
     private fun listing(cmd: String): List<String>? {
         val ds = openData()
+        activeDataSocket = ds
         try {
             val (c, _) = send(cmd)
             if (c != 150 && c != 125) return null
@@ -207,6 +220,7 @@ class FtpClient {
 
     fun download(remote: String, out: OutputStream, onBytes: (Long) -> Unit) {
         val ds = openData()
+        activeDataSocket = ds
         try {
             val (c, m) = send("RETR ${clean(remote)}")
             if (c != 150 && c != 125) throw FtpException(m)
@@ -214,12 +228,14 @@ class FtpClient {
             val (c2, m2) = reply()
             if (c2 != 226 && c2 != 250) throw FtpException(m2)
         } finally {
+            if (activeDataSocket === ds) activeDataSocket = null
             runCatching { ds.close() }
         }
     }
 
     fun upload(remote: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
         val ds = openData()
+        activeDataSocket = ds
         try {
             val (c, m) = send("STOR ${cleanName(remote)}")
             if (c != 150 && c != 125) throw FtpException(m)
@@ -227,6 +243,7 @@ class FtpClient {
             val (c2, m2) = reply()
             if (c2 != 226 && c2 != 250) throw FtpException(m2)
         } finally {
+            if (activeDataSocket === ds) activeDataSocket = null
             runCatching { ds.close() }
         }
     }
