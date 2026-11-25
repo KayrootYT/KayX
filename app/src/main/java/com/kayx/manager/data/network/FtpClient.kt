@@ -266,12 +266,12 @@ internal fun validateFtpRemoteName(name: String): String {
 
 
 internal fun parseFtpEpsvPort(reply: String): Int? {
-    val match = Regex("""\\((.)(?:\\1){2}(\\d+)\\1\\)""").find(reply) ?: return null
+    val match = Regex("""\((.)(?:\1){2}(\d+)\1\)""").find(reply) ?: return null
     return match.groupValues[2].toIntOrNull()?.takeIf { it in 1..65535 }
 }
 
 internal fun parseFtpPasvPort(reply: String): Int? {
-    val values = Regex("""(\\d+),(\\d+),(\\d+),(\\d+),(\\d+),(\\d+)""")
+    val values = Regex("""(\d+),(\d+),(\d+),(\d+),(\d+),(\d+)""")
         .find(reply)?.groupValues?.drop(1)?.mapNotNull { it.toIntOrNull() } ?: return null
     if (values.size != 6 || values.any { it !in 0..255 }) return null
     return (values[4] * 256 + values[5]).takeIf { it in 1..65535 }
