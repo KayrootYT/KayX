@@ -19,6 +19,7 @@ class NetworkCredentialStore(context: Context) {
         require(password.isNotEmpty()) { "Password is empty" }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+        cipher.updateAAD(profileId.toByteArray(Charsets.UTF_8))
         val encrypted = cipher.doFinal(password.toByteArray(Charsets.UTF_8))
         val payload = cipher.iv + encrypted
         check(preferences.edit().putString(storageKey(profileId), Base64.encodeToString(payload, Base64.NO_WRAP)).commit()) {
@@ -38,6 +39,7 @@ class NetworkCredentialStore(context: Context) {
         val key = getExistingKey() ?: throw IllegalStateException("Credential encryption key is missing; refusing to recreate it")
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+        cipher.updateAAD(profileId.toByteArray(Charsets.UTF_8))
         return String(cipher.doFinal(encrypted), Charsets.UTF_8)
     }
 
