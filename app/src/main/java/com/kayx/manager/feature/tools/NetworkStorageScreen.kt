@@ -287,7 +287,7 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
                             StorageProtocol.FTP -> ftp.connect(host, port.toIntOrNull() ?: 21, username, password, secure = false)
                             StorageProtocol.FTPS -> ftp.connect(host, port.toIntOrNull() ?: 21, username, password, secure = true)
                             StorageProtocol.SFTP -> sftp.connect(host, port.toIntOrNull() ?: 22, username, password, knownHosts)
-                            StorageProtocol.SMB -> smb.connect(host, shareName, username, password, domain)
+                            StorageProtocol.SMB -> smb.connect(host, port.toIntOrNull() ?: 445, shareName, username, password, domain)
                             StorageProtocol.WEBDAV -> webDav.connect(host, username, password)
                         }
                         try {
