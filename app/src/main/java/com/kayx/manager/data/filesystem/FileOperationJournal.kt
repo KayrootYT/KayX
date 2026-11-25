@@ -63,6 +63,9 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
     }
 
     private fun readEntries(): List<Entry> {
+        val backup = File(directory, "file-operations.undo.bak")
+        if (!file.exists() && backup.exists()) backup.renameTo(file)
+        else if (file.exists()) backup.delete()
         if (!file.isFile) return emptyList()
         return runCatching {
             file.readLines(Charsets.UTF_8).mapNotNull { line ->
