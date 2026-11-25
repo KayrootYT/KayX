@@ -220,7 +220,7 @@ private fun ToolsTab(onPush: (String, Tool) -> Unit) {
         ToolRow("Terminal", "Run commands and scripts", Icons.Default.Terminal) { onPush("", Tool.TERMINAL) }
         ToolRow("Root explorer", "Browse system folders (root or Shizuku)", Icons.Default.AdminPanelSettings) { onPush("", Tool.ROOT) }
         SectionTitle("Network")
-        ToolRow("FTP client", "Browse, download and upload over plain FTP", Icons.Default.Dns) { onPush("", Tool.FTP) }
+        ToolRow("Network storage", "FTP, FTPS, SFTP, encrypted SMB3 and HTTPS WebDAV", Icons.Default.Dns) { onPush("", Tool.FTP) }
         SectionTitle("Media")
         ToolRow("Streaming player", "Play media from a link", Icons.Default.Movie) { onPush("", Tool.STREAM) }
         SectionTitle("File tools")
