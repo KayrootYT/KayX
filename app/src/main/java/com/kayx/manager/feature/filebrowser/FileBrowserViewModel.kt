@@ -857,8 +857,21 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val keys = _s.value.selected.toList()
         if (keys.all { locationOf(it) is StorageLocation.Local }) {
             val files = keys.map { (locationOf(it) as StorageLocation.Local).directory }
-            if (SettingsStore.useRecycleBin) run({ withContext(Dispatchers.IO) { RecycleBin.trash(files) } }, "Moved ${files.size} to recycle bin", FileActionSound.DELETE)
-            else run({ repo.delete(files) }, "Deleted ${files.size}", FileActionSound.DELETE)
+            if (SettingsStore.useRecycleBin) {
+                val pane = _s.value.activeIdx
+                viewModelScope.launch {
+                    val result = withContext(Dispatchers.IO) { RecycleBin.trashWithEntries(files) }
+                    if (result.isSuccess) withContext(Dispatchers.IO) {
+                        result.getOrThrow().forEach { operationJournal?.recordTrash(it.id) }
+                    }
+                    _s.update { it.copy(undoAvailable = operationJournal?.entries()?.isNotEmpty() == true,
+                        message = result.exceptionOrNull()?.message ?: "Moved ${result.getOrThrow().size} to recycle bin") }
+                    if (result.isSuccess) FileOperationSounds.play(appContext, FileActionSound.DELETE)
+                    repo.invalidateSearchCache()
+                    clearPaneSelection(pane)
+                    reload()
+                }
+            } else run({ repo.delete(files) }, "Deleted ${files.size}", FileActionSound.DELETE)
             return
         }
         viewModelScope.launch {
