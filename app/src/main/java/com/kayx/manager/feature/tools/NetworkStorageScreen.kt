@@ -148,15 +148,15 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
             val resumableSftp = protocol == StorageProtocol.SFTP
             val resumableFtp = protocol == StorageProtocol.FTP || protocol == StorageProtocol.FTPS
             val resumable = resumableSftp || resumableFtp
-            val partial = File(directory, if (resumable) ".\${target.name}.kayx.part" else ".\${target.name}.kayx-\${System.nanoTime()}.part")
+            val partial = File(directory, if (resumable) ".${target.name}.kayx.part" else ".${target.name}.kayx-${System.nanoTime()}.part")
             try {
                 val offset = if (resumable && partial.isFile) partial.length() else 0L
                 FileOutputStream(partial, resumable && offset > 0L).use { output ->
                     when (protocol) {
-                        StorageProtocol.FTP, StorageProtocol.FTPS -> ftp.downloadResumable(entry.name, output, offset) { progress = "\${entry.name}: \${formatBytes(it)}" }
-                        StorageProtocol.SFTP -> sftp.downloadResumable(remote(entry.name), output, offset) { progress = "\${entry.name}: \${formatBytes(it)}" }
-                        StorageProtocol.SMB -> smb.download(remote(entry.name), output) { progress = "\${entry.name}: \${formatBytes(it)}" }
-                        StorageProtocol.WEBDAV -> webDav.download(remote(entry.name), output) { progress = "\${entry.name}: \${formatBytes(it)}" }
+                        StorageProtocol.FTP, StorageProtocol.FTPS -> ftp.downloadResumable(entry.name, output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
+                        StorageProtocol.SFTP -> sftp.downloadResumable(remote(entry.name), output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
+                        StorageProtocol.SMB -> smb.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
+                        StorageProtocol.WEBDAV -> webDav.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
                     }
                     output.fd.sync()
                 }
