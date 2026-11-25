@@ -64,7 +64,10 @@ class WebDavClient(
     }
 
     fun download(path: String, output: OutputStream, onBytes: (Long) -> Unit = {}) {
-        transfer("GET", resolve(path), null, ou    /** Upload to a unique sibling and publish it with MOVE only after a complete PUT. */
+        transfer("GET", resolve(path), null, output, onBytes)
+    }
+
+    /** Upload to a unique sibling and publish it with MOVE only after a complete PUT. */
     fun upload(path: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
         val temporaryName = ".kayx-upload-${UUID.randomUUID()}.part"
         val parent = path.substringBeforeLast('/', "")
@@ -76,8 +79,6 @@ class WebDavClient(
             runCatching { delete(temporaryPath) }
             throw failure
         }
-    }
-, null, onBytes)
     }
 
     /**
