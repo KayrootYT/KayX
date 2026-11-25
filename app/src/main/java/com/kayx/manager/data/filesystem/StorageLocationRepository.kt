@@ -7,6 +7,8 @@ import com.kayx.manager.domain.model.SortBy
 import com.kayx.manager.domain.model.SearchMode
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -77,33 +79,46 @@ class StorageLocationRepository {
         sort: SortBy,
         mode: SearchMode,
         allowedExtensions: Set<String> = emptySet(),
-        maxResults: Int = 5000
+        maxResults: Int = 5000,
+        maxDepth: Int = 64,
+        maxScannedEntries: Int = 100_000
     ): List<FileItem> = withContext(Dispatchers.IO) {
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.isEmpty()) return@withContext emptyList()
+        val resultLimit = maxResults.coerceIn(1, 100_000)
+        val depthLimit = maxDepth.coerceIn(1, 128)
+        val scanLimit = maxScannedEntries.coerceIn(1, 500_000)
+        val extensions = allowedExtensions.map { it.removePrefix(".").lowercase() }.filter { it.isNotBlank() }.toSet()
         val tree = Uri.parse(location.treeUri)
         check(SafRepository.persistedTrees(context).contains(tree)) { "Storage permission was revoked. Select the storage folder again." }
         val root = SafRepository.findByRelativePath(context, tree, location.relativePath)
             ?.takeIf { it.isDirectory } ?: error("Storage folder is unavailable")
-        val regex = if (mode == SearchMode.REGEX) runCatching { Regex(query, RegexOption.IGNORE_CASE) }.getOrNull() else null
-        val queue = java.util.ArrayDeque<Pair<DocumentFile, String>>()
-        queue.add(root to location.relativePath.trim('/'))
+        val regex = if (mode == SearchMode.REGEX) runCatching { Regex(normalizedQuery, RegexOption.IGNORE_CASE) }.getOrNull()
+            ?: return@withContext emptyList() else null
+        val queue = java.util.ArrayDeque<Triple<DocumentFile, String, Int>>()
+        queue.add(Triple(root, location.relativePath.trim('/'), 0))
         val visited = mutableSetOf<String>()
         val results = mutableListOf<FileItem>()
-        while (queue.isNotEmpty() && results.size < maxResults) {
-            val (folder, parentPath) = queue.removeFirst()
+        var scanned = 0
+        while (queue.isNotEmpty() && results.size < resultLimit && scanned < scanLimit) {
+            currentCoroutineContext().ensureActive()
+            val (folder, parentPath, depth) = queue.removeFirst()
             val folderId = folder.uri.toString()
-            if (!visited.add(folderId)) continue
+            if (!visited.add(folderId) || depth >= depthLimit) continue
             val children = folder.listFiles()
             for (child in children) {
+                if (++scanned % 128 == 0) currentCoroutineContext().ensureActive()
+                if (scanned > scanLimit) break
                 val name = child.name ?: continue
                 if (!showHidden && name.startsWith('.')) continue
                 val relative = listOf(parentPath, name).filter { it.isNotBlank() }.joinToString("/")
                 val extension = name.substringAfterLast('.', "").lowercase()
                 val matches = when (mode) {
-                    SearchMode.CONTAINS -> name.contains(query, ignoreCase = true)
-                    SearchMode.EXACT -> name.equals(query, ignoreCase = true)
+                    SearchMode.CONTAINS -> name.contains(normalizedQuery, ignoreCase = true)
+                    SearchMode.EXACT -> name.equals(normalizedQuery, ignoreCase = true)
                     SearchMode.REGEX -> regex?.containsMatchIn(name) == true
                 }
-                if (matches && (allowedExtensions.isEmpty() || child.isDirectory || extension in allowedExtensions)) {
+                if (matches && (extensions.isEmpty() || child.isDirectory || extension in extensions)) {
                     results += FileItem(
                         path = StorageLocation.Saf(location.treeUri, relative).stableKey(),
                         name = name,
@@ -112,9 +127,9 @@ class StorageLocationRepository {
                         modified = child.lastModified(),
                         hidden = name.startsWith('.')
                     )
-                    if (results.size >= maxResults) break
+                    if (results.size >= resultLimit) break
                 }
-                if (child.isDirectory) queue.addLast(child to relative)
+                if (child.isDirectory && depth + 1 < depthLimit) queue.addLast(Triple(child, relative, depth + 1))
             }
         }
         results.sortedWith(fileItemComparator(sort))

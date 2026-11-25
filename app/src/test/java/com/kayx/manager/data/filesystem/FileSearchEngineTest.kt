@@ -111,6 +111,26 @@ class FileSearchEngineTest {
     }
 
     @Test
+    fun reportsTruncationOnlyWhenAdditionalMatchesExist() = runBlocking {
+        val root = createTempDir(prefix = "kayx-search-cap-")
+        try {
+            File(root, "a.txt").writeText("a")
+            File(root, "b.txt").writeText("b")
+            val engine = FileSearchEngine()
+
+            val exactLimit = engine.search(FileSearchRequest(root, ".txt", maxResults = 2))
+            assertEquals(2, exactLimit.items.size)
+            assertFalse(exactLimit.truncated)
+
+            val overLimit = engine.search(FileSearchRequest(root, ".txt", maxResults = 1))
+            assertEquals(1, overLimit.items.size)
+            assertTrue(overLimit.truncated)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun mapsMtStyleQueriesToSafeMediaStorePatterns() {
         assertEquals("%music%", mediaStoreLikePattern("music", SearchMode.CONTAINS))
         assertEquals("%.mp3", mediaStoreLikePattern(".mp3", SearchMode.CONTAINS))
