@@ -166,10 +166,18 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         // explicit path such as a Private Space session supplied by MainActivity.
         val mayRestoreSaf = path == SettingsStore.browserPath || path == "/sdcard" || path == "/storage/emulated/0"
         val restoredPrimarySaf = if (mayRestoreSaf) saved?.getString("primary_saf", null)?.let { key ->
-            (StorageLocation.fromStableKey(key) as? StorageLocation.Saf)?.takeIf { it.treeUri in grantedTrees }?.stableKey()
+            val location = StorageLocation.fromStableKey(key) as? StorageLocation.Saf
+            location?.takeIf {
+                context != null && it.treeUri in grantedTrees &&
+                    runCatching { SafRepository.findByRelativePath(context, Uri.parse(it.treeUri), it.relativePath)?.isDirectory == true }.getOrDefault(false)
+            }?.stableKey()
         } else null
         val restoredSecondarySaf = if (mayRestoreSaf) saved?.getString("secondary_saf", null)?.let { key ->
-            (StorageLocation.fromStableKey(key) as? StorageLocation.Saf)?.takeIf { it.treeUri in grantedTrees }?.stableKey()
+            val location = StorageLocation.fromStableKey(key) as? StorageLocation.Saf
+            location?.takeIf {
+                context != null && it.treeUri in grantedTrees &&
+                    runCatching { SafRepository.findByRelativePath(context, Uri.parse(it.treeUri), it.relativePath)?.isDirectory == true }.getOrDefault(false)
+            }?.stableKey()
         } else null
         val primary = restoredPrimarySaf ?: path
         if (_s.value.root == primary) { reload(); return }
@@ -182,7 +190,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             ?: primary
         fun restorable(key: String): Boolean = when (val location = StorageLocation.fromStableKey(key)
             ?: File(key).takeIf { it.isAbsolute }?.let { StorageLocation.Local(it) }) {
-            is StorageLocation.Saf -> location.treeUri in grantedTrees
+            is StorageLocation.Saf -> context != null && location.treeUri in grantedTrees &&
+                runCatching { SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)?.isDirectory == true }.getOrDefault(false)
             is StorageLocation.Local -> location.directory.isDirectory && location.directory.canRead()
             null -> false
         }
