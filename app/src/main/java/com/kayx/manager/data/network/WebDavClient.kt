@@ -97,7 +97,7 @@ class WebDavClient(
 
         val strongEtag = etag?.takeIf(::isStrongWebDavEtag)
         val validator = strongEtag ?: lastModified
-        if (offset > 0L && validator == null) {
+        if (validator == null) {
             throw WebDavException("WebDAV resume requires a strong ETag or Last-Modified validator")
         }
 
@@ -123,8 +123,12 @@ class WebDavClient(
             }
 
             val responseEtag = connection.getHeaderField("ETag")?.trim()
-            if (strongEtag != null && responseEtag != null && responseEtag != strongEtag) {
-                throw WebDavException("WebDAV resource validator changed during download")
+            val responseLastModified = connection.getHeaderField("Last-Modified")?.trim()
+            if (strongEtag != null && responseEtag != strongEtag) {
+                throw WebDavException("WebDAV ETag was missing or changed during download")
+            }
+            if (strongEtag == null && responseLastModified != lastModified) {
+                throw WebDavException("WebDAV Last-Modified validator was missing or changed during download")
             }
             val expectedBytes = totalLength - offset
             var transferred = 0L
