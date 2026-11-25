@@ -80,7 +80,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
         if (!file.isFile) return emptyList()
         return runCatching {
             file.readLines(Charsets.UTF_8).mapNotNull { line ->
-                val fields = line.split('\t')
+                val fields = line.split('\t', ignoreCase = false, limit = 5)
                 if (fields.size != 4) return@mapNotNull null
                 val kind = runCatching { Kind.valueOf(fields[0]) }.getOrNull() ?: return@mapNotNull null
                 fun decode(value: String) = String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8)
@@ -148,6 +148,6 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
                     }
                 }
         }
-        digest.digest().joinToString("") { "%02x".format(it) }
+        digest.digest().joinToString("") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') }
     }.getOrNull()
 }
