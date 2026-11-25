@@ -132,6 +132,18 @@ internal fun updateBrowserTabSelection(tabs: List<BrowserTab>, index: Int, selec
     }
 }
 
+internal fun encodeBrowserPaths(paths: List<String>): String = paths.joinToString("\n") { path ->
+    java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(path.toByteArray(Charsets.UTF_8))
+}
+
+internal fun decodeBrowserPaths(encoded: String?): List<String> = encoded.orEmpty()
+    .lineSequence()
+    .filter { it.isNotBlank() }
+    .mapNotNull { value ->
+        runCatching { String(java.util.Base64.getUrlDecoder().decode(value), Charsets.UTF_8) }.getOrNull()
+    }
+    .toList()
+
 class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), private val archive: ArchiveRepository = ArchiveRepository()) : ViewModel() {
     private val storageLocations = StorageLocationRepository()
     private val storageTransfers = com.kayx.manager.data.filesystem.StorageTransferRepository()
@@ -168,11 +180,25 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             null -> storedSecondary.takeIf { it.isNotBlank() && File(it).isDirectory }
         }
             ?: primary
+        fun restorable(key: String): Boolean = when (val location = StorageLocation.fromStableKey(key)) {
+            is StorageLocation.Saf -> location.treeUri in grantedTrees
+            is StorageLocation.Local -> location.directory.isDirectory && location.directory.canRead()
+            null -> false
+        }
+        val restoredTabs = if (mayRestoreSaf) decodeBrowserPaths(saved?.getString("tabs", null))
+            .filter(::restorable).take(32).map(::BrowserTab) else emptyList()
+        val tabs = restoredTabs.ifEmpty { listOf(BrowserTab(primary), BrowserTab(restoredSecondary)) }
+        val activeTab = (saved?.getInt("active_tab", 0) ?: 0).coerceIn(0, tabs.lastIndex)
+        val restoredDir = if (!SettingsStore.dualPane) tabs[activeTab].path else primary
         val restoredActive = (saved?.getInt("active_pane", SettingsStore.browserActivePane) ?: SettingsStore.browserActivePane).coerceIn(0, 1)
-        _s.update { it.copy(root = primary, dir = primary, secondaryDir = restoredSecondary, secondaryItems = emptyList(),
+        val back = if (mayRestoreSaf) decodeBrowserPaths(saved?.getString("back_primary", null)).filter(::restorable).takeLast(50) else emptyList()
+        val forward = if (mayRestoreSaf) decodeBrowserPaths(saved?.getString("forward_primary", null)).filter(::restorable).takeLast(50) else emptyList()
+        val secondaryBack = if (mayRestoreSaf) decodeBrowserPaths(saved?.getString("back_secondary", null)).filter(::restorable).takeLast(50) else emptyList()
+        val secondaryForward = if (mayRestoreSaf) decodeBrowserPaths(saved?.getString("forward_secondary", null)).filter(::restorable).takeLast(50) else emptyList()
+        _s.update { it.copy(root = primary, dir = restoredDir, secondaryDir = restoredSecondary, secondaryItems = emptyList(),
             activePane = if (SettingsStore.dualPane) restoredActive else 0, dualPane = SettingsStore.dualPane,
-            backStacks = listOf(emptyList(), emptyList()), fwdStacks = listOf(emptyList(), emptyList()), recent = emptySet(),
-            tabs = listOf(BrowserTab(primary), BrowserTab(restoredSecondary)), activeTab = if (SettingsStore.dualPane) restoredActive else 0) }
+            backStacks = listOf(back, secondaryBack), fwdStacks = listOf(forward, secondaryForward), recent = emptySet(),
+            tabs = tabs, activeTab = if (SettingsStore.dualPane) 0 else activeTab) }
         SettingsStore.updateBrowserSession(primary, restoredSecondary, restoredActive)
         persistSafBrowserSession(_s.value)
         reload()
@@ -180,13 +206,34 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
 
     private fun persistSafBrowserSession(state: BrowserState) {
         val context = appContext ?: return
-        val primary = state.dir.takeIf { StorageLocation.fromStableKey(it) is StorageLocation.Saf }
-        val secondary = state.secondaryDir.takeIf { StorageLocation.fromStableKey(it) is StorageLocation.Saf }
-        context.getSharedPreferences("kayx_browser_storage", Context.MODE_PRIVATE).edit()
-            .putString("primary_saf", primary)
-            .putString("secondary_saf", secondary)
+        fun isPublicPath(key: String): Boolean = when (val location = StorageLocation.fromStableKey(key)) {
+            is StorageLocation.Saf -> true
+            is StorageLocation.Local -> {
+                val path = runCatching { location.directory.canonicalPath }.getOrNull() ?: return false
+                val privateRoots = listOf(context.filesDir, context.cacheDir, context.noBackupFilesDir)
+                    .mapNotNull { runCatching { it.canonicalPath.trimEnd(File.separatorChar) + File.separator }.getOrNull() }
+                privateRoots.none { path == it.removeSuffix(File.separator) || path.startsWith(it) }
+            }
+            null -> false
+        }
+        val prefs = context.getSharedPreferences("kayx_browser_storage", Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+            .putString("primary_saf", state.dir.takeIf { StorageLocation.fromStableKey(it) is StorageLocation.Saf })
+            .putString("secondary_saf", state.secondaryDir.takeIf { StorageLocation.fromStableKey(it) is StorageLocation.Saf })
             .putInt("active_pane", state.activePane.coerceIn(0, 1))
-            .apply()
+        if (isPublicPath(state.dir) && state.tabs.all { isPublicPath(it.path) }) {
+            editor.putString("tabs", encodeBrowserPaths(state.tabs.map { it.path }))
+                .putInt("active_tab", state.activeTab.coerceIn(0, state.tabs.lastIndex))
+                .putString("back_primary", encodeBrowserPaths(state.backStacks[0].filter(::isPublicPath)))
+                .putString("forward_primary", encodeBrowserPaths(state.fwdStacks[0].filter(::isPublicPath)))
+                .putString("back_secondary", encodeBrowserPaths(state.backStacks[1].filter(::isPublicPath)))
+                .putString("forward_secondary", encodeBrowserPaths(state.fwdStacks[1].filter(::isPublicPath)))
+        } else {
+            editor.remove("tabs").remove("active_tab")
+                .remove("back_primary").remove("forward_primary")
+                .remove("back_secondary").remove("forward_secondary")
+        }
+        editor.apply()
     }
 
     fun open(path: String) = navigatePane(0, path, NavMove.PUSH)
