@@ -17,6 +17,14 @@ class NetworkProtocolSafetyTest {
         assertEquals(true, validateSftpName("quarterly report.pdf"))
     }
 
+    @Test fun sftpResumeOffsetsMustFitTheCurrentRemoteFile() {
+        assertEquals(0L, validateSftpResumeOffset(0L, 100L))
+        assertEquals(100L, validateSftpResumeOffset(100L, 100L))
+        assertThrows(IllegalArgumentException::class.java) { validateSftpResumeOffset(-1L, 100L) }
+        assertThrows(IllegalArgumentException::class.java) { validateSftpResumeOffset(101L, 100L) }
+        assertThrows(IllegalArgumentException::class.java) { validateSftpResumeOffset(0L, -1L) }
+    }
+
     @Test fun smbPathsRejectTraversalAndAbsolutePaths() {
         assertEquals("folder\\report.txt", validateSmbPath("folder\\report.txt"))
         listOf("../escape", "folder\\..\\escape", "\\server\\share", "/root", "bad/name", "bad\rname")
