@@ -147,7 +147,8 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
             // Keep stable partials only for protocols that verify the remote object before resuming.
             val resumableSftp = protocol == StorageProtocol.SFTP
             val resumableFtp = protocol == StorageProtocol.FTP || protocol == StorageProtocol.FTPS
-            val resumable = resumableSftp || resumableFtp
+            val resumableWebDav = protocol == StorageProtocol.WEBDAV
+            val resumable = resumableSftp || resumableFtp || resumableWebDav
             val partial = File(directory, if (resumable) ".${target.name}.kayx.part" else ".${target.name}.kayx-${System.nanoTime()}.part")
             try {
                 val offset = if (resumable && partial.isFile) partial.length() else 0L
@@ -156,13 +157,13 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
                         StorageProtocol.FTP, StorageProtocol.FTPS -> ftp.downloadResumable(entry.name, output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
                         StorageProtocol.SFTP -> sftp.downloadResumable(remote(entry.name), output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
                         StorageProtocol.SMB -> smb.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
-                        StorageProtocol.WEBDAV -> webDav.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
+                        StorageProtocol.WEBDAV -> webDav.downloadResumable(remote(entry.name), output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
                     }
                     output.fd.sync()
                 }
                 Files.move(partial.toPath(), target.toPath())
             } catch (failure: Throwable) {
-                // FTP/FTPS require SIZE + REST validation; SFTP validates the remote size before append.
+                // FTP/SFTP/WebDAV retain partials only after validating remote size and resume position.
                 if (!resumable) runCatching { partial.delete() }
                 throw failure
             }
