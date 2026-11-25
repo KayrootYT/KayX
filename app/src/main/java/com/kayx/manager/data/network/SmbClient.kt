@@ -1,6 +1,6 @@
 package com.kayx.manager.data.network
 
-import com.hierynomus.msdtyp.FileAttributes
+import com.hierynomus.msfscc.FileAttributes
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2Dialect
 import com.hierynomus.mssmb2.SMB2ShareAccess
@@ -14,7 +14,7 @@ import com.hierynomus.mssmb2.SMB2ShareAccess.FILE_SHARE_WRITE
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
 import com.hierynomus.smbj.connection.Connection
-import com.hierynomus.smbj.session.AuthenticationContext
+import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.DiskShare
 import com.hierynomus.smbj.share.File as SmbFile
