@@ -44,6 +44,19 @@ class BrowserStateSelectionTest {
     }
 
     @Test
+    fun selectionUpdatesOnlyTheTargetTab() {
+        val tabs = listOf(
+            BrowserTab("/first", setOf("/first/a")),
+            BrowserTab("/second", setOf("/second/b"))
+        )
+
+        val updated = updateBrowserTabSelection(tabs, 1, setOf("/second/c"))
+
+        assertEquals(setOf("/first/a"), updated[0].selected)
+        assertEquals(setOf("/second/c"), updated[1].selected)
+    }
+
+    @Test
     fun singlePaneAlwaysUsesPrimarySelection() {
         val state = BrowserState(dualPane = false, activePane = 1,
             primarySelected = setOf("/primary.txt"), secondarySelected = setOf("/secondary.txt"))
