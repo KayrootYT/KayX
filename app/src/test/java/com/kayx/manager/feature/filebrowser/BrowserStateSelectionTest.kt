@@ -18,6 +18,32 @@ class BrowserStateSelectionTest {
     }
 
     @Test
+    fun navigationUpdatesOnlyTheActiveSinglePaneTab() {
+        val tabs = listOf(
+            BrowserTab("/first", setOf("/first/selected.txt")),
+            BrowserTab("/second", setOf("/second/selected.txt")),
+            BrowserTab("/third", setOf("/third/selected.txt"))
+        )
+
+        val updated = updateBrowserTabPath(tabs, 1, "/second/child")
+
+        assertEquals("/first", updated[0].path)
+        assertEquals("/second/child", updated[1].path)
+        assertEquals(emptySet<String>(), updated[1].selected)
+        assertEquals("/third", updated[2].path)
+        assertEquals(setOf("/first/selected.txt"), updated[0].selected)
+    }
+
+    @Test
+    fun tabPathUpdateClampsInvalidIndexAndHandlesEmptyTabs() {
+        assertEquals(
+            "/last/child",
+            updateBrowserTabPath(listOf(BrowserTab("/first"), BrowserTab("/last")), 99, "/last/child").last().path
+        )
+        assertEquals(listOf(BrowserTab("/new")), updateBrowserTabPath(emptyList(), 0, "/new"))
+    }
+
+    @Test
     fun singlePaneAlwaysUsesPrimarySelection() {
         val state = BrowserState(dualPane = false, activePane = 1,
             primarySelected = setOf("/primary.txt"), secondarySelected = setOf("/secondary.txt"))
