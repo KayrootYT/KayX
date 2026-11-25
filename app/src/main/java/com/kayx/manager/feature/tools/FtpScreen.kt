@@ -24,6 +24,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kayx.manager.data.network.FtpClient
+import com.kayx.manager.data.network.NetworkCredentialStore
+import com.kayx.manager.data.filesystem.FileOps
 import com.kayx.manager.data.storage.formatBytes
 import com.kayx.manager.ui.glass.GlassCard
 import com.kayx.manager.ui.theme.Accent
@@ -34,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
 
 /** Plain FTP browser: connect, browse, download to KayX/ftp, upload, rename, delete, new folder. */
 @Composable
@@ -42,6 +45,7 @@ fun FtpScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     val client = remember { FtpClient() }
+    val credentialStore = remember { NetworkCredentialStore(ctx) }
     DisposableEffect(Unit) { onDispose { Thread { client.disconnect() }.start() } }
 
     val prefs = remember { ctx.getSharedPreferences("ftp", Context.MODE_PRIVATE) }
@@ -49,6 +53,14 @@ fun FtpScreen(onBack: () -> Unit) {
     var port by remember { mutableStateOf(prefs.getString("port", "21") ?: "21") }
     var user by remember { mutableStateOf(prefs.getString("user", "anonymous") ?: "anonymous") }
     var pass by remember { mutableStateOf("") }
+    var useFtps by remember { mutableStateOf(false) }
+    var rememberPassword by remember { mutableStateOf(false) }
+    val profileKey = remember(host, port, user) { "$host:$port:$user" }
+    LaunchedEffect(rememberPassword, profileKey) {
+        if (rememberPassword) {
+            pass = withContext(Dispatchers.IO) { runCatching { credentialStore.read(profileKey) }.getOrNull().orEmpty() }
+        }
+    }
 
     var connected by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -72,9 +84,21 @@ fun FtpScreen(onBack: () -> Unit) {
 
     fun download(e: FtpClient.Entry) {
         run({
-            val dir = File(Environment.getExternalStorageDirectory(), "KayX/ftp").apply { mkdirs() }
-            val target = File(dir, e.name.substringAfterLast('/'))
-            FileOutputStream(target).use { out -> client.download(e.name, out) { progress = "${e.name}: ${formatBytes(it)}" } }
+            val dir = File(Environment.getExternalStorageDirectory(), "KayX/ftp")
+            check(dir.isDirectory || dir.mkdirs()) { "Cannot create KayX/ftp download folder" }
+            val target = FileOps.uniqueName(dir, e.name.substringAfterLast('/'))
+            val partial = File(dir, ".${target.name}.kayx-${System.nanoTime()}.part")
+            try {
+                FileOutputStream(partial).use { out ->
+                    client.download(e.name, out) { progress = "${e.name}: ${formatBytes(it)}" }
+                    out.fd.sync()
+                }
+                // Files.move without REPLACE_EXISTING guarantees an existing download is never overwritten.
+                Files.move(partial.toPath(), target.toPath())
+            } catch (failure: Throwable) {
+                partial.delete()
+                throw failure
+            }
         }, { scope.launch { snack.showSnackbar("Saved to KayX/ftp/${e.name}") } })
     }
 
@@ -90,7 +114,7 @@ fun FtpScreen(onBack: () -> Unit) {
     }
 
     ToolScaffold(
-        if (connected) "FTP · $host" else "FTP client",
+        if (connected) (if (useFtps) "FTPS · $host" else "FTP · $host") else "FTP client",
         { if (connected) { Thread { client.disconnect() }.start(); connected = false } else onBack() },
         snack,
         actions = {
@@ -112,11 +136,28 @@ fun FtpScreen(onBack: () -> Unit) {
                 OutlinedTextField(user, { user = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Username") })
                 OutlinedTextField(pass, { pass = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Password") },
                     visualTransformation = PasswordVisualTransformation())
-                Text("Plain FTP is not encrypted. Use it only on networks you trust. The password is not saved.", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = useFtps, onCheckedChange = { useFtps = it })
+                    Text("Use explicit FTPS (TLS)", style = MaterialTheme.typography.bodyMedium)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = rememberPassword, onCheckedChange = {
+                        rememberPassword = it
+                        if (!it) scope.launch(Dispatchers.IO) { runCatching { credentialStore.remove(profileKey) } }
+                    })
+                    Text("Remember password securely", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    if (useFtps) "TLS certificate and hostname are verified. The password is not saved."
+                    else "Plain FTP sends credentials and files without encryption. Use only on trusted networks. The password is not saved.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted
+                )
                 Button({
                     prefs.edit().putString("host", host).putString("port", port).putString("user", user).apply()
                     run({
-                        client.connect(host, port.toIntOrNull() ?: 21, user, pass)
+                        client.connect(host, port.toIntOrNull() ?: 21, user, pass, secure = useFtps)
+                        if (rememberPassword && pass.isNotEmpty()) credentialStore.save(profileKey, pass)
                         path = client.pwd(); entries = client.list(); connected = true
                     })
                 }, Modifier.fillMaxWidth(), enabled = !busy && host.isNotBlank()) {

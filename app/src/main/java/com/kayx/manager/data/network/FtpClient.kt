@@ -8,6 +8,8 @@ import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.net.InetSocketAddress
 import java.net.Socket
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
 
 /** Minimal plain-FTP client on raw sockets (no third-party library). Not encrypted: only for trusted networks. */
 class FtpClient {
@@ -18,10 +20,19 @@ class FtpClient {
     private var rd: BufferedReader? = null
     private var wr: BufferedWriter? = null
     private var host = ""
+    private var secureControl = false
 
     private fun clean(s: String): String {
-        if ('\r' in s || '\n' in s) throw FtpException("Invalid name")
+        if (s.length > 4096 || s.any { it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }) {
+            throw FtpException("FTP command contains an invalid control character")
+        }
         return s
+    }
+
+    private fun cleanName(s: String): String = try {
+        validateFtpRemoteName(s)
+    } catch (e: IllegalArgumentException) {
+        throw FtpException(e.message ?: "Invalid remote name")
     }
 
     private fun reply(): Pair<Int, String> {
@@ -31,8 +42,9 @@ class FtpClient {
         val sb = StringBuilder(first)
         if (first.length > 3 && first[3] == '-') {
             while (true) {
-                val l = r.readLine() ?: break
+                val l = r.readLine() ?: throw FtpException("Connection closed during multiline reply")
                 sb.append('\n').append(l)
+                if (sb.length > MAX_REPLY_CHARS) throw FtpException("FTP reply is too large")
                 if (l.length >= 4 && l.startsWith(code.toString()) && l[3] == ' ') break
             }
         }
@@ -51,30 +63,60 @@ class FtpClient {
         return m
     }
 
-    fun connect(host: String, port: Int, user: String, pass: String) {
+    fun connect(host: String, port: Int, user: String, pass: String, secure: Boolean = false) {
         disconnect()
+        if (host.isBlank()) throw FtpException("Host is required")
+        if (port !in 1..65535) throw FtpException("Port must be between 1 and 65535")
         val s = Socket()
-        s.connect(InetSocketAddress(host, port), 15_000)
-        s.soTimeout = 30_000
-        sock = s
-        this.host = host
-        rd = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.UTF_8))
-        wr = BufferedWriter(OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8))
-        val (c0, m0) = reply()
-        if (c0 != 220) throw FtpException(m0)
-        val (c1, m1) = send("USER ${clean(user)}")
-        var code = c1
-        var msg = m1
-        if (c1 == 331 || c1 == 332) { val p = send("PASS ${clean(pass)}"); code = p.first; msg = p.second }
-        if (code != 230) throw FtpException(msg)
-        runCatching { send("OPTS UTF8 ON") }
-        expect("TYPE I", 200)
+        try {
+            s.connect(InetSocketAddress(host, port), 15_000)
+            s.soTimeout = 30_000
+            sock = s
+            this.host = host
+            rd = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.UTF_8))
+            wr = BufferedWriter(OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8))
+            val (c0, m0) = reply()
+            if (c0 != 220) throw FtpException(m0)
+            // Negotiate TLS before sending USER/PASS; never leak credentials on FTPS.
+            if (secure) {
+                val (authCode, authMessage) = send("AUTH TLS")
+                if (authCode != 234) throw FtpException(authMessage)
+                val tls = tlsSocket(s, host, port)
+                sock = tls
+                rd = BufferedReader(InputStreamReader(tls.getInputStream(), Charsets.UTF_8))
+                wr = BufferedWriter(OutputStreamWriter(tls.getOutputStream(), Charsets.UTF_8))
+                expect("PBSZ 0", 200)
+                expect("PROT P", 200)
+                secureControl = true
+            }
+            val (c1, m1) = send("USER ${clean(user)}")
+            var code = c1
+            var msg = m1
+            if (c1 == 331 || c1 == 332) {
+                val p = send("PASS ${clean(pass)}")
+                code = p.first
+                msg = p.second
+            }
+            if (code != 230) throw FtpException(msg)
+            runCatching { send("OPTS UTF8 ON") }
+            expect("TYPE I", 200)
+        } catch (failure: Throwable) {
+            runCatching { s.close() }
+            sock = null
+            rd = null
+            wr = null
+            this.host = ""
+            secureControl = false
+            throw failure
+        }
     }
 
     fun disconnect() {
         runCatching { if (sock != null) send("QUIT") }
         runCatching { sock?.close() }
         sock = null; rd = null; wr = null
+        host = ""
+        secureControl = false
     }
 
     fun pwd(): String {
@@ -86,37 +128,71 @@ class FtpClient {
 
     fun cwd(path: String) { expect("CWD ${clean(path)}", 250) }
     fun up() { expect("CDUP", 200, 250) }
-    fun mkdir(name: String) { expect("MKD ${clean(name)}", 257) }
-    fun delete(name: String) { expect("DELE ${clean(name)}", 250) }
-    fun rmdir(name: String) { expect("RMD ${clean(name)}", 250) }
-    fun rename(from: String, to: String) { expect("RNFR ${clean(from)}", 350); expect("RNTO ${clean(to)}", 250) }
+    fun mkdir(name: String) { expect("MKD ${cleanName(name)}", 257) }
+    fun delete(name: String) { expect("DELE ${cleanName(name)}", 250) }
+    fun rmdir(name: String) { expect("RMD ${cleanName(name)}", 250) }
+    fun rename(from: String, to: String) { expect("RNFR ${cleanName(from)}", 350); expect("RNTO ${cleanName(to)}", 250) }
 
     private fun openData(): Socket {
         val (c, m) = send("EPSV")
         val port = if (c == 229) {
-            Regex("\\(\\|\\|\\|(\\d+)\\|\\)").find(m)?.groupValues?.get(1)?.toIntOrNull() ?: throw FtpException("Bad EPSV reply")
+            parseFtpEpsvPort(m) ?: throw FtpException("Invalid EPSV reply or port")
         } else {
             val (c2, m2) = send("PASV")
             if (c2 != 227) throw FtpException(m2)
-            val n = Regex("(\\d+),(\\d+),(\\d+),(\\d+),(\\d+),(\\d+)").find(m2)?.groupValues?.drop(1)?.map { it.toInt() }
-                ?: throw FtpException("Bad PASV reply")
-            n[4] * 256 + n[5]
+            parseFtpPasvPort(m2) ?: throw FtpException("Invalid PASV reply or port")
         }
         val d = Socket()
-        d.connect(InetSocketAddress(host, port), 15_000)
-        d.soTimeout = 30_000
-        return d
+        try {
+            d.connect(InetSocketAddress(host, port), 15_000)
+            d.soTimeout = 30_000
+            return d
+        } catch (failure: Throwable) {
+            runCatching { d.close() }
+            throw failure
+        }
     }
+
+    private fun tlsSocket(plain: Socket, tlsHost: String, tlsPort: Int): Socket {
+        val ssl = SSLContext.getDefault().socketFactory
+            .createSocket(plain, tlsHost, tlsPort, true) as SSLSocket
+        try {
+            val parameters = ssl.sslParameters
+            parameters.endpointIdentificationAlgorithm = "HTTPS"
+            ssl.sslParameters = parameters
+            ssl.startHandshake()
+            return ssl
+        } catch (failure: Throwable) {
+            runCatching { ssl.close() }
+            throw FtpException("FTPS certificate/hostname verification failed: ${failure.message}")
+        }
+    }
+
+    private fun protectDataSocket(socket: Socket): Socket =
+        if (secureControl) tlsSocket(socket, host, socket.port) else socket
 
     private fun listing(cmd: String): List<String>? {
         val ds = openData()
         try {
             val (c, _) = send(cmd)
             if (c != 150 && c != 125) return null
-            val lines = ds.getInputStream().bufferedReader(Charsets.UTF_8).readLines()
-            ds.close()
+            val protected = protectDataSocket(ds)
+            var exceededLimit = false
+            val lines = protected.getInputStream().bufferedReader(Charsets.UTF_8).use { reader ->
+                val result = ArrayList<String>()
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.length > MAX_LISTING_LINE_CHARS || result.size >= MAX_LISTING_ENTRIES) {
+                        exceededLimit = true
+                    } else if (!exceededLimit) {
+                        result += line
+                    }
+                }
+                result
+            }
             val (c2, m2) = reply()
             if (c2 != 226 && c2 != 250) throw FtpException(m2)
+            if (exceededLimit) throw FtpException("FTP listing exceeds the safety limit")
             return lines
         } finally {
             runCatching { ds.close() }
@@ -134,7 +210,7 @@ class FtpClient {
         try {
             val (c, m) = send("RETR ${clean(remote)}")
             if (c != 150 && c != 125) throw FtpException(m)
-            ds.getInputStream().use { copy(it, out, onBytes) }
+            protectDataSocket(ds).getInputStream().use { copy(it, out, onBytes) }
             val (c2, m2) = reply()
             if (c2 != 226 && c2 != 250) throw FtpException(m2)
         } finally {
@@ -145,14 +221,20 @@ class FtpClient {
     fun upload(remote: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
         val ds = openData()
         try {
-            val (c, m) = send("STOR ${clean(remote)}")
+            val (c, m) = send("STOR ${cleanName(remote)}")
             if (c != 150 && c != 125) throw FtpException(m)
-            ds.getOutputStream().use { copy(input, it, onBytes) }
+            protectDataSocket(ds).getOutputStream().use { copy(input, it, onBytes) }
             val (c2, m2) = reply()
             if (c2 != 226 && c2 != 250) throw FtpException(m2)
         } finally {
             runCatching { ds.close() }
         }
+    }
+
+    private companion object {
+        const val MAX_REPLY_CHARS = 16 * 1024
+        const val MAX_LISTING_LINE_CHARS = 4 * 1024
+        const val MAX_LISTING_ENTRIES = 5_000
     }
 
     private fun copy(i: InputStream, o: OutputStream, onBytes: (Long) -> Unit) {
@@ -168,6 +250,8 @@ class FtpClient {
         o.flush()
     }
 
+    internal fun parseMlsdForTest(lines: List<String>): List<Entry> = parseMlsd(lines)
+
     private fun parseMlsd(lines: List<String>): List<Entry> = lines.mapNotNull { line ->
         val sp = line.indexOf(' ')
         if (sp <= 0) return@mapNotNull null
@@ -175,18 +259,44 @@ class FtpClient {
             .associate { it.substringBefore('=').lowercase() to it.substringAfter('=') }
         val name = line.substring(sp + 1)
         val type = facts["type"]?.lowercase() ?: "file"
-        if (type == "cdir" || type == "pdir" || name == "." || name == "..") return@mapNotNull null
+        if (type == "cdir" || type == "pdir" || name == "." || name == ".." ||
+            runCatching { validateFtpRemoteName(name) }.isFailure) return@mapNotNull null
         val m = facts["modify"].orEmpty()
         val mod = if (m.length >= 12) "${m.substring(0, 4)}-${m.substring(4, 6)}-${m.substring(6, 8)} ${m.substring(8, 10)}:${m.substring(10, 12)}" else ""
-        Entry(name, type == "dir", facts["size"]?.toLongOrNull() ?: 0L, mod)
+        Entry(name, type == "dir", facts["size"]?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L, mod)
     }
+
+    internal fun parseUnixForTest(lines: List<String>): List<Entry> = parseUnix(lines)
 
     private val unixLine = Regex("^([\\-dl])[rwxsStT\\-]{9}\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\w{3}\\s+\\d{1,2}\\s+[\\d:]{4,5})\\s+(.+)$")
 
     private fun parseUnix(lines: List<String>): List<Entry> = lines.mapNotNull { line ->
         val m = unixLine.find(line.trim()) ?: return@mapNotNull null
         val name = m.groupValues[4].substringBefore(" -> ")
-        if (name == "." || name == "..") return@mapNotNull null
-        Entry(name, m.groupValues[1] == "d", m.groupValues[2].toLongOrNull() ?: 0L, m.groupValues[3])
+        if (name == "." || name == ".." || runCatching { validateFtpRemoteName(name) }.isFailure) return@mapNotNull null
+        Entry(name, m.groupValues[1] == "d", m.groupValues[2].toLongOrNull()?.coerceAtLeast(0L) ?: 0L, m.groupValues[3])
     }
+}
+
+internal fun validateFtpRemoteName(name: String): String {
+    require(name.isNotBlank()) { "Remote name is required" }
+    require(name != "." && name != "..") { "Invalid remote name" }
+    require(name.length <= 255) { "Remote name is too long" }
+    require(name.none { it == '/' || it == '\\' || it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }) {
+        "Remote name must be a single safe path segment"
+    }
+    return name
+}
+
+
+internal fun parseFtpEpsvPort(reply: String): Int? {
+    val match = Regex("""\((.)(?:\1){2}(\d+)\1\)""").find(reply) ?: return null
+    return match.groupValues[2].toIntOrNull()?.takeIf { it in 1..65535 }
+}
+
+internal fun parseFtpPasvPort(reply: String): Int? {
+    val values = Regex("""(\d+),(\d+),(\d+),(\d+),(\d+),(\d+)""")
+        .find(reply)?.groupValues?.drop(1)?.mapNotNull { it.toIntOrNull() } ?: return null
+    if (values.size != 6 || values.any { it !in 0..255 }) return null
+    return (values[4] * 256 + values[5]).takeIf { it in 1..65535 }
 }
