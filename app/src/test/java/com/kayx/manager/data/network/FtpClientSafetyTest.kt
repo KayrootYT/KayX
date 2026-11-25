@@ -10,7 +10,7 @@ class FtpClientSafetyTest {
     }
 
     @Test fun remoteNameRejectsTraversalAndCommandInjection() {
-        listOf("", ".", "..", "../secret", "folder/file", "folder\\file", "bad\\rname", "bad\\nname", "bad\\u0000name", "x".repeat(256))
+        listOf("", ".", "..", "../secret", "folder/file", "folder\\file", "bad\rname", "bad\nname", "bad\u0000name", "x".repeat(256))
             .forEach { name -> assertThrows(IllegalArgumentException::class.java) { validateFtpRemoteName(name) } }
     }
 
