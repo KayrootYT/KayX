@@ -91,8 +91,17 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
             output.flush()
             output.fd.sync()
         }
-        if (file.exists()) require(file.delete()) { "Could not replace undo journal" }
-        require(temp.renameTo(file)) { "Could not commit undo journal" }
+        val backup = File(directory, "file-operations.undo.bak")
+        backup.delete()
+        val hadJournal = file.exists()
+        if (hadJournal) require(file.renameTo(backup)) { "Could not preserve undo journal" }
+        try {
+            require(temp.renameTo(file)) { "Could not commit undo journal" }
+            backup.delete()
+        } catch (failure: Throwable) {
+            if (hadJournal && backup.exists()) require(backup.renameTo(file)) { "Could not restore undo journal" }
+            throw failure
+        }
     }
 
     private fun fingerprint(target: File): String? = runCatching {
