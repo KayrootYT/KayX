@@ -27,13 +27,7 @@ class WebDavClient(
     @Volatile private var active: HttpURLConnection? = null
 
     fun connect(serverUrl: String, username: String, password: String) {
-        val parsed = runCatching { URI(serverUrl.trim()) }.getOrElse { throw IllegalArgumentException("Invalid WebDAV URL", it) }
-        require(parsed.scheme.equals("https", ignoreCase = true)) { "WebDAV requires HTTPS" }
-        require(!parsed.host.isNullOrBlank()) { "WebDAV host is required" }
-        require(parsed.userInfo == null && parsed.fragment == null) { "Do not embed credentials or fragments in the WebDAV URL" }
-        require(parsed.port in -1..65535) { "Invalid WebDAV port" }
-        val normalized = if (parsed.path.isNullOrBlank()) URI(parsed.scheme, null, parsed.host, parsed.port, "/", parsed.query, null) else parsed
-        baseUri = normalized
+        baseUri = validateWebDavServerUrl(serverUrl)
         authorization = "Basic " + Base64.getEncoder().encodeToString(
             (username + ":" + password).toByteArray(StandardCharsets.UTF_8)
         )
@@ -235,4 +229,14 @@ class WebDavClient(
         const val MAX_ENTRIES = 5000
         val PROPFIND_BODY = """<?xml version="1.0" encoding="utf-8" ?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/><d:getlastmodified/></d:prop></d:propfind>""".toByteArray(StandardCharsets.UTF_8)
     }
+}
+
+
+internal fun validateWebDavServerUrl(serverUrl: String): URI {
+    val parsed = runCatching { URI(serverUrl.trim()) }.getOrElse { throw IllegalArgumentException("Invalid WebDAV URL", it) }
+    require(parsed.scheme.equals("https", ignoreCase = true)) { "WebDAV requires HTTPS" }
+    require(!parsed.host.isNullOrBlank()) { "WebDAV host is required" }
+    require(parsed.userInfo == null && parsed.fragment == null) { "Do not embed credentials or fragments in the WebDAV URL" }
+    require(parsed.port in -1..65535) { "Invalid WebDAV port" }
+    return if (parsed.path.isNullOrBlank()) URI(parsed.scheme, null, parsed.host, parsed.port, "/", parsed.query, null) else parsed
 }
