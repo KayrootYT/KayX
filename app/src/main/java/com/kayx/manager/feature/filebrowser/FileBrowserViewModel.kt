@@ -116,6 +116,14 @@ data class RetryTransfer(
 
 internal enum class NavMove { PUSH, BACK, FORWARD }
 
+internal fun updateBrowserTabPath(tabs: List<BrowserTab>, index: Int, path: String): List<BrowserTab> {
+    if (tabs.isEmpty()) return listOf(BrowserTab(path))
+    val safeIndex = index.coerceIn(0, tabs.lastIndex)
+    return tabs.toMutableList().also { current ->
+        current[safeIndex] = current[safeIndex].copy(path = path, selected = emptySet())
+    }
+}
+
 class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), private val archive: ArchiveRepository = ArchiveRepository()) : ViewModel() {
     private val storageLocations = StorageLocationRepository()
     private val storageTransfers = com.kayx.manager.data.filesystem.StorageTransferRepository()
@@ -200,13 +208,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             }
             val backs = st.backStacks.toMutableList().also { it[pane] = nb }
             val fwds = st.fwdStacks.toMutableList().also { it[pane] = nf }
-            val tabs = st.tabs.toMutableList()
+            val tabIndex = if (pane == 1) 1 else if (st.dualPane) 0 else st.activeTab.coerceIn(0, st.tabs.lastIndex)
+            val tabs = updateBrowserTabPath(st.tabs, tabIndex, path)
             if (pane == 1) {
-                if (tabs.size > 1) tabs[1] = tabs[1].copy(path = path, selected = emptySet())
                 st.copy(secondaryDir = path, secondarySelected = emptySet(), activePane = 1, backStacks = backs, fwdStacks = fwds, recent = emptySet(), tabs = tabs, activeTab = 1)
             } else {
-                if (tabs.isNotEmpty()) tabs[0] = tabs[0].copy(path = path, selected = emptySet())
-                st.copy(dir = path, primarySelected = emptySet(), query = "", searching = false, activePane = 0, backStacks = backs, fwdStacks = fwds, recent = emptySet(), tabs = tabs, activeTab = 0)
+                st.copy(dir = path, primarySelected = emptySet(), query = "", searching = false, activePane = 0, backStacks = backs, fwdStacks = fwds, recent = emptySet(), tabs = tabs, activeTab = if (st.dualPane) 0 else tabIndex)
             }
         }
         val saved = _s.value
@@ -259,11 +266,26 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
 
     fun addTab(path: String = _s.value.dir) {
-        _s.update { it.copy(tabs = it.tabs + BrowserTab(path), activeTab = it.tabs.size) }
         if (_s.value.dualPane) {
-            setActivePane(1)
             openSecondary(path)
-        } else open(path)
+            return
+        }
+        _s.update { st ->
+            val tabs = st.tabs + BrowserTab(path)
+            st.copy(
+                tabs = tabs,
+                activeTab = tabs.lastIndex,
+                activePane = 0,
+                dir = path,
+                primarySelected = emptySet(),
+                query = "",
+                searching = false,
+                backStacks = listOf(emptyList(), st.backStacks[1]),
+                fwdStacks = listOf(emptyList(), st.fwdStacks[1])
+            )
+        }
+        persistSafBrowserSession(_s.value)
+        reload()
     }
 
     fun closeTab(index: Int) {
@@ -276,7 +298,15 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     else -> st.activeTab
                 }
                 val tab = tabs[active]
-                st.copy(tabs = tabs, activeTab = active, dir = tab.path, primarySelected = tab.selected)
+                st.copy(
+                    tabs = tabs,
+                    activeTab = active,
+                    activePane = 0,
+                    dir = tab.path,
+                    primarySelected = tab.selected,
+                    backStacks = listOf(emptyList(), st.backStacks[1]),
+                    fwdStacks = listOf(emptyList(), st.fwdStacks[1])
+                )
             }
         }
         persistSafBrowserSession(_s.value)
@@ -288,9 +318,13 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             val tab = st.tabs.getOrNull(index.coerceIn(0, st.tabs.lastIndex)) ?: return@update st
             st.copy(
                 activeTab = index.coerceIn(0, st.tabs.lastIndex),
-                activePane = if (st.dualPane) index.coerceIn(0, 1) else 0,
+                activePane = 0,
                 dir = tab.path,
-                primarySelected = tab.selected
+                primarySelected = tab.selected,
+                query = "",
+                searching = false,
+                backStacks = listOf(emptyList(), st.backStacks[1]),
+                fwdStacks = listOf(emptyList(), st.fwdStacks[1])
             )
         }
         persistSafBrowserSession(_s.value)
