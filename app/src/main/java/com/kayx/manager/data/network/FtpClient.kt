@@ -263,7 +263,11 @@ class FtpClient {
             return remoteSize
         } finally {
             if (activeDataSocket === ds) activeDataSocket = null
-            runCatching { ds.close    /** Upload to a unique sibling first; publish the destination only after transfer completion. */
+            runCatching { ds.close() }
+        }
+    }
+
+    /** Upload to a unique sibling first; publish the destination only after transfer completion. */
     fun upload(remote: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
         val destination = cleanName(remote)
         val temporary = ".kayx-upload-${UUID.randomUUID()}.part"
@@ -288,10 +292,6 @@ class FtpClient {
         } finally {
             if (activeDataSocket === ds) activeDataSocket = null
             runCatching { ds.close() }
-        }
-    }
-
-() }
         }
     }
 
