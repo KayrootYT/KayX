@@ -154,9 +154,11 @@ object ArchiveEdit {
                         val safeName = safeEntryName(n)
                         if (written.add(safeName)) putBytes(zos, cnt, safeName, safeName.endsWith(".arsc"), b, System.currentTimeMillis())
                     }
+                    zos.finish()
+                    zos.flush()
+                    fileOutput.fd.sync()
                 }
             }
-            fileOutput.fd.sync()
             Files.move(tmp.toPath(), zip.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } catch (t: Throwable) { tmp.delete(); throw t }
         removed
