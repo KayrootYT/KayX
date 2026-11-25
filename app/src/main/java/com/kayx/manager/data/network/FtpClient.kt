@@ -76,15 +76,7 @@ class FtpClient {
             wr = BufferedWriter(OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8))
             val (c0, m0) = reply()
             if (c0 != 220) throw FtpException(m0)
-            val (c1, m1) = send("USER ${clean(user)}")
-            var code = c1
-            var msg = m1
-            if (c1 == 331 || c1 == 332) {
-                val p = send("PASS ${clean(pass)}")
-                code = p.first
-                msg = p.second
-            }
-            if (code != 230) throw FtpException(msg)
+            // Negotiate TLS before sending USER/PASS; never leak credentials on FTPS.
             if (secure) {
                 val (authCode, authMessage) = send("AUTH TLS")
                 if (authCode != 234) throw FtpException(authMessage)
@@ -96,6 +88,15 @@ class FtpClient {
                 expect("PROT P", 200)
                 secureControl = true
             }
+            val (c1, m1) = send("USER ${clean(user)}")
+            var code = c1
+            var msg = m1
+            if (c1 == 331 || c1 == 332) {
+                val p = send("PASS ${clean(pass)}")
+                code = p.first
+                msg = p.second
+            }
+            if (code != 230) throw FtpException(msg)
             runCatching { send("OPTS UTF8 ON") }
             expect("TYPE I", 200)
         } catch (failure: Throwable) {
