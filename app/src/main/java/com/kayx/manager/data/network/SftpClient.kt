@@ -41,7 +41,7 @@ class SftpClient {
         }
     }
 
-    fun list(path: String = "."): List<Entry> {
+    fun list(path: String = "/"): List<Entry> {
         val sftp = requireChannel()
         validateSftpPath(path)
         @Suppress("UNCHECKED_CAST")
