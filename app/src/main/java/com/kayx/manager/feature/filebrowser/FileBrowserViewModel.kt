@@ -12,6 +12,7 @@ import com.kayx.manager.data.filesystem.Conflict
 import com.kayx.manager.data.filesystem.ExternalOps
 import com.kayx.manager.data.filesystem.RecycleBin
 import com.kayx.manager.data.filesystem.FileOps
+import com.kayx.manager.data.filesystem.FileOperationJournal
 import com.kayx.manager.data.filesystem.FileOperationSounds
 import com.kayx.manager.data.filesystem.FileActionSound
 import com.kayx.manager.data.filesystem.FileRepository
@@ -71,7 +72,8 @@ data class BrowserState(
     val retryTransfer: RetryTransfer? = null,
     /** Independent browser tabs; panes are two presentation windows over these tab records. */
     val tabs: List<BrowserTab> = listOf(BrowserTab(), BrowserTab()),
-    val activeTab: Int = 0
+    val activeTab: Int = 0,
+    val undoAvailable: Boolean = false
 ) {
     /** Selection belongs to the active pane; the two panes never share selection state. */
     val selected: Set<String> get() = if (dualPane && activePane == 1) secondarySelected else primarySelected
@@ -150,10 +152,13 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     private val _s = MutableStateFlow(BrowserState(showHidden = SettingsStore.showHidden, sort = SettingsStore.defaultSort, dualPane = SettingsStore.dualPane, tabMode = SettingsStore.dualTabs))
     private var applied = Triple(SettingsStore.showHidden, SettingsStore.defaultSort, SettingsStore.dualPane)
     private var appContext: Context? = null
+    private var operationJournal: FileOperationJournal? = null
     val state: StateFlow<BrowserState> = _s
 
     fun attachSearchContext(context: Context) {
         appContext = context.applicationContext
+        operationJournal = FileOperationJournal(context.applicationContext.filesDir)
+        _s.update { it.copy(undoAvailable = operationJournal?.entries()?.isNotEmpty() == true) }
         repo.attachSearchContext(context)
     }
 
@@ -723,6 +728,21 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             repo.invalidateSearchCache()
             val outcome = result.getOrNull()
             val failed = outcome?.failed.orEmpty()
+            // Only journal fully completed local transfers with an unambiguous destination.
+            // REPLACE is intentionally excluded because undo must not discard overwritten data.
+            if (result.isSuccess && outcome != null && outcome.completed == keys.size && outcome.skipped == 0 &&
+                failed.isEmpty() && effectivePolicy != Conflict.REPLACE &&
+                destinationLocation is StorageLocation.Local && keys.all { locationOf(it) is StorageLocation.Local }) {
+                withContext(Dispatchers.IO) {
+                    keys.forEach { key ->
+                        val source = (locationOf(key) as StorageLocation.Local).directory
+                        val target = if (effectivePolicy == Conflict.KEEP_BOTH) FileOps.uniqueName(destinationLocation.directory, source.name)
+                            else File(destinationLocation.directory, source.name)
+                        if (cut) operationJournal?.recordMove(source, target) else operationJournal?.recordCopy(target)
+                    }
+                }
+                _s.update { it.copy(undoAvailable = operationJournal?.entries()?.isNotEmpty() == true) }
+            }
             if (result.isSuccess && !fromClipboard) clearPaneSelection(sourcePane ?: _s.value.activeIdx)
             _s.update { current ->
                 current.copy(
@@ -779,9 +799,33 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             }
         }
     }
+    fun undoLastOperation() {
+        val journal = operationJournal ?: return notify("Undo is not ready")
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { journal.undo() }
+            repo.invalidateSearchCache()
+            _s.update { it.copy(undoAvailable = journal.entries().isNotEmpty(),
+                message = result.fold({ "Undid " + it.kind.name.lowercase() }, { it.message ?: "Undo failed" })) }
+            reload()
+        }
+    }
+
     fun rename(path: String, n: String) {
         when (val location = locationOf(path)) {
-            is StorageLocation.Local -> run({ repo.rename(location.directory, n) }, "Renamed to $n", FileActionSound.RENAME)
+            is StorageLocation.Local -> {
+                val source = location.directory
+                val destination = File(source.parentFile, n)
+                viewModelScope.launch {
+                    val result = withContext(Dispatchers.IO) { repo.rename(source, n) }
+                    if (result.isSuccess) withContext(Dispatchers.IO) { operationJournal?.recordRename(source, destination) }
+                    _s.update { it.copy(undoAvailable = operationJournal?.entries()?.isNotEmpty() == true,
+                        message = result.exceptionOrNull()?.message ?: "Renamed to $n") }
+                    if (result.isSuccess) FileOperationSounds.play(appContext, FileActionSound.RENAME)
+                    repo.invalidateSearchCache()
+                    clearSelection()
+                    reload()
+                }
+            }
             is StorageLocation.Saf -> viewModelScope.launch {
                 val context = appContext ?: return@launch notify("Storage context is not ready")
                 val result = withContext(Dispatchers.IO) {
