@@ -11,7 +11,7 @@ import java.util.Base64
  * Undo never overwrites an existing source and never deletes a copy whose content changed.
  */
 class FileOperationJournal(private val directory: File, private val maxEntries: Int = 50) {
-    enum class Kind { MOVE, COPY, RENAME }
+    enum class Kind { MOVE, COPY, RENAME, TRASH }
     data class Entry(val kind: Kind, val source: String, val destination: String, val fingerprint: String)
 
     private val file = File(directory, "file-operations.undo")
@@ -25,6 +25,11 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
     @Synchronized fun recordRename(source: File, destination: File) =
         append(Entry(Kind.RENAME, source.absolutePath, destination.absolutePath, ""))
 
+    @Synchronized fun recordTrash(recycleEntryId: String) {
+        require(isSafeRecycleEntryId(recycleEntryId))
+        append(Entry(Kind.TRASH, "", recycleEntryId, ""))
+    }
+
     @Synchronized fun recordCopy(destination: File): Boolean {
         val value = fingerprint(destination) ?: return false
         append(Entry(Kind.COPY, "", destination.absolutePath, value))
@@ -36,8 +41,13 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
         val entry = current.lastOrNull() ?: error("Nothing to undo")
         val source = File(entry.source)
         val destination = File(entry.destination)
-        require(destination.isAbsolute && destination.exists()) { "The affected item no longer exists" }
+        if (entry.kind == Kind.TRASH) {
+            RecycleBin.restoreById(entry.destination).getOrThrow()
+        } else {
+            require(destination.isAbsolute && destination.exists()) { "The affected item no longer exists" }
+        }
         when (entry.kind) {
+            Kind.TRASH -> Unit
             Kind.MOVE, Kind.RENAME -> {
                 require(source.isAbsolute && !source.exists()) { "Original location is no longer available" }
                 require(destination.canonicalFile != source.canonicalFile) { "Invalid undo path" }
@@ -57,8 +67,9 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
 
     private fun append(entry: Entry) {
         require(maxEntries > 0)
-        require(entry.destination.isNotBlank() && File(entry.destination).isAbsolute)
-        if (entry.kind != Kind.COPY) require(entry.source.isNotBlank() && File(entry.source).isAbsolute)
+        require(entry.destination.isNotBlank())
+        if (entry.kind != Kind.TRASH) require(File(entry.destination).isAbsolute)
+        if (entry.kind != Kind.COPY && entry.kind != Kind.TRASH) require(entry.source.isNotBlank() && File(entry.source).isAbsolute)
         writeEntries((readEntries() + entry).takeLast(maxEntries))
     }
 
@@ -76,7 +87,9 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
                 val source = decode(fields[1])
                 val destination = decode(fields[2])
                 val fingerprint = decode(fields[3])
-                if (!File(destination).isAbsolute || (kind != Kind.COPY && !File(source).isAbsolute)) null
+                if ((kind != Kind.TRASH && !File(destination).isAbsolute) ||
+                    (kind != Kind.COPY && kind != Kind.TRASH && !File(source).isAbsolute) ||
+                    (kind == Kind.TRASH && !isSafeRecycleEntryId(destination))) null
                 else Entry(kind, source, destination, fingerprint)
             }.takeLast(maxEntries)
         }.getOrDefault(emptyList())
