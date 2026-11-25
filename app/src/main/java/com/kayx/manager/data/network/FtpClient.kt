@@ -124,6 +124,8 @@ class FtpClient {
     }
 
     fun disconnect() {
+        runCatching { activeDataSocket?.close() }
+        activeDataSocket = null
         runCatching { if (sock != null) send("QUIT") }
         runCatching { sock?.close() }
         sock = null; rd = null; wr = null
