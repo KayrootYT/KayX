@@ -144,25 +144,26 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
             val directory = File(Environment.getExternalStorageDirectory(), "KayX/network")
             check(directory.isDirectory || directory.mkdirs()) { "Cannot create KayX/network download folder" }
             val target = FileOps.uniqueName(directory, entry.name)
-            // SFTP keeps a stable app-named partial so a retry can continue from its exact byte offset.
-            // Other protocols still use disposable partial files until their resume semantics are verified.
+            // Keep stable partials only for protocols that verify the remote object before resuming.
             val resumableSftp = protocol == StorageProtocol.SFTP
-            val partial = File(directory, if (resumableSftp) ".${target.name}.kayx.part" else ".${target.name}.kayx-${System.nanoTime()}.part")
+            val resumableFtp = protocol == StorageProtocol.FTP || protocol == StorageProtocol.FTPS
+            val resumable = resumableSftp || resumableFtp
+            val partial = File(directory, if (resumable) ".\${target.name}.kayx.part" else ".\${target.name}.kayx-\${System.nanoTime()}.part")
             try {
-                val offset = if (resumableSftp && partial.isFile) partial.length() else 0L
-                FileOutputStream(partial, resumableSftp && offset > 0L).use { output ->
+                val offset = if (resumable && partial.isFile) partial.length() else 0L
+                FileOutputStream(partial, resumable && offset > 0L).use { output ->
                     when (protocol) {
-                        StorageProtocol.FTP, StorageProtocol.FTPS -> ftp.download(entry.name, output) { progress = "${entry.name}: ${formatBytes(it)}" }
-                        StorageProtocol.SFTP -> sftp.downloadResumable(remote(entry.name), output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
-                        StorageProtocol.SMB -> smb.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
-                        StorageProtocol.WEBDAV -> webDav.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
+                        StorageProtocol.FTP, StorageProtocol.FTPS -> ftp.downloadResumable(entry.name, output, offset) { progress = "\${entry.name}: \${formatBytes(it)}" }
+                        StorageProtocol.SFTP -> sftp.downloadResumable(remote(entry.name), output, offset) { progress = "\${entry.name}: \${formatBytes(it)}" }
+                        StorageProtocol.SMB -> smb.download(remote(entry.name), output) { progress = "\${entry.name}: \${formatBytes(it)}" }
+                        StorageProtocol.WEBDAV -> webDav.download(remote(entry.name), output) { progress = "\${entry.name}: \${formatBytes(it)}" }
                     }
                     output.fd.sync()
                 }
                 Files.move(partial.toPath(), target.toPath())
             } catch (failure: Throwable) {
-                // Keep only SFTP partials: the client verifies the remote size before resuming.
-                if (!resumableSftp) partial.delete()
+                // FTP/FTPS require SIZE + REST validation; SFTP validates the remote size before append.
+                if (!resumable) runCatching { partial.delete() }
                 throw failure
             }
         }, { scope.launch { snack.showSnackbar("Saved to KayX/network/${entry.name}") } })
