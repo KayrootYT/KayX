@@ -57,6 +57,23 @@ class BrowserStateSelectionTest {
     }
 
     @Test
+    fun browserSessionPathCodecRoundTripsUnicodeAndReservedCharacters() {
+        val paths = listOf(
+            "/storage/emulated/0/Download",
+            "saf://location/content%3A%2F%2Fprovider%2Ftree%2Froot?path=Music%2Fहिंदी songs",
+            "/storage/emulated/0/folder/with spaces and ? symbols"
+        )
+
+        assertEquals(paths, decodeBrowserPaths(encodeBrowserPaths(paths)))
+    }
+
+    @Test
+    fun browserSessionPathCodecIgnoresCorruptEntries() {
+        val encoded = encodeBrowserPaths(listOf("/valid/path"))
+        assertEquals(listOf("/valid/path"), decodeBrowserPaths(encoded + "\n%%%invalid%%%"))
+    }
+
+    @Test
     fun singlePaneAlwaysUsesPrimarySelection() {
         val state = BrowserState(dualPane = false, activePane = 1,
             primarySelected = setOf("/primary.txt"), secondarySelected = setOf("/secondary.txt"))
