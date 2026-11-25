@@ -149,6 +149,8 @@ class WebDavClient(
         return URI(root.scheme, null, root.host, root.port, rootPath + encoded, root.query, null).toURL()
     }
 
+    internal fun parseMultistatusForTest(xml: String, requestUrl: URL): List<Entry> = parseMultistatus(xml, requestUrl)
+
     private fun parseMultistatus(xml: String, requestUrl: URL): List<Entry> {
         require(xml.length <= MAX_XML_BYTES) { "WebDAV response is too large" }
         val factory = DocumentBuilderFactory.newInstance().apply {
