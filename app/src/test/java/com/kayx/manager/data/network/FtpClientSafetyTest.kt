@@ -37,4 +37,16 @@ class FtpClientSafetyTest {
         assertEquals(42L, entries.first().size)
         assertEquals(true, entries.last().dir)
     }
+
+    @Test fun epsvAcceptsRfcDelimiterAndRejectsInvalidPorts() {
+        assertEquals(2121, parseFtpEpsvPort("229 Entering Extended Passive Mode (!!!2121!)"))
+        assertEquals(null, parseFtpEpsvPort("229 Entering Extended Passive Mode (|||70000|)"))
+    }
+
+    @Test fun pasvValidatesOctetsAndPort() {
+        assertEquals(50000, parseFtpPasvPort("227 Entering Passive Mode (10,0,0,5,195,80)"))
+        assertEquals(null, parseFtpPasvPort("227 Entering Passive Mode (999,0,0,5,195,80)"))
+        assertEquals(null, parseFtpPasvPort("227 Entering Passive Mode (10,0,0,5,0,0)"))
+    }
+
 }
