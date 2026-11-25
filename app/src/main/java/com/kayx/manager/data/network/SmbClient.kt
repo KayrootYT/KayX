@@ -4,17 +4,12 @@ import com.hierynomus.msdtyp.FileAttributes
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.mssmb2.SMB2CreateOptions
-import com.hierynomus.mssmb2.SMB2MessageFlag
-import com.hierynomus.mssmb2.SMB2MessageFlag.SMB2_FLAGS_SIGNED
 import com.hierynomus.mssmb2.SMB2CreateOptions.FILE_NON_DIRECTORY_FILE
-import com.hierynomus.mssmb2.SMB2CreateOptions.FILE_DIRECTORY_FILE
 import com.hierynomus.mssmb2.SMB2CreateDisposition.FILE_OPEN
 import com.hierynomus.mssmb2.SMB2CreateDisposition.FILE_OVERWRITE_IF
 import com.hierynomus.mssmb2.SMB2ShareAccess.FILE_SHARE_DELETE
 import com.hierynomus.mssmb2.SMB2ShareAccess.FILE_SHARE_READ
 import com.hierynomus.mssmb2.SMB2ShareAccess.FILE_SHARE_WRITE
-import com.hierynomus.mssmb2.SMB2MessageCommandCode
-import com.hierynomus.mssmb2.SMB2CreateOptions.FILE_DIRECTORY_FILE
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.connection.Connection
 import com.hierynomus.smbj.session.AuthenticationContext
@@ -87,7 +82,10 @@ class SmbClient {
         try {
             file.use { it.outputStream.use { output -> copy(input, output, onBytes) } }
             // Keep the original untouched until the temporary transfer has fully closed.
-            requireShare().rename(temporary, target)
+            requireShare().openFile(
+                temporary, EnumSet.of(com.hierynomus.msdtyp.AccessMask.DELETE), null,
+                SHARE_ACCESS, FILE_OPEN, EnumSet.of(FILE_NON_DIRECTORY_FILE)
+            ).use { it.rename(target, false) }
         } catch (failure: Throwable) {
             runCatching { requireShare().rm(temporary) }
             throw failure
@@ -97,8 +95,14 @@ class SmbClient {
     fun createDirectory(path: String) = requireShare().mkdir(validateSmbPath(path))
     fun deleteFile(path: String) = requireShare().rm(validateSmbPath(path))
     fun deleteDirectory(path: String) = requireShare().rmdir(validateSmbPath(path), false)
-    fun rename(source: String, destination: String) =
-        requireShare().rename(validateSmbPath(source), validateSmbPath(destination))
+    fun rename(source: String, destination: String) {
+        val from = validateSmbPath(source)
+        val to = validateSmbPath(destination)
+        requireShare().openFile(
+            from, EnumSet.of(com.hierynomus.msdtyp.AccessMask.DELETE), null,
+            SHARE_ACCESS, FILE_OPEN, EnumSet.of(FILE_NON_DIRECTORY_FILE)
+        ).use { it.rename(to, false) }
+    }
 
     @Synchronized
     fun cancelTransfer() = disconnect()
@@ -114,7 +118,7 @@ class SmbClient {
     }
 
     private fun requireShare(): DiskShare =
-        share?.takeIf { it.isConnected } ?: throw SmbException("Not connected")
+        share ?: throw SmbException("Not connected")
 
     private fun copy(input: InputStream, output: OutputStream, onBytes: (Long) -> Unit) {
         val buffer = ByteArray(64 * 1024)
