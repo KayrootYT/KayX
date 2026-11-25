@@ -292,7 +292,9 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                 fwdStacks = listOf(emptyList(), st.fwdStacks[1])
             )
         }
-        persistSafBrowserSession(_s.value)
+        val saved = _s.value
+        SettingsStore.updateBrowserSession(saved.dir, saved.secondaryDir, saved.activePane)
+        persistSafBrowserSession(saved)
         reload()
     }
 
