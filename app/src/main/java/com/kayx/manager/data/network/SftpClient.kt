@@ -12,8 +12,8 @@ import java.util.Vector
 class SftpClient {
     data class Entry(val name: String, val directory: Boolean, val size: Long, val modifiedEpochSeconds: Long)
 
-    private var session: Session? = null
-    private var channel: ChannelSftp? = null
+    @Volatile private var session: Session? = null
+    @Volatile private var channel: ChannelSftp? = null
 
     @Synchronized
     fun connect(host: String, port: Int, username: String, password: String, knownHosts: File) {
