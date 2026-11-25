@@ -54,8 +54,30 @@ class SftpClient {
     }
 
     fun download(remotePath: String, output: OutputStream, onBytes: (Long) -> Unit = {}) {
+        downloadResumable(remotePath, output, 0L, onBytes)
+    }
+
+    /**
+     * Resume a download into an append-mode output stream. The remote size is queried first;
+     * offsets beyond the current remote file are rejected rather than silently corrupting data.
+     * The caller must ensure [output] is positioned at exactly [offset] bytes.
+     */
+    fun downloadResumable(
+        remotePath: String,
+        output: OutputStream,
+        offset: Long,
+        onBytes: (Long) -> Unit = {}
+    ): Long {
         validateSftpPath(remotePath)
-        requireChannel().get(remotePath).use { copy(it, output, onBytes) }
+        val sftp = requireChannel()
+        val remoteSize = sftp.stat(remotePath).size
+        validateSftpResumeOffset(offset, remoteSize)
+        val mode = if (offset == 0L) ChannelSftp.OVERWRITE else ChannelSftp.RESUME
+        var transferred = offset
+        sftp.get(remotePath, output, null, mode, offset)
+        transferred = remoteSize
+        onBytes(transferred)
+        return remoteSize
     }
 
     fun upload(remotePath: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
@@ -125,3 +147,12 @@ internal fun validateSftpPath(path: String): String {
 internal fun validateSftpName(name: String): Boolean =
     name.isNotBlank() && name != "." && name != ".." && name.length <= 255 &&
         name.none { it == '/' || it == '\\' || it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }
+
+
+/** Reject stale/oversized local partials before an SFTP resume is attempted. */
+internal fun validateSftpResumeOffset(offset: Long, remoteSize: Long): Long {
+    require(offset >= 0L) { "Resume offset cannot be negative" }
+    require(remoteSize >= 0L) { "Remote file size is invalid" }
+    require(offset <= remoteSize) { "Partial download is larger than the remote file; remove it and retry" }
+    return offset
+}
