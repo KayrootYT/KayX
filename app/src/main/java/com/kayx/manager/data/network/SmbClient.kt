@@ -107,13 +107,20 @@ class SmbClient {
     fun createDirectory(path: String) = requireShare().mkdir(validateSmbPath(path))
     fun deleteFile(path: String) = requireShare().rm(validateSmbPath(path))
     fun deleteDirectory(path: String) = requireShare().rmdir(validateSmbPath(path), false)
-    fun rename(source: String, destination: String) {
+    fun rename(source: String, destination: String, directory: Boolean = false) {
         val from = validateSmbPath(source)
         val to = validateSmbPath(destination)
-        requireShare().openFile(
-            from, EnumSet.of(com.hierynomus.msdtyp.AccessMask.DELETE), null,
-            SHARE_ACCESS, FILE_OPEN, EnumSet.of(FILE_NON_DIRECTORY_FILE)
-        ).use { it.rename(to, false) }
+        if (directory) {
+            requireShare().openDirectory(
+                from, EnumSet.of(com.hierynomus.msdtyp.AccessMask.DELETE), null,
+                SHARE_ACCESS, FILE_OPEN, EnumSet.of(FILE_DIRECTORY_FILE)
+            ).use { it.rename(to, false) }
+        } else {
+            requireShare().openFile(
+                from, EnumSet.of(com.hierynomus.msdtyp.AccessMask.DELETE), null,
+                SHARE_ACCESS, FILE_OPEN, EnumSet.of(FILE_NON_DIRECTORY_FILE)
+            ).use { it.rename(to, false) }
+        }
     }
 
     @Synchronized
