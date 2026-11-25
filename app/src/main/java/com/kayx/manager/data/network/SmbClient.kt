@@ -6,6 +6,7 @@ import com.hierynomus.mssmb2.SMB2Dialect
 import com.hierynomus.mssmb2.SMB2ShareAccess
 import com.hierynomus.mssmb2.SMB2CreateOptions
 import com.hierynomus.mssmb2.SMB2CreateOptions.FILE_NON_DIRECTORY_FILE
+import com.hierynomus.mssmb2.SMB2CreateOptions.FILE_DIRECTORY_FILE
 import com.hierynomus.mssmb2.SMB2CreateDisposition.FILE_OPEN
 import com.hierynomus.mssmb2.SMB2CreateDisposition.FILE_OVERWRITE_IF
 import com.hierynomus.mssmb2.SMB2ShareAccess.FILE_SHARE_DELETE
