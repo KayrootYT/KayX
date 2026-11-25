@@ -210,6 +210,7 @@ class FtpClient {
             if (exceededLimit) throw FtpException("FTP listing exceeds the safety limit")
             return lines
         } finally {
+            if (activeDataSocket === ds) activeDataSocket = null
             runCatching { ds.close() }
         }
     }
