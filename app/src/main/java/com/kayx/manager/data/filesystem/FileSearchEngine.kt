@@ -93,6 +93,7 @@ class FileSearchEngine(
         val extensions = request.allowedExtensions.map { it.removePrefix(".").lowercase() }.filter { it.isNotBlank() }.toSet()
         val cap = request.maxResults.coerceIn(1, 100_000)
         val matches = ArrayList<FileItem>(minOf(cap, 512))
+        var resultTruncated = false
         for (item in index.entries) {
             currentCoroutineContext().ensureActive()
             if (item.modified < request.modifiedAfter || item.modified > request.modifiedBefore) continue
@@ -107,7 +108,10 @@ class FileSearchEngine(
                 else -> item.name.contains(query, ignoreCase = true)
             }
             if (matched) {
-                if (matches.size == cap) break
+                if (matches.size == cap) {
+                    resultTruncated = true
+                    break
+                }
                 matches += item
             }
         }
@@ -121,7 +125,7 @@ class FileSearchEngine(
                 SortBy.DATE -> b.modified.compareTo(a.modified)
             }
         }
-        FileSearchResult(sorted, index.scanned, index.truncated || matches.size >= cap)
+        FileSearchResult(sorted, index.scanned, index.truncated || resultTruncated)
     }
 
     /** Content search shares the same indexed traversal, cancellation and permission handling. */
