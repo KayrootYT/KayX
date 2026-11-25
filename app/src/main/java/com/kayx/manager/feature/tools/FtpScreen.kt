@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kayx.manager.data.network.FtpClient
+import com.kayx.manager.data.network.NetworkCredentialStore
 import com.kayx.manager.data.filesystem.FileOps
 import com.kayx.manager.data.storage.formatBytes
 import com.kayx.manager.ui.glass.GlassCard
@@ -44,6 +45,7 @@ fun FtpScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     val client = remember { FtpClient() }
+    val credentialStore = remember { NetworkCredentialStore(ctx) }
     DisposableEffect(Unit) { onDispose { Thread { client.disconnect() }.start() } }
 
     val prefs = remember { ctx.getSharedPreferences("ftp", Context.MODE_PRIVATE) }
@@ -52,6 +54,13 @@ fun FtpScreen(onBack: () -> Unit) {
     var user by remember { mutableStateOf(prefs.getString("user", "anonymous") ?: "anonymous") }
     var pass by remember { mutableStateOf("") }
     var useFtps by remember { mutableStateOf(false) }
+    var rememberPassword by remember { mutableStateOf(false) }
+    val profileKey = remember(host, port, user) { "$host:$port:$user" }
+    LaunchedEffect(rememberPassword, profileKey) {
+        if (rememberPassword) {
+            pass = withContext(Dispatchers.IO) { runCatching { credentialStore.read(profileKey) }.getOrNull().orEmpty() }
+        }
+    }
 
     var connected by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -131,6 +140,13 @@ fun FtpScreen(onBack: () -> Unit) {
                     Checkbox(checked = useFtps, onCheckedChange = { useFtps = it })
                     Text("Use explicit FTPS (TLS)", style = MaterialTheme.typography.bodyMedium)
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = rememberPassword, onCheckedChange = {
+                        rememberPassword = it
+                        if (!it) scope.launch(Dispatchers.IO) { runCatching { credentialStore.remove(profileKey) } }
+                    })
+                    Text("Remember password securely", style = MaterialTheme.typography.bodyMedium)
+                }
                 Text(
                     if (useFtps) "TLS certificate and hostname are verified. The password is not saved."
                     else "Plain FTP sends credentials and files without encryption. Use only on trusted networks. The password is not saved.",
@@ -141,6 +157,7 @@ fun FtpScreen(onBack: () -> Unit) {
                     prefs.edit().putString("host", host).putString("port", port).putString("user", user).apply()
                     run({
                         client.connect(host, port.toIntOrNull() ?: 21, user, pass, secure = useFtps)
+                        if (rememberPassword && pass.isNotEmpty()) credentialStore.save(profileKey, pass)
                         path = client.pwd(); entries = client.list(); connected = true
                     })
                 }, Modifier.fillMaxWidth(), enabled = !busy && host.isNotBlank()) {
