@@ -114,6 +114,8 @@ class FtpClient {
         runCatching { if (sock != null) send("QUIT") }
         runCatching { sock?.close() }
         sock = null; rd = null; wr = null
+        host = ""
+        secureControl = false
     }
 
     fun pwd(): String {
@@ -133,13 +135,11 @@ class FtpClient {
     private fun openData(): Socket {
         val (c, m) = send("EPSV")
         val port = if (c == 229) {
-            Regex("\\(\\|\\|\\|(\\d+)\\|\\)").find(m)?.groupValues?.get(1)?.toIntOrNull() ?: throw FtpException("Bad EPSV reply")
+            parseFtpEpsvPort(m) ?: throw FtpException("Invalid EPSV reply or port")
         } else {
             val (c2, m2) = send("PASV")
             if (c2 != 227) throw FtpException(m2)
-            val n = Regex("(\\d+),(\\d+),(\\d+),(\\d+),(\\d+),(\\d+)").find(m2)?.groupValues?.drop(1)?.map { it.toInt() }
-                ?: throw FtpException("Bad PASV reply")
-            n[4] * 256 + n[5]
+            parseFtpPasvPort(m2) ?: throw FtpException("Invalid PASV reply or port")
         }
         val d = Socket()
         d.connect(InetSocketAddress(host, port), 15_000)
@@ -262,4 +262,17 @@ internal fun validateFtpRemoteName(name: String): String {
         "Remote name must be a single safe path segment"
     }
     return name
+}
+
+
+internal fun parseFtpEpsvPort(reply: String): Int? {
+    val match = Regex("""\\((.)(?:\\1){2}(\\d+)\\1\\)""").find(reply) ?: return null
+    return match.groupValues[2].toIntOrNull()?.takeIf { it in 1..65535 }
+}
+
+internal fun parseFtpPasvPort(reply: String): Int? {
+    val values = Regex("""(\\d+),(\\d+),(\\d+),(\\d+),(\\d+),(\\d+)""")
+        .find(reply)?.groupValues?.drop(1)?.mapNotNull { it.toIntOrNull() } ?: return null
+    if (values.size != 6 || values.any { it !in 0..255 }) return null
+    return (values[4] * 256 + values[5]).takeIf { it in 1..65535 }
 }
