@@ -21,3 +21,9 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER AND CONTRIBUTORS "AS IS" AND A
 - Project: https://github.com/JesusFreke/smali
 
 - Android apksig (Apache 2.0), Bouncy Castle (MIT), Apache Commons Compress (Apache 2.0), XZ for Java (public domain).
+
+
+## Network storage libraries
+
+- `com.github.mwiede:jsch:0.2.20` — BSD 3-Clause License. Used for SFTP with strict OpenSSH `known_hosts` verification. Project: https://github.com/mwiede/jsch
+- `com.hierynomus:smbj:0.13.0` — Apache License 2.0. Used for SMB2/3; KayX configures SMB3 encryption and signing as required. Project: https://github.com/hierynomus/smbj
