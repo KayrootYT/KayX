@@ -8,6 +8,7 @@ import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.UUID
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 
@@ -266,7 +267,20 @@ class FtpClient {
         }
     }
 
+    /** Upload to a unique sibling first; publish the destination only after transfer completion. */
     fun upload(remote: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
+        val destination = cleanName(remote)
+        val temporary = ".kayx-upload-${UUID.randomUUID()}.part"
+        try {
+            uploadDirect(temporary, input, onBytes)
+            rename(temporary, destination)
+        } catch (failure: Throwable) {
+            runCatching { delete(temporary) }
+            throw failure
+        }
+    }
+
+    private fun uploadDirect(remote: String, input: InputStream, onBytes: (Long) -> Unit) {
         val ds = openData()
         activeDataSocket = ds
         try {

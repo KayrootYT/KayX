@@ -26,6 +26,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.EnumSet
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 
 /** SMB2/3 client. Credentials are passed only to the SMB authentication exchange. */
 class SmbClient {
@@ -139,7 +140,9 @@ class SmbClient {
 
     fun upload(path: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
         val target = validateSmbPath(path)
-        val temporary = "$target.kayx-part"
+        val parent = target.substringBeforeLast('\\', "")
+        val temporaryName = ".kayx-upload-${UUID.randomUUID()}.part"
+        val temporary = if (parent.isEmpty()) temporaryName else "$parent\\$temporaryName"
         val file = requireShare().openFile(
             temporary, EnumSet.of(com.hierynomus.msdtyp.AccessMask.GENERIC_WRITE), null,
             SHARE_ACCESS, FILE_OVERWRITE_IF, EnumSet.of(FILE_NON_DIRECTORY_FILE)
