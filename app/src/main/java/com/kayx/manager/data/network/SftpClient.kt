@@ -8,6 +8,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.io.File
 import java.util.Vector
+import java.util.UUID
 
 /** SFTP client that refuses unknown SSH host keys; the supplied known_hosts file is mandatory. */
 class SftpClient {
@@ -91,7 +92,9 @@ class SftpClient {
     fun upload(remotePath: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
         validateSftpPath(remotePath)
         val sftp = requireChannel()
-        val temporary = "$remotePath.kayx-part"
+        val parent = remotePath.substringBeforeLast('/', "")
+        val temporaryName = ".kayx-upload-${UUID.randomUUID()}.part"
+        val temporary = if (parent.isEmpty()) temporaryName else "$parent/$temporaryName"
         try {
             sftp.put(temporary).use { output -> copy(input, output, onBytes) }
             // Rename only after a complete upload; do not overwrite an existing destination.
