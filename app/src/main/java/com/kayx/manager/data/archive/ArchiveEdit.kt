@@ -159,7 +159,11 @@ object ArchiveEdit {
                     fileOutput.fd.sync()
                 }
             }
-            Files.move(tmp.toPath(), zip.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            try {
+                Files.move(tmp.toPath(), zip.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                Files.move(tmp.toPath(), zip.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
         } catch (t: Throwable) { tmp.delete(); throw t }
         removed
     }
