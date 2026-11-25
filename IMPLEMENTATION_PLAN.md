@@ -63,10 +63,14 @@ A source module is not proof that every workflow is complete or works on every A
 - [ ] Verify media codecs and unsupported-format messaging.
 
 ### Phase 6 — Network storage
-- [ ] Audit and implement FTP/FTPS, SFTP, SMB, and WebDAV as independent optional modules.
-- [ ] Store credentials only in Android Keystore-backed encrypted storage; never log credentials.
-- [ ] Support explicit certificate/host-key verification, reconnect, and transfer resume.
-- [ ] Keep network protocols optional and never use a KayX server as a proxy or feature gate.
+- [x] Add independent FTP/explicit FTPS, SFTP, SMB2/3, and WebDAV clients; expose all four protocols in the Network Storage browser.
+- [x] Store remembered network passwords through the Android Keystore AES-GCM credential store; saving is opt-in and credentials are not logged.
+- [x] FTPS verifies TLS certificates and hostnames with no downgrade; SFTP requires a verified OpenSSH `known_hosts` file and strict host-key checking; WebDAV requires HTTPS, rejects redirects, and hardens XML parsing against XXE; SMB requires SMB3 encryption and signing.
+- [x] Add bounded remote listing/path validation and a user-visible cancel action for active transfers.
+- [x] Keep protocols optional and connect directly to user-selected servers; no KayX proxy/server dependency.
+- [ ] Add resumable upload/download support where each protocol safely supports it; preserve partial transfers only when resume metadata can be verified.
+- [ ] Add automated protocol integration tests against disposable FTP/FTPS, SFTP, SMB3 and WebDAV servers; add Android Keystore/device tests.
+- [ ] Verify the new clients and unified UI with the full Android build, security scan, and physical-device testing before marking Phase 6 complete.
 
 ### Phase 7 — Performance, accessibility and release
 - [ ] Profile large directories, search, storage scans, and thumbnails on low-memory devices.
