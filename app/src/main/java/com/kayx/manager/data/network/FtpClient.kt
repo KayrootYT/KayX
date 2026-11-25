@@ -20,8 +20,16 @@ class FtpClient {
     private var host = ""
 
     private fun clean(s: String): String {
-        if ('\r' in s || '\n' in s) throw FtpException("Invalid name")
+        if (s.any { it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }) {
+            throw FtpException("FTP command contains an invalid control character")
+        }
         return s
+    }
+
+    private fun cleanName(s: String): String = try {
+        validateFtpRemoteName(s)
+    } catch (e: IllegalArgumentException) {
+        throw FtpException(e.message ?: "Invalid remote name")
     }
 
     private fun reply(): Pair<Int, String> {
@@ -53,22 +61,37 @@ class FtpClient {
 
     fun connect(host: String, port: Int, user: String, pass: String) {
         disconnect()
+        if (host.isBlank()) throw FtpException("Host is required")
+        if (port !in 1..65535) throw FtpException("Port must be between 1 and 65535")
         val s = Socket()
-        s.connect(InetSocketAddress(host, port), 15_000)
-        s.soTimeout = 30_000
-        sock = s
-        this.host = host
-        rd = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.UTF_8))
-        wr = BufferedWriter(OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8))
-        val (c0, m0) = reply()
-        if (c0 != 220) throw FtpException(m0)
-        val (c1, m1) = send("USER ${clean(user)}")
-        var code = c1
-        var msg = m1
-        if (c1 == 331 || c1 == 332) { val p = send("PASS ${clean(pass)}"); code = p.first; msg = p.second }
-        if (code != 230) throw FtpException(msg)
-        runCatching { send("OPTS UTF8 ON") }
-        expect("TYPE I", 200)
+        try {
+            s.connect(InetSocketAddress(host, port), 15_000)
+            s.soTimeout = 30_000
+            sock = s
+            this.host = host
+            rd = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.UTF_8))
+            wr = BufferedWriter(OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8))
+            val (c0, m0) = reply()
+            if (c0 != 220) throw FtpException(m0)
+            val (c1, m1) = send("USER ${clean(user)}")
+            var code = c1
+            var msg = m1
+            if (c1 == 331 || c1 == 332) {
+                val p = send("PASS ${clean(pass)}")
+                code = p.first
+                msg = p.second
+            }
+            if (code != 230) throw FtpException(msg)
+            runCatching { send("OPTS UTF8 ON") }
+            expect("TYPE I", 200)
+        } catch (failure: Throwable) {
+            runCatching { s.close() }
+            sock = null
+            rd = null
+            wr = null
+            this.host = ""
+            throw failure
+        }
     }
 
     fun disconnect() {
@@ -86,10 +109,10 @@ class FtpClient {
 
     fun cwd(path: String) { expect("CWD ${clean(path)}", 250) }
     fun up() { expect("CDUP", 200, 250) }
-    fun mkdir(name: String) { expect("MKD ${clean(name)}", 257) }
-    fun delete(name: String) { expect("DELE ${clean(name)}", 250) }
-    fun rmdir(name: String) { expect("RMD ${clean(name)}", 250) }
-    fun rename(from: String, to: String) { expect("RNFR ${clean(from)}", 350); expect("RNTO ${clean(to)}", 250) }
+    fun mkdir(name: String) { expect("MKD ${cleanName(name)}", 257) }
+    fun delete(name: String) { expect("DELE ${cleanName(name)}", 250) }
+    fun rmdir(name: String) { expect("RMD ${cleanName(name)}", 250) }
+    fun rename(from: String, to: String) { expect("RNFR ${cleanName(from)}", 350); expect("RNTO ${cleanName(to)}", 250) }
 
     private fun openData(): Socket {
         val (c, m) = send("EPSV")
@@ -145,7 +168,7 @@ class FtpClient {
     fun upload(remote: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
         val ds = openData()
         try {
-            val (c, m) = send("STOR ${clean(remote)}")
+            val (c, m) = send("STOR ${cleanName(remote)}")
             if (c != 150 && c != 125) throw FtpException(m)
             ds.getOutputStream().use { copy(input, it, onBytes) }
             val (c2, m2) = reply()
@@ -168,6 +191,8 @@ class FtpClient {
         o.flush()
     }
 
+    internal fun parseMlsdForTest(lines: List<String>): List<Entry> = parseMlsd(lines)
+
     private fun parseMlsd(lines: List<String>): List<Entry> = lines.mapNotNull { line ->
         val sp = line.indexOf(' ')
         if (sp <= 0) return@mapNotNull null
@@ -175,18 +200,21 @@ class FtpClient {
             .associate { it.substringBefore('=').lowercase() to it.substringAfter('=') }
         val name = line.substring(sp + 1)
         val type = facts["type"]?.lowercase() ?: "file"
-        if (type == "cdir" || type == "pdir" || name == "." || name == "..") return@mapNotNull null
+        if (type == "cdir" || type == "pdir" || name == "." || name == ".." ||
+            runCatching { validateFtpRemoteName(name) }.isFailure) return@mapNotNull null
         val m = facts["modify"].orEmpty()
         val mod = if (m.length >= 12) "${m.substring(0, 4)}-${m.substring(4, 6)}-${m.substring(6, 8)} ${m.substring(8, 10)}:${m.substring(10, 12)}" else ""
-        Entry(name, type == "dir", facts["size"]?.toLongOrNull() ?: 0L, mod)
+        Entry(name, type == "dir", facts["size"]?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L, mod)
     }
+
+    internal fun parseUnixForTest(lines: List<String>): List<Entry> = parseUnix(lines)
 
     private val unixLine = Regex("^([\\-dl])[rwxsStT\\-]{9}\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\w{3}\\s+\\d{1,2}\\s+[\\d:]{4,5})\\s+(.+)$")
 
     private fun parseUnix(lines: List<String>): List<Entry> = lines.mapNotNull { line ->
         val m = unixLine.find(line.trim()) ?: return@mapNotNull null
         val name = m.groupValues[4].substringBefore(" -> ")
-        if (name == "." || name == "..") return@mapNotNull null
-        Entry(name, m.groupValues[1] == "d", m.groupValues[2].toLongOrNull() ?: 0L, m.groupValues[3])
+        if (name == "." || name == ".." || runCatching { validateFtpRemoteName(name) }.isFailure) return@mapNotNull null
+        Entry(name, m.groupValues[1] == "d", m.groupValues[2].toLongOrNull()?.coerceAtLeast(0L) ?: 0L, m.groupValues[3])
     }
 }
