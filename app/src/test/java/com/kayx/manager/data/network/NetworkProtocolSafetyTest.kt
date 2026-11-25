@@ -25,6 +25,15 @@ class NetworkProtocolSafetyTest {
         assertThrows(IllegalArgumentException::class.java) { validateSftpResumeOffset(0L, -1L) }
     }
 
+    @Test fun sftpUploadResumeRequiresExactTemporarySizeAndValidRange() {
+        validateSftpUploadResumeState(0L, 100L, 0L)
+        validateSftpUploadResumeState(40L, 100L, 40L)
+        validateSftpUploadResumeState(100L, 100L, 100L)
+        assertThrows(IllegalArgumentException::class.java) { validateSftpUploadResumeState(-1L, 100L, 0L) }
+        assertThrows(IllegalArgumentException::class.java) { validateSftpUploadResumeState(101L, 100L, 101L) }
+        assertThrows(IllegalArgumentException::class.java) { validateSftpUploadResumeState(40L, 100L, 39L) }
+    }
+
     @Test fun smbPathsRejectTraversalAndAbsolutePaths() {
         assertEquals("folder\\report.txt", validateSmbPath("folder\\report.txt"))
         listOf("../escape", "folder\\..\\escape", "\\server\\share", "/root", "bad/name", "bad\rname")
