@@ -56,10 +56,15 @@ fun FtpScreen(onBack: () -> Unit) {
     var useFtps by remember { mutableStateOf(false) }
     var rememberPassword by remember { mutableStateOf(false) }
     val profileKey = remember(host, port, user) { "$host:$port:$user" }
-    LaunchedEffect(rememberPassword, profileKey) {
-        if (rememberPassword) {
-            pass = withContext(Dispatchers.IO) { runCatching { credentialStore.read(profileKey) }.getOrNull().orEmpty() }
+    LaunchedEffect(profileKey) {
+        val saved = withContext(Dispatchers.IO) {
+            runCatching { credentialStore.read(profileKey) }.getOrElse {
+                snack.showSnackbar(it.message ?: "Saved password could not be read")
+                null
+            }
         }
+        rememberPassword = saved != null
+        if (saved != null) pass = saved
     }
 
     var connected by remember { mutableStateOf(false) }
@@ -123,6 +128,13 @@ fun FtpScreen(onBack: () -> Unit) {
                 IconButton({ nameDialog = "mkdir" to "" }, enabled = !busy) { Icon(Icons.Default.CreateNewFolder, "New folder") }
                 IconButton({ picker.launch("*/*") }, enabled = !busy) { Icon(Icons.Default.Upload, "Upload") }
                 IconButton({ refresh() }, enabled = !busy) { Icon(Icons.Default.Refresh, "Refresh") }
+                if (busy) IconButton({
+                    client.cancelTransfer()
+                    connected = false
+                    busy = false
+                    progress = ""
+                    scope.launch { snack.showSnackbar("Transfer cancelled; reconnect before continuing.") }
+                }) { Icon(Icons.Default.Close, "Cancel transfer") }
             }
         }
     ) { pad ->
@@ -141,9 +153,16 @@ fun FtpScreen(onBack: () -> Unit) {
                     Text("Use explicit FTPS (TLS)", style = MaterialTheme.typography.bodyMedium)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = rememberPassword, onCheckedChange = {
-                        rememberPassword = it
-                        if (!it) scope.launch(Dispatchers.IO) { runCatching { credentialStore.remove(profileKey) } }
+                    Checkbox(checked = rememberPassword, onCheckedChange = { checked ->
+                        rememberPassword = checked
+                        scope.launch(Dispatchers.IO) {
+                            if (checked) {
+                                val saved = runCatching { credentialStore.read(profileKey) }.getOrNull()
+                                if (saved != null) withContext(Dispatchers.Main) { pass = saved }
+                            } else {
+                                runCatching { credentialStore.remove(profileKey) }
+                            }
+                        }
                     })
                     Text("Remember password securely", style = MaterialTheme.typography.bodyMedium)
                 }
@@ -157,8 +176,17 @@ fun FtpScreen(onBack: () -> Unit) {
                     prefs.edit().putString("host", host).putString("port", port).putString("user", user).apply()
                     run({
                         client.connect(host, port.toIntOrNull() ?: 21, user, pass, secure = useFtps)
-                        if (rememberPassword && pass.isNotEmpty()) credentialStore.save(profileKey, pass)
-                        path = client.pwd(); entries = client.list(); connected = true
+                        try {
+                            val currentPath = client.pwd()
+                            val currentEntries = client.list()
+                            if (rememberPassword && pass.isNotEmpty()) credentialStore.save(profileKey, pass)
+                            path = currentPath
+                            entries = currentEntries
+                            connected = true
+                        } catch (failure: Throwable) {
+                            client.disconnect()
+                            throw failure
+                        }
                     })
                 }, Modifier.fillMaxWidth(), enabled = !busy && host.isNotBlank()) {
                     if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White) else Text("Connect")
