@@ -8,6 +8,8 @@ import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.net.InetSocketAddress
 import java.net.Socket
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
 
 /** Minimal plain-FTP client on raw sockets (no third-party library). Not encrypted: only for trusted networks. */
 class FtpClient {
@@ -18,6 +20,7 @@ class FtpClient {
     private var rd: BufferedReader? = null
     private var wr: BufferedWriter? = null
     private var host = ""
+    private var secureControl = false
 
     private fun clean(s: String): String {
         if (s.any { it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 }) {
@@ -59,7 +62,7 @@ class FtpClient {
         return m
     }
 
-    fun connect(host: String, port: Int, user: String, pass: String) {
+    fun connect(host: String, port: Int, user: String, pass: String, secure: Boolean = false) {
         disconnect()
         if (host.isBlank()) throw FtpException("Host is required")
         if (port !in 1..65535) throw FtpException("Port must be between 1 and 65535")
@@ -82,6 +85,17 @@ class FtpClient {
                 msg = p.second
             }
             if (code != 230) throw FtpException(msg)
+            if (secure) {
+                val (authCode, authMessage) = send("AUTH TLS")
+                if (authCode != 234) throw FtpException(authMessage)
+                val tls = tlsSocket(s, host, port)
+                sock = tls
+                rd = BufferedReader(InputStreamReader(tls.getInputStream(), Charsets.UTF_8))
+                wr = BufferedWriter(OutputStreamWriter(tls.getOutputStream(), Charsets.UTF_8))
+                expect("PBSZ 0", 200)
+                expect("PROT P", 200)
+                secureControl = true
+            }
             runCatching { send("OPTS UTF8 ON") }
             expect("TYPE I", 200)
         } catch (failure: Throwable) {
@@ -90,6 +104,7 @@ class FtpClient {
             rd = null
             wr = null
             this.host = ""
+            secureControl = false
             throw failure
         }
     }
@@ -131,13 +146,32 @@ class FtpClient {
         return d
     }
 
+    private fun tlsSocket(plain: Socket, tlsHost: String, tlsPort: Int): Socket {
+        val ssl = SSLContext.getDefault().socketFactory
+            .createSocket(plain, tlsHost, tlsPort, true) as SSLSocket
+        try {
+            val parameters = ssl.sslParameters
+            parameters.endpointIdentificationAlgorithm = "HTTPS"
+            ssl.sslParameters = parameters
+            ssl.startHandshake()
+            return ssl
+        } catch (failure: Throwable) {
+            runCatching { ssl.close() }
+            throw FtpException("FTPS certificate/hostname verification failed: ${failure.message}")
+        }
+    }
+
+    private fun protectDataSocket(socket: Socket): Socket =
+        if (secureControl) tlsSocket(socket, host, socket.port) else socket
+
     private fun listing(cmd: String): List<String>? {
         val ds = openData()
         try {
             val (c, _) = send(cmd)
             if (c != 150 && c != 125) return null
-            val lines = ds.getInputStream().bufferedReader(Charsets.UTF_8).readLines()
-            ds.close()
+            val protected = protectDataSocket(ds)
+            val lines = protected.getInputStream().bufferedReader(Charsets.UTF_8).readLines()
+            protected.close()
             val (c2, m2) = reply()
             if (c2 != 226 && c2 != 250) throw FtpException(m2)
             return lines
@@ -157,7 +191,7 @@ class FtpClient {
         try {
             val (c, m) = send("RETR ${clean(remote)}")
             if (c != 150 && c != 125) throw FtpException(m)
-            ds.getInputStream().use { copy(it, out, onBytes) }
+            protectDataSocket(ds).getInputStream().use { copy(it, out, onBytes) }
             val (c2, m2) = reply()
             if (c2 != 226 && c2 != 250) throw FtpException(m2)
         } finally {
@@ -170,7 +204,7 @@ class FtpClient {
         try {
             val (c, m) = send("STOR ${cleanName(remote)}")
             if (c != 150 && c != 125) throw FtpException(m)
-            ds.getOutputStream().use { copy(input, it, onBytes) }
+            protectDataSocket(ds).getOutputStream().use { copy(input, it, onBytes) }
             val (c2, m2) = reply()
             if (c2 != 226 && c2 != 250) throw FtpException(m2)
         } finally {
