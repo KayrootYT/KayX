@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kayx.manager.data.network.FtpClient
+import com.kayx.manager.data.filesystem.FileOps
 import com.kayx.manager.data.storage.formatBytes
 import com.kayx.manager.ui.glass.GlassCard
 import com.kayx.manager.ui.theme.Accent
@@ -34,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
 
 /** Plain FTP browser: connect, browse, download to KayX/ftp, upload, rename, delete, new folder. */
 @Composable
@@ -72,9 +74,21 @@ fun FtpScreen(onBack: () -> Unit) {
 
     fun download(e: FtpClient.Entry) {
         run({
-            val dir = File(Environment.getExternalStorageDirectory(), "KayX/ftp").apply { mkdirs() }
-            val target = File(dir, e.name.substringAfterLast('/'))
-            FileOutputStream(target).use { out -> client.download(e.name, out) { progress = "${e.name}: ${formatBytes(it)}" } }
+            val dir = File(Environment.getExternalStorageDirectory(), "KayX/ftp")
+            check(dir.isDirectory || dir.mkdirs()) { "Cannot create KayX/ftp download folder" }
+            val target = FileOps.uniqueName(dir, e.name.substringAfterLast('/'))
+            val partial = File(dir, ".${target.name}.kayx-${System.nanoTime()}.part")
+            try {
+                FileOutputStream(partial).use { out ->
+                    client.download(e.name, out) { progress = "${e.name}: ${formatBytes(it)}" }
+                    out.fd.sync()
+                }
+                // Files.move without REPLACE_EXISTING guarantees an existing download is never overwritten.
+                Files.move(partial.toPath(), target.toPath())
+            } catch (failure: Throwable) {
+                partial.delete()
+                throw failure
+            }
         }, { scope.launch { snack.showSnackbar("Saved to KayX/ftp/${e.name}") } })
     }
 
