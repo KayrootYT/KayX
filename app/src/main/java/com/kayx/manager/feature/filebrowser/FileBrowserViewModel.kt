@@ -865,7 +865,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                         result.getOrThrow().forEach { operationJournal?.recordTrash(it.id) }
                     }
                     _s.update { it.copy(undoAvailable = operationJournal?.entries()?.isNotEmpty() == true,
-                        message = result.exceptionOrNull()?.message ?: "Moved ${result.getOrThrow().size} to recycle bin") }
+                        message = result.fold({ "Moved ${it.size} to recycle bin" }, { it.message ?: "Recycle-bin operation failed" })) }
                     if (result.isSuccess) FileOperationSounds.play(appContext, FileActionSound.DELETE)
                     repo.invalidateSearchCache()
                     clearPaneSelection(pane)
