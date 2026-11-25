@@ -19,3 +19,8 @@
 -keep class com.kayx.manager.data.advanced.ShizukuUserService { *; }
 -keep class com.kayx.manager.IUserService { *; }
 -keep class com.kayx.manager.IUserService$Stub { *; }
+
+# Mbassador's optional EL expression-filter integration references the Java EE
+# Expression Language API (javax.el), which is intentionally not shipped on Android.
+# KayX does not configure EL expression filters; keep the core event bus usable without EL.
+-dontwarn javax.el.**
