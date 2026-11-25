@@ -567,7 +567,11 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun selectPaths(paths: Set<String>) = updateActiveSelection { paths }
     fun clearSelection() = updateActiveSelection { emptySet() }
     private fun clearPaneSelection(pane: Int) = _s.update { st ->
-        if (pane == 1) st.copy(secondarySelected = emptySet()) else st.copy(primarySelected = emptySet())
+        val secondary = pane == 1 && st.dualPane
+        val tabIndex = if (secondary) 1 else if (st.dualPane) 0 else st.activeTab
+        val tabs = updateBrowserTabSelection(st.tabs, tabIndex, emptySet())
+        if (secondary) st.copy(secondarySelected = emptySet(), tabs = tabs)
+        else st.copy(primarySelected = emptySet(), tabs = tabs)
     }
     fun notify(msg: String) = _s.update { it.copy(message = msg) }
     fun consumeMessage() = _s.update { it.copy(message = null) }
