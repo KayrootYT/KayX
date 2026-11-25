@@ -231,6 +231,10 @@ private fun DualHeader(
                             DropdownMenuItem({ Text(b.name.lowercase().replaceFirstChar { it.uppercase() } + if (s.sort == b) "  ✓" else "") }, { menuOpen = false; sortPage = false; vm.setSort(b) })
                         }
                     } else {
+                        if (s.undoAvailable) {
+                            DropdownMenuItem({ Text("Undo last file operation") }, { menuOpen = false; vm.undoLastOperation() })
+                            HorizontalDivider()
+                        }
                         // View
                         DropdownMenuItem({ Text(if (s.tabMode) "Split view (both panes)" else "Swipe tabs (full screen)") }, { menuOpen = false; vm.toggleTabMode() })
                         DropdownMenuItem({ Text("Swap panes") }, { menuOpen = false; vm.swapPanes() })

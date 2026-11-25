@@ -291,6 +291,10 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                     HorizontalDivider()
                                     SortBy.values().forEach { b -> DropdownMenuItem({ Text(b.name.lowercase().replaceFirstChar { it.uppercase() } + if (s.sort == b) "  ✓" else "") }, { vm.setSort(b); menu = false; sortPage = false }) }
                                 } else {
+                                    if (s.undoAvailable) {
+                                        DropdownMenuItem({ Text("Undo last file operation") }, { vm.undoLastOperation(); menu = false })
+                                        HorizontalDivider()
+                                    }
                                     // View
                                     DropdownMenuItem({ Text(if (s.showHidden) "Hide hidden files" else "Show hidden files") }, { vm.toggleHidden(); menu = false })
                                     DropdownMenuItem({ Text("Sort by: ${s.sort.name.lowercase()}  ›") }, { sortPage = true })

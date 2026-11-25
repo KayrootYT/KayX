@@ -94,8 +94,13 @@ object RecycleBin {
     }
 
     @Synchronized
-    fun trash(files: List<File>): Result<Unit> = runCatching {
+    fun trash(files: List<File>): Result<Unit> = trashWithEntries(files).map { Unit }
+
+    /** Trashes items and returns durable recycle-bin records for the undo journal. */
+    @Synchronized
+    fun trashWithEntries(files: List<File>): Result<List<Entry>> = runCatching {
         val d = dir()
+        val created = mutableListOf<Entry>()
         for (f in files) {
             if (!f.exists()) continue
             val safeSource = isSafeRecycleOriginal(f.absolutePath, Environment.getExternalStorageDirectory(), d)
@@ -112,6 +117,7 @@ object RecycleBin {
             try {
                 move(f, target)
                 target.setLastModified(deletedAt)
+                created += Entry(id, f.absolutePath, deletedAt, target.isDirectory, if (target.isFile) target.length() else 0L)
             } catch (t: Throwable) {
                 if (t !is SourceCleanupFailed) {
                     runCatching { target.deleteRecursively() }
@@ -120,6 +126,14 @@ object RecycleBin {
                 throw t
             }
         }
+        created
+    }
+
+    @Synchronized
+    fun restoreById(id: String): Result<File> {
+        require(isSafeRecycleEntryId(id)) { "Invalid recycle-bin entry" }
+        val entry = list().firstOrNull { it.id == id } ?: return Result.failure(IllegalStateException("Recycle-bin item no longer exists"))
+        return restore(entry)
     }
 
     @Synchronized
