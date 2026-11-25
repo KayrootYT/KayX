@@ -76,7 +76,7 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
     var path by remember { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<FtpClient.Entry>>(emptyList()) }
     var progress by remember { mutableStateOf("") }
-    var nameDialog by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var nameDialog by remember { mutableStateOf<Triple<String, String, Boolean>?>(null) }
     var deleteTarget by remember { mutableStateOf<FtpClient.Entry?>(null) }
     val profileKey = remember(protocol, host, port, username, shareName, domain) {
         "${protocol.name}|${host.trim()}|${port.trim()}|${username.trim()}|${shareName.trim()}|${domain.trim()}"
@@ -204,7 +204,7 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
                     else path = path.substringBeforeLast(if (protocol == StorageProtocol.SMB) "\\" else "/", "")
                     listCurrent()
                 }) }, enabled = !busy) { Icon(Icons.Default.ArrowUpward, "Up") }
-                IconButton({ nameDialog = "mkdir" to "" }, enabled = !busy) { Icon(Icons.Default.CreateNewFolder, "New folder") }
+                IconButton({ nameDialog = Triple("mkdir", "", false) }, enabled = !busy) { Icon(Icons.Default.CreateNewFolder, "New folder") }
                 IconButton({ uploadPicker.launch("*/*") }, enabled = !busy) { Icon(Icons.Default.Upload, "Upload") }
                 IconButton({ refresh() }, enabled = !busy) { Icon(Icons.Default.Refresh, "Refresh") }
                 if (busy) IconButton({
@@ -339,7 +339,7 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
                                     IconButton({ menu = true }) { Icon(Icons.Default.MoreVert, "Actions") }
                                     DropdownMenu(menu, { menu = false }) {
                                         if (!entry.dir) DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; download(entry) })
-                                        DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; nameDialog = "rename" to entry.name })
+                                        DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; nameDialog = Triple("rename", entry.name, entry.dir) })
                                         DropdownMenuItem(text = { Text("Delete", color = Color(0xFFFF6B6B)) }, onClick = { menu = false; deleteTarget = entry })
                                     }
                                 }
@@ -351,7 +351,7 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
         }
     }
 
-    nameDialog?.let { (mode, initial) ->
+    nameDialog?.let { (mode, initial, isDirectory) ->
         var value by remember(mode, initial) { mutableStateOf(initial) }
         AlertDialog(
             onDismissRequest = { nameDialog = null },
@@ -365,7 +365,7 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
                         when (protocol) {
                             StorageProtocol.FTP, StorageProtocol.FTPS -> if (mode == "mkdir") ftp.mkdir(newName) else ftp.rename(initial, newName)
                             StorageProtocol.SFTP -> if (mode == "mkdir") sftp.createDirectory(remote(newName)) else sftp.rename(remote(initial), remote(newName))
-                            StorageProtocol.SMB -> if (mode == "mkdir") smb.createDirectory(remote(newName)) else smb.rename(remote(initial), remote(newName))
+                            StorageProtocol.SMB -> if (mode == "mkdir") smb.createDirectory(remote(newName)) else smb.rename(remote(initial), remote(newName), isDirectory)
                             StorageProtocol.WEBDAV -> if (mode == "mkdir") webDav.createDirectory(remote(newName)) else webDav.move(remote(initial), remote(newName))
                         }
                         listCurrent()
