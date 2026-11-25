@@ -33,9 +33,10 @@ class SmbClient {
     private var share: DiskShare? = null
 
     @Synchronized
-    fun connect(host: String, shareName: String, username: String, password: String, domain: String = "") {
+    fun connect(host: String, port: Int, shareName: String, username: String, password: String, domain: String = "") {
         disconnect()
         require(host.isNotBlank() && host.length <= 253 && host.none { it.code < 0x20 }) { "Invalid SMB host" }
+        require(port in 1..65535) { "Invalid SMB port" }
         require(shareName.isNotBlank() && shareName.length <= 80 && shareName.none { it == '/' || it == '\\' || it.code < 0x20 }) { "Invalid SMB share name" }
         require(username.isNotBlank() && username.none { it.code < 0x20 }) { "Invalid SMB username" }
         // Require SMB3 encryption and signing; do not silently downgrade to SMB2/unencrypted SMB.
@@ -48,7 +49,7 @@ class SmbClient {
             .build()
         val smbClient = SMBClient(config)
         try {
-            val conn = smbClient.connect(host)
+            val conn = smbClient.connect(host, port)
             val session = conn.authenticate(AuthenticationContext(username, password.toCharArray(), domain))
             val disk = session.connectShare(shareName) as? DiskShare
                 ?: throw SmbException("The selected SMB share is not a disk share")
