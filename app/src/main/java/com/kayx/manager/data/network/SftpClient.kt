@@ -105,6 +105,51 @@ class SftpClient {
         }
     }
 
+    /**
+     * Resume into a caller-persisted temporary sibling. The remote temporary size must
+     * exactly match [offset]; the destination is published only after final size verification.
+     */
+    fun uploadResumable(
+        remotePath: String,
+        temporaryPath: String,
+        input: InputStream,
+        offset: Long,
+        totalSize: Long,
+        onBytes: (Long) -> Unit = {}
+    ) {
+        validateSftpPath(remotePath)
+        validateSftpPath(temporaryPath)
+        require(remotePath != temporaryPath) { "Temporary upload path must differ from destination" }
+        require(offset >= 0L && totalSize >= 0L && offset <= totalSize) { "Invalid upload resume range" }
+        val sftp = requireChannel()
+        val remoteSize = runCatching { sftp.stat(temporaryPath).size }.getOrElse { failure ->
+            if (failure is com.jcraft.jsch.SftpException && failure.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) 0L
+            else throw failure
+        }
+        if (remoteSize != offset) throw SftpException("Temporary upload size changed; restart this upload")
+        if (offset < totalSize) {
+            val mode = if (offset == 0L) ChannelSftp.OVERWRITE else ChannelSftp.RESUME
+            val buffer = ByteArray(64 * 1024)
+            var sent = 0L
+            sftp.put(temporaryPath, mode).use { output ->
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (sent > totalSize - offset - count) {
+                        throw SftpException("Upload source exceeded the declared size")
+                    }
+                    output.write(buffer, 0, count)
+                    sent += count
+                    onBytes(offset + sent)
+                }
+                output.flush()
+            }
+        }
+        val verifiedSize = sftp.stat(temporaryPath).size
+        if (verifiedSize != totalSize) throw SftpException("Temporary upload size verification failed")
+        sftp.rename(temporaryPath, remotePath)
+    }
+
     fun createDirectory(path: String) { validateSftpPath(path); requireChannel().mkdir(path) }
     fun deleteFile(path: String) { validateSftpPath(path); requireChannel().rm(path) }
     fun deleteDirectory(path: String) { validateSftpPath(path); requireChannel().rmdir(path) }
