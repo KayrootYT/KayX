@@ -4,6 +4,9 @@ import android.content.Context
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.UUID
 import java.io.FilterOutputStream
 import java.io.OutputStream
 import java.util.zip.CRC32
@@ -37,9 +40,27 @@ object ArchiveEdit {
         return name
     }
 
-    fun readEntry(zip: File, name: String): ByteArray = ZipFile(zip).use { z ->
-        val e = z.getEntry(name) ?: error("Entry not found: $name")
-        z.getInputStream(e).use { it.readBytes() }
+    private const val MAX_PREVIEW_BYTES = 64L * 1024 * 1024
+
+    fun readEntry(zip: File, name: String, maxBytes: Long = MAX_PREVIEW_BYTES): ByteArray {
+        require(maxBytes in 1..MAX_PREVIEW_BYTES) { "Preview size limit is invalid" }
+        return ZipFile(zip).use { archive ->
+            val entry = archive.getEntry(safeEntryName(name)) ?: error("Entry not found: $name")
+            require(!entry.isDirectory && entry.size in 0..maxBytes) { "Archive entry is too large to preview" }
+            archive.getInputStream(entry).use { input ->
+                val output = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(32 * 1024)
+                var total = 0L
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    check(count.toLong() <= maxBytes - total) { "Archive entry exceeds preview size limit" }
+                    output.write(buffer, 0, count)
+                    total += count
+                }
+                output.toByteArray()
+            }
+        }
     }
 
     fun extractToCache(ctx: Context, zip: File, name: String): File {
@@ -99,12 +120,12 @@ object ArchiveEdit {
         replace.keys.forEach { safeEntryName(it) }
         add.keys.forEach { safeEntryName(it) }
         rename.forEach { (old, new) -> safeEntryName(old); safeEntryName(new) }
-        val tmp = File(zip.parentFile, zip.name + ".kayx-tmp")
-        tmp.delete()
+        val tmp = File(zip.parentFile, "." + zip.name + ".kayx-tmp-" + UUID.randomUUID())
         var removed = 0
         try {
             ZipFile(zip).use { src ->
-                val cnt = Counting(BufferedOutputStream(FileOutputStream(tmp), 1 shl 16))
+                val fileOutput = FileOutputStream(tmp, false)
+                val cnt = Counting(BufferedOutputStream(fileOutput, 1 shl 16))
                 ZipOutputStream(cnt).use { zos ->
                     val written = HashSet<String>()
                     val en = src.entries()
@@ -133,9 +154,16 @@ object ArchiveEdit {
                         val safeName = safeEntryName(n)
                         if (written.add(safeName)) putBytes(zos, cnt, safeName, safeName.endsWith(".arsc"), b, System.currentTimeMillis())
                     }
+                    zos.finish()
+                    zos.flush()
+                    fileOutput.fd.sync()
                 }
             }
-            check(tmp.renameTo(zip)) { "Could not replace original archive" }
+            try {
+                Files.move(tmp.toPath(), zip.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                Files.move(tmp.toPath(), zip.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
         } catch (t: Throwable) { tmp.delete(); throw t }
         removed
     }
