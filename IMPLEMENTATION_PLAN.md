@@ -73,7 +73,7 @@ A source module is not proof that every workflow is complete or works on every A
 - [x] Add WebDAV resumable downloads using HEAD Content-Length, strong ETag or Last-Modified validators, If-Range, and strict 206 Content-Range validation before appending.
 - [x] Add SMB resumable downloads using an opened-handle size/timestamp fingerprint persisted beside the partial file; reject changed/missing fingerprints and discard mismatched partials.
 - [ ] Add protocol-safe resumable uploads; each needs protocol-specific offset/validator checks before retaining partial data.
-- [ ] Add automated protocol integration tests against disposable FTP/FTPS, SFTP, SMB3 and WebDAV servers; add Android Keystore/device tests.
+- [ ] Add automated protocol integration tests against disposable FTP/FTPS, SFTP, SMB3 and WebDAV servers (local FTP REST resume test added; FTPS/SFTP/SMB3/WebDAV server coverage remains); add Android Keystore/device tests.
 - [ ] Verify the new clients and unified UI with the full Android build, security scan, and physical-device testing before marking Phase 6 complete.
 
 ### Phase 7 — Performance, accessibility and release
