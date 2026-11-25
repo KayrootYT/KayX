@@ -29,9 +29,9 @@ import java.util.concurrent.TimeUnit
 class SmbClient {
     data class Entry(val name: String, val directory: Boolean, val size: Long)
 
-    private var client: SMBClient? = null
-    private var connection: Connection? = null
-    private var share: DiskShare? = null
+    @Volatile private var client: SMBClient? = null
+    @Volatile private var connection: Connection? = null
+    @Volatile private var share: DiskShare? = null
 
     @Synchronized
     fun connect(host: String, port: Int, shareName: String, username: String, password: String, domain: String = "") {
