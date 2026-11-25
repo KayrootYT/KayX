@@ -155,8 +155,8 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
             val resumeKey = MessageDigest.getInstance("SHA-256")
                 .digest(resumeIdentity.toByteArray(Charsets.UTF_8))
                 .take(12).joinToString("") { "%02x".format(it.toInt() and 0xff) }
-            val partial = File(directory, if (resumable) ".${target.name}.$resumeKey.kayx.part" else ".${target.name}.kayx-${System.nanoTime()}.part")
-            val smbMetadata = File(directory, ".${target.name}.$resumeKey.kayx.smbmeta")
+            val partial = File(directory, if (resumable) ".kayx-$resumeKey.part" else ".kayx-${System.nanoTime()}.part")
+            val smbMetadata = File(directory, ".kayx-$resumeKey.smbmeta")
             try {
                 val offset = if (resumable && partial.isFile) partial.length() else 0L
                 FileOutputStream(partial, resumable && offset > 0L).use { output ->
