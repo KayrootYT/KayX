@@ -40,6 +40,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
+import java.security.MessageDigest
 
 private enum class StorageProtocol(val title: String, val defaultPort: String) {
     FTP("FTP", "21"), FTPS("Explicit FTPS", "21"), SFTP("SFTP", "22"), SMB("SMB3", "445"), WEBDAV("WebDAV over HTTPS", "443")
@@ -144,25 +145,48 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
             val directory = File(Environment.getExternalStorageDirectory(), "KayX/network")
             check(directory.isDirectory || directory.mkdirs()) { "Cannot create KayX/network download folder" }
             val target = FileOps.uniqueName(directory, entry.name)
-            // SFTP keeps a stable app-named partial so a retry can continue from its exact byte offset.
-            // Other protocols still use disposable partial files until their resume semantics are verified.
+            // Keep stable partials only for protocols that verify the remote object before resuming.
             val resumableSftp = protocol == StorageProtocol.SFTP
-            val partial = File(directory, if (resumableSftp) ".${target.name}.kayx.part" else ".${target.name}.kayx-${System.nanoTime()}.part")
+            val resumableFtp = protocol == StorageProtocol.FTP || protocol == StorageProtocol.FTPS
+            val resumableSmb = protocol == StorageProtocol.SMB
+            val resumableWebDav = protocol == StorageProtocol.WEBDAV
+            val resumable = resumableSftp || resumableFtp || resumableSmb || resumableWebDav
+            val resumeIdentity = "$profileKey|$path|${entry.name}"
+            val resumeKey = MessageDigest.getInstance("SHA-256")
+                .digest(resumeIdentity.toByteArray(Charsets.UTF_8))
+                .take(12).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            val partial = File(directory, if (resumable) ".kayx-$resumeKey.part" else ".kayx-${System.nanoTime()}.part")
+            val smbMetadata = File(directory, ".kayx-$resumeKey.smbmeta")
             try {
-                val offset = if (resumableSftp && partial.isFile) partial.length() else 0L
-                FileOutputStream(partial, resumableSftp && offset > 0L).use { output ->
+                val offset = if (resumable && partial.isFile) partial.length() else 0L
+                FileOutputStream(partial, resumable && offset > 0L).use { output ->
                     when (protocol) {
-                        StorageProtocol.FTP, StorageProtocol.FTPS -> ftp.download(entry.name, output) { progress = "${entry.name}: ${formatBytes(it)}" }
+                        StorageProtocol.FTP, StorageProtocol.FTPS -> ftp.downloadResumable(entry.name, output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
                         StorageProtocol.SFTP -> sftp.downloadResumable(remote(entry.name), output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
-                        StorageProtocol.SMB -> smb.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
-                        StorageProtocol.WEBDAV -> webDav.download(remote(entry.name), output) { progress = "${entry.name}: ${formatBytes(it)}" }
+                        StorageProtocol.SMB -> {
+                            val expectedFingerprint = if (offset > 0L && smbMetadata.isFile) smbMetadata.readText(Charsets.UTF_8) else null
+                            smb.downloadResumable(remote(entry.name), output, offset, expectedFingerprint, { fingerprint ->
+                                val temporaryMetadata = File(directory, "${smbMetadata.name}.tmp")
+                                FileOutputStream(temporaryMetadata).use { metadataOutput ->
+                                    metadataOutput.write(fingerprint.toByteArray(Charsets.UTF_8))
+                                    metadataOutput.fd.sync()
+                                }
+                                Files.move(temporaryMetadata.toPath(), smbMetadata.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                            }) { progress = "${entry.name}: ${formatBytes(it)}" }
+                        }
+                        StorageProtocol.WEBDAV -> webDav.downloadResumable(remote(entry.name), output, offset) { progress = "${entry.name}: ${formatBytes(it)}" }
                     }
                     output.fd.sync()
                 }
                 Files.move(partial.toPath(), target.toPath())
+                runCatching { smbMetadata.delete() }
             } catch (failure: Throwable) {
-                // Keep only SFTP partials: the client verifies the remote size before resuming.
-                if (!resumableSftp) partial.delete()
+                if (failure is SmbClient.SmbResumeMismatchException) {
+                    runCatching { partial.delete() }
+                    runCatching { smbMetadata.delete() }
+                } else if (!resumable) {
+                    runCatching { partial.delete() }
+                }
                 throw failure
             }
         }, { scope.launch { snack.showSnackbar("Saved to KayX/network/${entry.name}") } })

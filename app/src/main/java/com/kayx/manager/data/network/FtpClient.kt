@@ -236,6 +236,36 @@ class FtpClient {
         }
     }
 
+    /**
+     * Resume a RETR only after the server confirms the current remote size with SIZE.
+     * The caller must append to a partial file whose existing length equals [offset].
+     * Returns the verified remote size; byte callbacks include the starting offset.
+     */
+    fun downloadResumable(remote: String, out: OutputStream, offset: Long, onBytes: (Long) -> Unit = {}): Long {
+        val safeRemote = clean(remote)
+        val (sizeCode, sizeReply) = send("SIZE $safeRemote")
+        if (sizeCode != 213) throw FtpException("Server does not provide a verifiable SIZE response: $sizeReply")
+        val remoteSize = sizeReply.substringAfter(' ', "").trim().toLongOrNull()
+            ?: throw FtpException("Invalid FTP SIZE response")
+        validateFtpResumeOffset(offset, remoteSize)
+        if (offset == remoteSize) return remoteSize
+
+        val ds = openData()
+        activeDataSocket = ds
+        try {
+            if (offset > 0L) expect("REST $offset", 350)
+            val (code, message) = send("RETR $safeRemote")
+            if (code != 150 && code != 125) throw FtpException(message)
+            protectDataSocket(ds).getInputStream().use { copy(it, out) { transferred -> onBytes(offset + transferred) } }
+            val (finalCode, finalMessage) = reply()
+            if (finalCode != 226 && finalCode != 250) throw FtpException(finalMessage)
+            return remoteSize
+        } finally {
+            if (activeDataSocket === ds) activeDataSocket = null
+            runCatching { ds.close() }
+        }
+    }
+
     fun upload(remote: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
         val ds = openData()
         activeDataSocket = ds
@@ -296,6 +326,12 @@ class FtpClient {
         if (name == "." || name == ".." || runCatching { validateFtpRemoteName(name) }.isFailure) return@mapNotNull null
         Entry(name, m.groupValues[1] == "d", m.groupValues[2].toLongOrNull()?.coerceAtLeast(0L) ?: 0L, m.groupValues[3])
     }
+}
+
+internal fun validateFtpResumeOffset(offset: Long, remoteSize: Long): Long {
+    require(remoteSize >= 0L) { "Remote file size is invalid" }
+    require(offset >= 0L && offset <= remoteSize) { "Resume offset is outside the current remote file" }
+    return offset
 }
 
 internal fun validateFtpRemoteName(name: String): String {

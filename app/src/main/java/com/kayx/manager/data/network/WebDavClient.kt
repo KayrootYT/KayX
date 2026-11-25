@@ -70,6 +70,92 @@ class WebDavClient(
         transfer("PUT", resolve(path), input, null, onBytes)
     }
 
+    /**
+     * Resume a download only when HEAD supplies a stable validator and a known length.
+     * A partial response must be 206 with a Content-Range starting at [offset].
+     * If the server ignores Range or the resource changed, no response bytes are appended.
+     */
+    fun downloadResumable(path: String, output: OutputStream, offset: Long, onBytes: (Long) -> Unit = {}): Long {
+        val url = resolve(path)
+        val metadataConnection = open(url, "HEAD")
+        val totalLength: Long
+        val etag: String?
+        val lastModified: String?
+        try {
+            val code = metadataConnection.responseCode
+            if (code !in 200..299) throw WebDavException("WebDAV HEAD failed: HTTP $code")
+            totalLength = metadataConnection.getHeaderFieldLong("Content-Length", -1L)
+            etag = metadataConnection.getHeaderField("ETag")?.trim()?.takeIf { it.isNotEmpty() }
+            lastModified = metadataConnection.getHeaderField("Last-Modified")?.trim()?.takeIf { it.isNotEmpty() }
+        } finally {
+            metadataConnection.disconnect()
+            if (active === metadataConnection) active = null
+        }
+        if (totalLength < 0L) throw WebDavException("WebDAV server did not provide a verifiable Content-Length")
+        validateWebDavResumeOffset(offset, totalLength)
+        if (offset == totalLength) return totalLength
+
+        val strongEtag = etag?.takeIf(::isStrongWebDavEtag)
+        val validator = strongEtag ?: lastModified
+        if (validator == null) {
+            throw WebDavException("WebDAV resume requires a strong ETag or Last-Modified validator")
+        }
+
+        val connection = open(url, "GET")
+        try {
+            if (offset > 0L) {
+                connection.setRequestProperty("Range", "bytes=$offset-")
+                connection.setRequestProperty("If-Range", validator ?: throw WebDavException("Missing WebDAV resume validator"))
+            } else {
+                if (strongEtag != null) connection.setRequestProperty("If-Match", strongEtag)
+                else if (lastModified != null) connection.setRequestProperty("If-Unmodified-Since", lastModified)
+            }
+            val code = connection.responseCode
+            if (offset > 0L) {
+                if (code != 206) throw WebDavException("WebDAV server did not honor the resume range (HTTP $code)")
+                val range = parseWebDavContentRange(connection.getHeaderField("Content-Range"))
+                    ?: throw WebDavException("WebDAV server returned an invalid Content-Range")
+                if (range.start != offset || range.total != totalLength || range.endInclusive != totalLength - 1L) {
+                    throw WebDavException("WebDAV resource changed or returned a mismatched range")
+                }
+            } else if (code != 200) {
+                throw WebDavException("WebDAV download failed: HTTP $code")
+            }
+
+            val responseEtag = connection.getHeaderField("ETag")?.trim()
+            val responseLastModified = connection.getHeaderField("Last-Modified")?.trim()
+            if (strongEtag != null && responseEtag != strongEtag) {
+                throw WebDavException("WebDAV ETag was missing or changed during download")
+            }
+            if (strongEtag == null && responseLastModified != lastModified) {
+                throw WebDavException("WebDAV Last-Modified validator was missing or changed during download")
+            }
+            val expectedBytes = totalLength - offset
+            var transferred = 0L
+            connection.inputStream.use { source ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val count = source.read(buffer)
+                    if (count < 0) break
+                    if (transferred > expectedBytes - count) {
+                        throw WebDavException("WebDAV response exceeded the verified file length")
+                    }
+                    output.write(buffer, 0, count)
+                    transferred += count
+                    onBytes(offset + transferred)
+                }
+            }
+            if (transferred != expectedBytes) {
+                throw WebDavException("WebDAV response length did not match the verified file size")
+            }
+            output.flush()
+            return totalLength
+        } finally {
+            connection.disconnect()
+            if (active === connection) active = null
+        }
+    }
+
     fun createDirectory(path: String) = execute("MKCOL", resolve(path), setOf(201, 200, 405))
     fun delete(path: String) = execute("DELETE", resolve(path), setOf(200, 202, 204))
     fun move(source: String, destination: String, overwrite: Boolean = false) {
@@ -230,6 +316,27 @@ class WebDavClient(
     }
 }
 
+
+
+internal data class WebDavContentRange(val start: Long, val endInclusive: Long, val total: Long)
+
+internal fun parseWebDavContentRange(value: String?): WebDavContentRange? {
+    val match = Regex("^bytes (\\d+)-(\\d+)/(\\d+)$").matchEntire(value?.trim().orEmpty()) ?: return null
+    val start = match.groupValues[1].toLongOrNull() ?: return null
+    val end = match.groupValues[2].toLongOrNull() ?: return null
+    val total = match.groupValues[3].toLongOrNull() ?: return null
+    if (start < 0L || end < start || total <= end) return null
+    return WebDavContentRange(start, end, total)
+}
+
+internal fun validateWebDavResumeOffset(offset: Long, totalLength: Long): Long {
+    require(totalLength >= 0L) { "Remote file size is invalid" }
+    require(offset >= 0L && offset <= totalLength) { "Resume offset is outside the current remote file" }
+    return offset
+}
+
+internal fun isStrongWebDavEtag(value: String?): Boolean =
+    !value.isNullOrBlank() && !value.trim().startsWith("W/", ignoreCase = true)
 
 internal fun validateWebDavServerUrl(serverUrl: String): URI {
     val parsed = runCatching { URI(serverUrl.trim()) }.getOrElse { throw IllegalArgumentException("Invalid WebDAV URL", it) }

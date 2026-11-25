@@ -1,6 +1,8 @@
 package com.kayx.manager.data.network
 
 import com.hierynomus.msfscc.FileAttributes
+import com.hierynomus.msfscc.fileinformation.FileBasicInformation
+import com.hierynomus.msfscc.fileinformation.FileStandardInformation
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2Dialect
 import com.hierynomus.mssmb2.SMB2ShareAccess
@@ -85,6 +87,56 @@ class SmbClient {
         file.use { it.inputStream.use { input -> copy(input, output, onBytes) } }
     }
 
+
+    /**
+     * Resume using a fingerprint captured from the opened SMB file handle.
+     * The caller persists the fingerprint beside the local partial before bytes are copied.
+     */
+    fun downloadResumable(
+        path: String,
+        output: OutputStream,
+        offset: Long,
+        expectedFingerprint: String?,
+        onFingerprint: (String) -> Unit,
+        onBytes: (Long) -> Unit = {}
+    ): Long {
+        val file = requireShare().openFile(
+            validateSmbPath(path), EnumSet.of(com.hierynomus.msdtyp.AccessMask.GENERIC_READ), null,
+            SHARE_ACCESS, FILE_OPEN, EnumSet.of(FILE_NON_DIRECTORY_FILE)
+        )
+        file.use {
+            val fingerprint = smbFileFingerprint(it.getFileInformation(FileStandardInformation::class.java).endOfFile,
+                it.getFileInformation(FileBasicInformation::class.java))
+            val remoteSize = it.getFileInformation(FileStandardInformation::class.java).endOfFile
+            validateSmbResumeOffset(offset, remoteSize)
+            if (!isSmbResumeFingerprintMatch(offset, expectedFingerprint, fingerprint)) {
+                throw SmbResumeMismatchException("SMB remote file changed since the partial download began")
+            }
+            if (offset == 0L) onFingerprint(fingerprint)
+
+            val buffer = ByteArray(64 * 1024)
+            var position = offset
+            while (position < remoteSize) {
+                val count = it.read(buffer, position)
+                if (count <= 0) throw SmbException("SMB download ended before the verified file size")
+                if (position - offset > remoteSize - offset - count) {
+                    throw SmbException("SMB download exceeded the verified file size")
+                }
+                output.write(buffer, 0, count)
+                position += count
+                onBytes(position)
+            }
+            output.flush()
+
+            val finalSize = it.getFileInformation(FileStandardInformation::class.java).endOfFile
+            val finalFingerprint = smbFileFingerprint(finalSize, it.getFileInformation(FileBasicInformation::class.java))
+            if (finalFingerprint != fingerprint) {
+                throw SmbResumeMismatchException("SMB remote file changed during download")
+            }
+            return remoteSize
+        }
+    }
+
     fun upload(path: String, input: InputStream, onBytes: (Long) -> Unit = {}) {
         val target = validateSmbPath(path)
         val temporary = "$target.kayx-part"
@@ -154,6 +206,7 @@ class SmbClient {
     }
 
     class SmbException(message: String) : Exception(message)
+    class SmbResumeMismatchException(message: String) : Exception(message)
 
     private companion object {
         const val MAX_ENTRIES = 5000
@@ -161,6 +214,24 @@ class SmbClient {
             EnumSet.of(FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_SHARE_DELETE)
     }
 }
+
+
+internal fun smbFileFingerprint(size: Long, basic: FileBasicInformation): String =
+    listOf(
+        size,
+        basic.creationTime.windowsTimeStamp,
+        basic.lastWriteTime.windowsTimeStamp,
+        basic.changeTime.windowsTimeStamp
+    ).joinToString(":")
+
+internal fun validateSmbResumeOffset(offset: Long, remoteSize: Long): Long {
+    require(remoteSize >= 0L) { "Remote file size is invalid" }
+    require(offset >= 0L && offset <= remoteSize) { "Resume offset is outside the current remote file" }
+    return offset
+}
+
+internal fun isSmbResumeFingerprintMatch(offset: Long, expected: String?, actual: String): Boolean =
+    offset == 0L || (!expected.isNullOrBlank() && expected == actual)
 
 internal fun validateSmbPath(path: String): String {
     require(path.length <= 4096 && !path.startsWith("/") && !path.startsWith("\\") &&

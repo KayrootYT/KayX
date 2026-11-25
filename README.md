@@ -58,4 +58,5 @@ Open **Tools → Network storage** to connect directly to FTP, explicit FTPS, SF
 - SMB requires SMB3 encryption and signing. SMB servers that cannot negotiate encrypted SMB3 are rejected rather than silently downgraded.
 - WebDAV accepts HTTPS URLs only, uses platform certificate/hostname verification, rejects redirects, and parses server XML with external entities disabled.
 - Remembered passwords are optional and stored using an Android Keystore AES-GCM key. Network storage is optional; local file management remains offline-first.
+- Interrupted downloads can resume for FTP/FTPS, SFTP, SMB3, and WebDAV when the server provides the required size/identity checks; unsafe or changed partials are rejected rather than blindly appended. Resumable uploads are not yet supported.
 - Plain FTP is unencrypted and should only be used on trusted networks.

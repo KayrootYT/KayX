@@ -13,6 +13,28 @@ class WebDavSafetyTest {
         assertThrows(IllegalArgumentException::class.java) { validateWebDavServerUrl("https:///missing-host") }
     }
 
+    @Test fun webDavContentRangeMustBeWellFormedAndBounded() {
+        assertEquals(WebDavContentRange(10L, 19L, 100L), parseWebDavContentRange("bytes 10-19/100"))
+        assertEquals(null, parseWebDavContentRange("bytes 10-19/*"))
+        assertEquals(null, parseWebDavContentRange("bytes 19-10/100"))
+        assertEquals(null, parseWebDavContentRange("bytes 10-100/100"))
+        assertEquals(null, parseWebDavContentRange("items 10-19/100"))
+    }
+
+    @Test fun webDavResumeOffsetMustFitVerifiedLength() {
+        assertEquals(0L, validateWebDavResumeOffset(0L, 100L))
+        assertEquals(100L, validateWebDavResumeOffset(100L, 100L))
+        assertThrows(IllegalArgumentException::class.java) { validateWebDavResumeOffset(-1L, 100L) }
+        assertThrows(IllegalArgumentException::class.java) { validateWebDavResumeOffset(101L, 100L) }
+        assertThrows(IllegalArgumentException::class.java) { validateWebDavResumeOffset(0L, -1L) }
+    }
+
+    @Test fun weakEtagsAreNotAcceptedAsIfRangeValidators() {
+        assertEquals(true, isStrongWebDavEtag("\"revision-1\""))
+        assertEquals(false, isStrongWebDavEtag("W/\"revision-1\""))
+        assertEquals(false, isStrongWebDavEtag(null))
+    }
+
     @Test fun webDavRequiresValidPort() {
         assertEquals(8443, validateWebDavServerUrl("https://files.example.test:8443/dav").port)
         assertThrows(IllegalArgumentException::class.java) { validateWebDavServerUrl("https://files.example.test:99999/dav") }

@@ -69,8 +69,11 @@ A source module is not proof that every workflow is complete or works on every A
 - [x] Add bounded remote listing/path validation and a user-visible cancel action for active transfers.
 - [x] Keep protocols optional and connect directly to user-selected servers; no KayX proxy/server dependency.
 - [x] Add verified-offset resumable SFTP downloads: interrupted partial files are retained, remote size is checked before resuming, and progress continues from the existing byte offset.
-- [ ] Add resumable FTP/FTPS downloads (REST), SMB downloads, WebDAV Range downloads, and protocol-safe resumable uploads; each needs protocol-specific offset/validator checks before retaining partial data.
-- [ ] Add automated protocol integration tests against disposable FTP/FTPS, SFTP, SMB3 and WebDAV servers; add Android Keystore/device tests.
+- [x] Add FTP/FTPS resumable downloads using a server-confirmed SIZE response, validated local offset, and REST before RETR; retain stable partial files only for FTP/FTPS and SFTP.
+- [x] Add WebDAV resumable downloads using HEAD Content-Length, strong ETag or Last-Modified validators, If-Range, and strict 206 Content-Range validation before appending.
+- [x] Add SMB resumable downloads using an opened-handle size/timestamp fingerprint persisted beside the partial file; reject changed/missing fingerprints and discard mismatched partials.
+- [ ] Add protocol-safe resumable uploads; each needs protocol-specific offset/validator checks before retaining partial data.
+- [ ] Add automated protocol integration tests against disposable FTP/FTPS, SFTP, SMB3 and WebDAV servers (local FTP REST resume test added; FTPS/SFTP/SMB3/WebDAV server coverage remains); add Android Keystore/device tests.
 - [ ] Verify the new clients and unified UI with the full Android build, security scan, and physical-device testing before marking Phase 6 complete.
 
 ### Phase 7 — Performance, accessibility and release

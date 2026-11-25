@@ -31,6 +31,21 @@ class NetworkProtocolSafetyTest {
             .forEach { assertThrows(IllegalArgumentException::class.java) { validateSmbPath(it) } }
     }
 
+    @Test fun smbResumeOffsetMustFitCurrentRemoteFile() {
+        assertEquals(0L, validateSmbResumeOffset(0L, 100L))
+        assertEquals(100L, validateSmbResumeOffset(100L, 100L))
+        assertThrows(IllegalArgumentException::class.java) { validateSmbResumeOffset(-1L, 100L) }
+        assertThrows(IllegalArgumentException::class.java) { validateSmbResumeOffset(101L, 100L) }
+        assertThrows(IllegalArgumentException::class.java) { validateSmbResumeOffset(0L, -1L) }
+    }
+
+    @Test fun smbResumeRequiresMatchingPersistedFingerprint() {
+        assertEquals(true, isSmbResumeFingerprintMatch(0L, null, "size:timestamp"))
+        assertEquals(true, isSmbResumeFingerprintMatch(50L, "size:timestamp", "size:timestamp"))
+        assertEquals(false, isSmbResumeFingerprintMatch(50L, null, "size:timestamp"))
+        assertEquals(false, isSmbResumeFingerprintMatch(50L, "old", "new"))
+    }
+
     @Test fun smbNamesRejectSeparatorsAndTraversal() {
         listOf("", ".", "..", "../escape", "folder\\file", "folder/file", "bad\u0000name")
             .forEach { assertEquals(false, validateSmbName(it)) }
