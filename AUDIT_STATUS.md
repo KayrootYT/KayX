@@ -61,9 +61,12 @@ No release-ready claim is made until the fresh CI run and physical-device tests 
 - WebDAV: HTTPS only, platform certificate/hostname verification, redirects disabled, response-size bounds, DOCTYPE/external entity protections, and same-origin response href checks.
 - Remembered network passwords are opt-in and encrypted with an Android Keystore AES-GCM key; credential ciphertext is bound to the connection profile ID.
 - The unified Network Storage screen supports browsing and common file operations; transfer cancellation closes the active protocol connection/request.
-- SFTP downloads now resume from a retained local partial file after checking the current remote file size against the local offset. A JVM test covers negative, valid, and oversized offsets.
-- FTP/FTPS, SMB and WebDAV resumable transfers, plus resumable uploads, remain unimplemented until their server-side offset/validator semantics can be safely verified.
-- **Still pending before Phase 6 completion:** disposable real-server integration tests for all protocols, Android Keystore/device tests, physical-device validation, and final CI on the completed PR head. CI success alone is not a substitute for server/device tests.
+- SFTP downloads resume from a retained local partial file after checking the current remote file size against the local offset. JVM tests cover negative, valid, and oversized offsets.
+- FTP/explicit FTPS downloads use server-confirmed SIZE plus REST offset validation; a disposable local FTP server test exercises SIZE → EPSV → REST → RETR.
+- WebDAV downloads require HEAD Content-Length plus a strong ETag or Last-Modified validator, send If-Range, and reject responses unless HTTP 206 and the complete Content-Range match the expected offset and size.
+- SMB3 downloads use an opened-handle size/timestamp fingerprint persisted beside the local partial; missing or changed fingerprints reject and discard the partial.
+- Resumable uploads remain unimplemented; do not append or overwrite remote partials without a persistent transfer identity and protocol-specific verification.
+- **Still pending before Phase 6 completion:** disposable real-server integration tests for FTPS, SFTP, SMB3 and WebDAV, Android Keystore/device tests, physical-device validation, and final CI on the completed PR head. CI success alone is not a substitute for server/device tests.
 
 
 ## Static scanner findings reviewed
