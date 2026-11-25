@@ -70,6 +70,9 @@ dependencies {
     // RAR 4/5/7 extraction only (RAR archive creation is not supported by this library license).
     implementation("com.github.junrar:junrar:8.1.2")
     implementation("org.tukaani:xz:1.9")
+    // SFTP with strict known_hosts verification and SMB2/3 client support
+    implementation("com.github.mwiede:jsch:0.2.20")
+    implementation("com.hierynomus:smbj:0.13.0")
     // Shizuku (official API + provider) – privileged shell via a user-granted Shizuku service
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")

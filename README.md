@@ -48,3 +48,14 @@ A source module does not guarantee a complete feature. Privileged access, networ
 - **Web functions** (HTML): choose the website root directory, see the preview path, pick what tapping an HTML file does (Ask / Edit / Preview). Preview is served from a loopback-only HTTP server so root-relative links work.
 - **Text editor menu**: File ▸, Search, Syntax, Previous/Next position, Jump to line, Soft wrap, Read-only mode, Smooth mode, Code completion, Preferences, Close file.
 - **Apps**: filter/sort chips scroll horizontally so the last chip is no longer clipped.
+
+## Network storage
+
+Open **Tools → Network storage** to connect directly to FTP, explicit FTPS, SFTP, SMB3, or WebDAV servers.
+
+- Use explicit FTPS for encrypted FTP; the server certificate and hostname are verified.
+- SFTP requires importing an OpenSSH `known_hosts` file containing a host key you verified independently. Unknown keys are rejected.
+- SMB requires SMB3 encryption and signing. SMB servers that cannot negotiate encrypted SMB3 are rejected rather than silently downgraded.
+- WebDAV accepts HTTPS URLs only, uses platform certificate/hostname verification, rejects redirects, and parses server XML with external entities disabled.
+- Remembered passwords are optional and stored using an Android Keystore AES-GCM key. Network storage is optional; local file management remains offline-first.
+- Plain FTP is unencrypted and should only be used on trusted networks.
