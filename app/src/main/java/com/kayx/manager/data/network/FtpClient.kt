@@ -143,9 +143,14 @@ class FtpClient {
             parseFtpPasvPort(m2) ?: throw FtpException("Invalid PASV reply or port")
         }
         val d = Socket()
-        d.connect(InetSocketAddress(host, port), 15_000)
-        d.soTimeout = 30_000
-        return d
+        try {
+            d.connect(InetSocketAddress(host, port), 15_000)
+            d.soTimeout = 30_000
+            return d
+        } catch (failure: Throwable) {
+            runCatching { d.close() }
+            throw failure
+        }
     }
 
     private fun tlsSocket(plain: Socket, tlsHost: String, tlsPort: Int): Socket {
