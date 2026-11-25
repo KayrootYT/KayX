@@ -8,7 +8,6 @@ import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.Base64
-import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
 
@@ -76,9 +75,9 @@ class WebDavClient(
     fun move(source: String, destination: String, overwrite: Boolean = false) {
         val sourceUri = resolve(source)
         val targetUri = resolve(destination)
-        val connection = open(sourceUri.toURL(), "MOVE")
+        val connection = open(sourceUri, "MOVE")
         try {
-            connection.setRequestProperty("Destination", targetUri.toASCIIString())
+            connection.setRequestProperty("Destination", targetUri.toExternalForm())
             connection.setRequestProperty("Overwrite", if (overwrite) "T" else "F")
             val code = connection.responseCode
             if (code !in setOf(201, 204)) throw WebDavException("WebDAV MOVE failed: HTTP $code")
@@ -146,7 +145,7 @@ class WebDavClient(
             path.split('/').none { it == ".." || it == "." }) { "Invalid WebDAV relative path" }
         val encoded = path.split('/').filter { it.isNotEmpty() }.joinToString("/") { encodeSegment(it) }
         val rootPath = if (root.path.endsWith("/")) root.path else root.path + "/"
-        return URI(root.scheme, null, root.host, root.port, rootPath + encoded, root.query, null).toURL()
+        return URL(URI(root.scheme, null, root.host, root.port, rootPath + encoded, root.query, null).toString())
     }
 
     internal fun parseMultistatusForTest(xml: String, requestUrl: URL): List<Entry> = parseMultistatus(xml, requestUrl)
@@ -159,8 +158,6 @@ class WebDavClient(
             setFeature("http://xml.org/sax/features/external-general-entities", false)
             setFeature("http://xml.org/sax/features/external-parameter-entities", false)
             setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-            setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
-            setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
             isXIncludeAware = false
             isExpandEntityReferences = false
         }
