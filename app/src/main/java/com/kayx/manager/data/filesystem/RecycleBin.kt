@@ -130,6 +130,13 @@ object RecycleBin {
     }
 
     @Synchronized
+    fun restoreById(id: String): Result<File> {
+        require(isSafeRecycleEntryId(id)) { "Invalid recycle-bin entry" }
+        val entry = list().firstOrNull { it.id == id } ?: return Result.failure(IllegalStateException("Recycle-bin item no longer exists"))
+        return restore(entry)
+    }
+
+    @Synchronized
     fun restore(e: Entry): Result<File> = runCatching {
         val src = payload(e.id)
         check(src.exists()) { "Item no longer in recycle bin" }
