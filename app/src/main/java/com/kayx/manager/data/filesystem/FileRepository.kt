@@ -115,7 +115,10 @@ class FileRepository {
     suspend fun delete(files: List<File>): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             for (f in files) {
-                if (f.exists()) check(f.deleteRecursively()) { "Could not delete ${f.name}" }
+                currentCoroutineContext().ensureActive()
+                if (f.exists() || java.nio.file.Files.isSymbolicLink(f.toPath())) {
+                    FileOps.deleteTreeCancellable(f)
+                }
             }
         }
     }
