@@ -71,6 +71,7 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
     }
     var showLicenses by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
+    var showAiSettings by remember { mutableStateOf(false) }
     val appInfo = remember { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0) }.getOrNull() }
     val versionName = appInfo?.versionName ?: "—"
     val versionCode = appInfo?.versionCode?.toString() ?: "—"
@@ -282,6 +283,12 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
                 }
             }
 
+            // ---------------- Optional AI ----------------
+            IosSection("AI assistant", "Connect an OpenAI-compatible HTTPS endpoint. AI is disabled by default; local file management never depends on it.") {
+                IosRow("AI provider settings", icon = Icons.Default.AutoAwesome, iconBg = Purple, chevron = true,
+                    subtitle = "Configure endpoint, model and encrypted API key", onClick = { showAiSettings = true })
+            }
+
             // ---------------- About ----------------
             IosSection("About", "Beyond File Management.") {
                 IosRow("KayX", icon = Icons.Default.FolderCopy, iconBg = Blue, subtitle = "App version $versionName · Build $versionCode")
@@ -302,6 +309,8 @@ fun SettingsScreen(storageGranted: Boolean, onManageStorage: () -> Unit, onBack:
             }
         }
     }
+
+    if (showAiSettings) AiSettingsDialog { showAiSettings = false }
 
     if (showLicenses) AlertDialog(
         onDismissRequest = { showLicenses = false },
