@@ -152,14 +152,14 @@ AI is an optional extension and must not weaken KayX's offline-first/free produc
 - [x] Build & Test, debug APK artifact verification and Security Scan passed on merge commit `7923e7d` (2026-11-26).
 - [ ] Validate credential save/read/clear and provider requests on a physical Android device with a test endpoint.
 
-### AI Phase 2 — Function calling and tool registry (implementation in review)
+### AI Phase 2 — Function calling and tool registry (merged; CI green)
 - [x] Add OpenAI-compatible strict function definitions and bounded tool-call response parsing.
 - [x] Add a strict app-code allow-listed registry with typed argument validation and unknown-key rejection.
 - [x] Separate read-only and destructive tools; destructive tools require a separate explicit confirmation callback.
 - [x] Add per-tool permission checks, bounded timeouts, coroutine cancellation propagation and sanitized failures.
 - [x] Add metadata-only audit events; no arguments, prompts, credentials or tool results are logged by the registry.
 - [x] Add JVM tests for unknown tools, malformed/missing/oversized arguments, denied permissions, confirmation gates, success, timeout and sanitized exceptions.
-- [ ] Run Build & Test and Security Scan on the final PR head; review any CI failures before merge.
+- [x] Build & Test (including unit tests, APK build and native-library artifact verification) and Security Scan passed on final PR head `88b02f3` (2026-11-26).
 - [ ] Physical-device validation of provider function-call compatibility and real confirmation UI.
 - Note: no production file-operation tools are registered in this phase; registration requires a separately reviewed app implementation.
 
