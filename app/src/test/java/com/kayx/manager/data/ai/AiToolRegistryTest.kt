@@ -136,6 +136,18 @@ class AiToolRegistryTest {
         }
     }
 
+    @Test fun rejectsOversizedToolOutput() = runBlocking {
+        val oversized = object : KayXAiTool {
+            override val spec = AiToolSpec("large_result", "Large result", emptyMap())
+            override suspend fun execute(arguments: Map<String, Any?>, context: AiToolExecutionContext) =
+                "x".repeat(AiToolSpec.MAX_RESULT_CHARS + 1)
+        }
+        assertEquals(
+            AiToolResult.Failed,
+            registry(listOf(oversized)).execute(AiToolCall("1", "large_result", emptyMap()), context())
+        )
+    }
+
     @Test fun propagatesCallerCancellation() = runBlocking {
         val started = CompletableDeferred<Unit>()
         val waiting = object : KayXAiTool {
