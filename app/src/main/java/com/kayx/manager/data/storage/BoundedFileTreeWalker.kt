@@ -19,6 +19,7 @@ internal fun walkFilesBounded(
     root: File,
     maxDepth: Int = 20,
     parallelism: Int = 4,
+    onFileFound: (File) -> Unit = {},
     includeDirectory: (File) -> Boolean = { true }
 ): List<File> {
     require(maxDepth >= 0) { "maxDepth must not be negative" }
@@ -45,7 +46,11 @@ internal fun walkFilesBounded(
 
                     override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
                         if (Thread.currentThread().isInterrupted) return FileVisitResult.TERMINATE
-                        if (attrs.isRegularFile) files.add(file.toFile())
+                        if (attrs.isRegularFile) {
+                            val found = file.toFile()
+                            files.add(found)
+                            onFileFound(found)
+                        }
                         return FileVisitResult.CONTINUE
                     }
 
