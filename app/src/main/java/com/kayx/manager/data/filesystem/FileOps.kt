@@ -170,6 +170,26 @@ object FileOps {
         } else copyFileControlled(src, dest, control, onBytesCopied)
     }
 
+    /** Cancellable post-order source cleanup after a verified move copy. */
+    private fun deleteTreeControlled(root: File, control: TransferControl): Boolean {
+        val pending = ArrayDeque<Pair<File, Boolean>>()
+        pending.addLast(root to false)
+        while (pending.isNotEmpty()) {
+            awaitTransfer(control)
+            val (item, visited) = pending.removeLast()
+            if (java.nio.file.Files.isSymbolicLink(item.toPath()) || !item.isDirectory) {
+                if ((item.exists() || java.nio.file.Files.isSymbolicLink(item.toPath())) && !item.delete()) return false
+            } else if (visited) {
+                if (!item.delete()) return false
+            } else {
+                pending.addLast(item to true)
+                val children = item.listFiles() ?: return false
+                children.forEach { pending.addLast(it to false) }
+            }
+        }
+        return true
+    }
+
     /** Like [copyAny], but removes a half-written destination when the copy fails. */
     private fun copyClean(src: File, dest: File) {
         try { copyAny(src, dest) } catch (e: Exception) { dest.deleteRecursively(); throw e }
@@ -225,7 +245,7 @@ object FileOps {
                         // Once the full destination copy exists and the move is committed, never
                         // delete it merely because source cleanup fails after partial progress.
                         preserveCompletedCopy = true
-                        if (!f.deleteRecursively()) {
+                        if (!deleteTreeControlled(f, control)) {
                             replaceBackup?.let { backup ->
                                 if (backup.exists()) {
                                     val preservedOld = uniqueName(dst, f.name)
