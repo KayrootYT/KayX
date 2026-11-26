@@ -110,6 +110,28 @@ class AiToolRegistryTest {
         assertEquals(AiToolResult.TimedOut, result)
     }
 
+    @Test fun permissionCheckFailureFailsClosed() = runBlocking {
+        val tool = EchoTool()
+        val registry = AiToolRegistry(
+            listOf(tool),
+            AiToolPermissionGate { error("permission backend unavailable") },
+            AiDestructiveConfirmation { _, _ -> true }
+        )
+        assertEquals(AiToolResult.PermissionDenied, registry.execute(call(mapOf("query" to "ok")), context()))
+        assertEquals(0, tool.executions)
+    }
+
+    @Test fun rejectsDuplicateToolNames() {
+        val first = EchoTool()
+        val second = EchoTool()
+        try {
+            registry(listOf(first, second))
+            fail("Duplicate names must be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected: app code must not register ambiguous tools.
+        }
+    }
+
     @Test fun doesNotLeakToolExceptionMessage() = runBlocking {
         val broken = object : KayXAiTool {
             override val spec = AiToolSpec("broken", "Broken test", emptyMap())
