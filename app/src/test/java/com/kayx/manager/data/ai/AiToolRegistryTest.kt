@@ -1,6 +1,10 @@
 package com.kayx.manager.data.ai
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -130,6 +134,23 @@ class AiToolRegistryTest {
         } catch (_: IllegalArgumentException) {
             // Expected: app code must not register ambiguous tools.
         }
+    }
+
+    @Test fun propagatesCallerCancellation() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val waiting = object : KayXAiTool {
+            override val spec = AiToolSpec("waiting", "Wait for cancellation", emptyMap())
+            override suspend fun execute(arguments: Map<String, Any?>, context: AiToolExecutionContext): String {
+                started.complete(Unit)
+                awaitCancellation()
+            }
+        }
+        val job = launch {
+            registry(listOf(waiting)).execute(AiToolCall("1", "waiting", emptyMap()), context())
+        }
+        started.await()
+        job.cancelAndJoin()
+        assertTrue(job.isCancelled)
     }
 
     @Test fun doesNotLeakToolExceptionMessage() = runBlocking {
