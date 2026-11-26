@@ -160,6 +160,52 @@ class SmbClient {
         }
     }
 
+    /**
+     * Resume into a stable temporary sibling. The SMB server's current temporary-file size
+     * must exactly equal [offset]. Data is written at explicit file offsets, then size-checked
+     * before the temporary file is atomically renamed to the destination.
+     */
+    fun uploadResumable(
+        path: String,
+        temporaryPath: String,
+        input: InputStream,
+        offset: Long,
+        totalSize: Long,
+        onBytes: (Long) -> Unit = {}
+    ) {
+        val target = validateSmbPath(path)
+        val temporary = validateSmbPath(temporaryPath)
+        require(target != temporary) { "Temporary upload path must differ from destination" }
+        require(offset >= 0L && totalSize >= 0L && offset <= totalSize) { "Invalid upload resume range" }
+        val disk = requireShare()
+        val disposition = if (offset == 0L) FILE_OVERWRITE_IF else FILE_OPEN
+        val file = disk.openFile(
+            temporary, EnumSet.of(com.hierynomus.msdtyp.AccessMask.GENERIC_WRITE), null,
+            SHARE_ACCESS, disposition, EnumSet.of(FILE_NON_DIRECTORY_FILE)
+        )
+        file.use {
+            val currentSize = it.getFileInformation(FileStandardInformation::class.java).endOfFile
+            validateSmbUploadResumeState(offset, totalSize, currentSize)
+            val buffer = ByteArray(64 * 1024)
+            var position = offset
+            while (position < totalSize) {
+                val count = input.read(buffer, 0, minOf(buffer.size.toLong(), totalSize - position).toInt())
+                if (count < 0) break
+                it.write(buffer, position, 0, count)
+                position += count
+                onBytes(position)
+            }
+            if (position != totalSize) throw SmbException("Upload source ended before the declared size")
+            val finalSize = it.getFileInformation(FileStandardInformation::class.java).endOfFile
+            if (finalSize != totalSize) throw SmbException("Temporary upload size verification failed")
+        }
+        // Rename only after the write handle has closed and the complete size is verified.
+        disk.openFile(
+            temporary, EnumSet.of(com.hierynomus.msdtyp.AccessMask.DELETE), null,
+            SHARE_ACCESS, FILE_OPEN, EnumSet.of(FILE_NON_DIRECTORY_FILE)
+        ).use { it.rename(target, false) }
+    }
+
     fun createDirectory(path: String) = requireShare().mkdir(validateSmbPath(path))
     fun deleteFile(path: String) = requireShare().rm(validateSmbPath(path))
     fun deleteDirectory(path: String) = requireShare().rmdir(validateSmbPath(path), false)
@@ -248,3 +294,9 @@ internal fun validateSmbPath(path: String): String {
 internal fun validateSmbName(name: String): Boolean =
     name.isNotBlank() && name != "." && name != ".." && name.length <= 255 &&
         name.none { it == '/' || it == '\\' || it == '\u0000' || it == '\r' || it == '\n' || it.code < 0x20 }
+
+
+internal fun validateSmbUploadResumeState(offset: Long, totalSize: Long, remoteSize: Long) {
+    require(totalSize >= 0L && offset >= 0L && offset <= totalSize) { "Invalid upload resume range" }
+    require(remoteSize == offset) { "Temporary upload size changed; restart this upload" }
+}
