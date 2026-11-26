@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,8 +62,9 @@ object Thumbs {
     fun trimMemory(level: Int) {
         val current = bitmapCache ?: return
         when {
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> current.evictAll()
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> current.evictAll()
             level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> current.trimToSize(current.maxSize() / 2)
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> current.trimToSize(current.maxSize() / 2)
         }
     }
 
@@ -170,8 +172,13 @@ object Thumbs {
 @Composable
 fun FileThumb(path: String, size: Dp = 44.dp, modifier: Modifier = Modifier, square: Boolean = false) {
     val ctx = LocalContext.current
+    val file = remember(path) { File(path) }
+    val modified = file.lastModified()
+    val length = file.length()
     val ext = path.substringAfterLast('.', "").lowercase()
-    val bmp by produceState<Bitmap?>(null, path) { value = if (Thumbs.hasPreview(ext)) Thumbs.load(ctx, path, ext) else null }
+    val bmp by produceState<Bitmap?>(null, path, modified, length) {
+        value = if (Thumbs.hasPreview(ext)) Thumbs.load(ctx, path, ext) else null
+    }
     val shape = RoundedCornerShape(if (square) 0.dp else 9.dp)
     val sz = if (size == Dp.Unspecified) modifier else modifier.size(size)
     val b = bmp
