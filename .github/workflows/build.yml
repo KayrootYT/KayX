@@ -103,12 +103,17 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort | tail -n 1)"
           test -x "$AAPT"
           "$AAPT" dump permissions "$RELEASE_APK" | grep "uses-permission" | sed -E "s/.*name='([^']+)'.*/\\1/" | sort -u > "$RUNNER_TEMP/kayx-apk-permissions.txt"
+          unreviewed_permissions=0
           while IFS= read -r permission; do
-            grep -Fxq "$permission" docs/APK_PERMISSION_ALLOWLIST.txt || {
+            if ! grep -Fxq "$permission" docs/APK_PERMISSION_ALLOWLIST.txt; then
               echo "::error::Unreviewed permission in APK: $permission"
-              exit 1
-            }
+              unreviewed_permissions=1
+            fi
           done < "$RUNNER_TEMP/kayx-apk-permissions.txt"
+          if [ "$unreviewed_permissions" -ne 0 ]; then
+            echo "::error::Review the complete permission list above; the audit reports all missing entries in one run."
+            exit 1
+          fi
           echo "Verified APK permissions:"
           cat "$RUNNER_TEMP/kayx-apk-permissions.txt"
       - name: Run Android startup smoke and semantics tests
