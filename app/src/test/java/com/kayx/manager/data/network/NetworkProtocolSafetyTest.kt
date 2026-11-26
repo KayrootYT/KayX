@@ -40,6 +40,15 @@ class NetworkProtocolSafetyTest {
             .forEach { assertThrows(IllegalArgumentException::class.java) { validateSmbPath(it) } }
     }
 
+    @Test fun smbUploadResumeRequiresExactTemporarySizeAndValidRange() {
+        validateSmbUploadResumeState(0L, 100L, 0L)
+        validateSmbUploadResumeState(40L, 100L, 40L)
+        validateSmbUploadResumeState(100L, 100L, 100L)
+        assertThrows(IllegalArgumentException::class.java) { validateSmbUploadResumeState(-1L, 100L, 0L) }
+        assertThrows(IllegalArgumentException::class.java) { validateSmbUploadResumeState(101L, 100L, 101L) }
+        assertThrows(IllegalArgumentException::class.java) { validateSmbUploadResumeState(40L, 100L, 39L) }
+    }
+
     @Test fun smbResumeOffsetMustFitCurrentRemoteFile() {
         assertEquals(0L, validateSmbResumeOffset(0L, 100L))
         assertEquals(100L, validateSmbResumeOffset(100L, 100L))
