@@ -187,17 +187,24 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
             } else {
                 digest.update("DIRECTORY".toByteArray(Charsets.UTF_8))
                 val pending = ArrayDeque<File>()
-                target.listFiles()?.sortedByDescending { it.name }?.forEach(pending::addLast)
+                val items = ArrayList<File>()
+                target.listFiles()?.forEach(pending::addLast)
                 while (pending.isNotEmpty()) {
                     if (Thread.currentThread().isInterrupted) throw InterruptedException("Undo fingerprint cancelled")
                     val item = pending.removeLast()
+                    items += item
+                    if (item.isDirectory && !java.nio.file.Files.isSymbolicLink(item.toPath())) {
+                        val children = item.listFiles() ?: error("Cannot read folder ${item.name}")
+                        children.forEach(pending::addLast)
+                    }
+                }
+                // Keep the exact relative-path ordering used by existing journal fingerprints.
+                items.sortedBy { it.relativeTo(target).invariantSeparatorsPath }.forEach { item ->
+                    if (Thread.currentThread().isInterrupted) throw InterruptedException("Undo fingerprint cancelled")
                     val relative = item.relativeTo(target).invariantSeparatorsPath
                     digest.update(relative.toByteArray(Charsets.UTF_8))
                     digest.update((if (item.isDirectory) 1 else 0).toByte())
-                    if (item.isDirectory) {
-                        val children = item.listFiles() ?: error("Cannot read folder ${item.name}")
-                        children.sortedByDescending { it.name }.forEach(pending::addLast)
-                    } else if (item.isFile) {
+                    if (item.isFile) {
                         FileInputStream(item).use { input ->
                             val buffer = ByteArray(64 * 1024)
                             while (true) {
