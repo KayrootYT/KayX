@@ -39,6 +39,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.FileInputStream
+import java.security.DigestInputStream
+import java.util.Properties
 import java.nio.file.Files
 import java.security.MessageDigest
 
@@ -197,16 +200,105 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
             val name = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
-            } ?: "upload.bin"
-            val input = context.contentResolver.openInputStream(uri) ?: error("Cannot read selected file")
-            input.use {
+            }?.takeIf { it.isNotBlank() } ?: "upload.bin"
+            val uploadDirectory = File(context.filesDir, "network/uploads")
+            check(uploadDirectory.isDirectory || uploadDirectory.mkdirs()) { "Cannot create private upload staging folder" }
+            val identity = "$profileKey|$path|$name"
+            val identityKey = MessageDigest.getInstance("SHA-256")
+                .digest(identity.toByteArray(Charsets.UTF_8)).take(12)
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            val staged = File(uploadDirectory, "$identityKey.source")
+            val stagedCandidate = File(uploadDirectory, "$identityKey.source.new")
+            val metadata = File(uploadDirectory, "$identityKey.properties")
+            val digest = MessageDigest.getInstance("SHA-256")
+            context.contentResolver.openInputStream(uri)?.use { source ->
+                FileOutputStream(stagedCandidate).use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = source.read(buffer)
+                        if (count < 0) break
+                        digest.update(buffer, 0, count)
+                        output.write(buffer, 0, count)
+                    }
+                    output.fd.sync()
+                }
+            } ?: error("Cannot read selected file")
+            val sourceHash = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            val sourceSize = stagedCandidate.length()
+            val previous = Properties().apply {
+                if (metadata.isFile) metadata.inputStream().use { load(it) }
+            }
+            val sameSource = staged.isFile && staged.length() == sourceSize &&
+                previous.getProperty("sourceSha256") == sourceHash &&
+                previous.getProperty("profile") == profileKey &&
+                previous.getProperty("destination") == remote(name)
+            if (sameSource) stagedCandidate.delete()
+            else {
+                Files.move(stagedCandidate.toPath(), staged.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                previous.clear()
+            }
+            val destination = remote(name)
+            val suffix = sourceHash.take(20)
+            val temporary = when (protocol) {
+                StorageProtocol.FTP, StorageProtocol.FTPS -> ".kayx-upload-$identityKey-$suffix.part"
+                StorageProtocol.SFTP -> destination.substringBeforeLast('/', "").let { parent ->
+                    if (parent.isEmpty()) ".kayx-upload-$identityKey-$suffix.part" else "$parent/.kayx-upload-$identityKey-$suffix.part"
+                }
+                StorageProtocol.SMB -> destination.substringBeforeLast('\\', "").let { parent ->
+                    if (parent.isEmpty()) ".kayx-upload-$identityKey-$suffix.part" else "$parent\\.kayx-upload-$identityKey-$suffix.part"
+                }
+                StorageProtocol.WEBDAV -> ""
+            }
+            var offset = if (sameSource) previous.getProperty("offset")?.toLongOrNull() ?: 0L else 0L
+            if (offset !in 0L..sourceSize) offset = 0L
+            fun persistUploadState(acknowledged: Long) {
+                previous.setProperty("sourceSha256", sourceHash)
+                previous.setProperty("size", sourceSize.toString())
+                previous.setProperty("profile", profileKey)
+                previous.setProperty("destination", destination)
+                previous.setProperty("temporary", temporary)
+                previous.setProperty("offset", acknowledged.coerceIn(0L, sourceSize).toString())
+                val pending = File(uploadDirectory, "$identityKey.properties.new")
+                FileOutputStream(pending).use { output ->
+                    previous.store(output, "KayX resumable network upload; contains no credentials")
+                    output.fd.sync()
+                }
+                Files.move(pending.toPath(), metadata.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+            }
+            if (!sameSource || previous.getProperty("temporary") != temporary) {
+                offset = 0L
+                previous.clear()
+                persistUploadState(0L)
+            } else {
+                // Ensure the latest source identity and destination are durable before network I/O.
+                persistUploadState(offset)
+            }
+            FileInputStream(staged).use { input ->
+                skipUploadBytes(input, offset)
                 when (protocol) {
-                    StorageProtocol.FTP, StorageProtocol.FTPS -> ftp.upload(name, it) { progress = "$name: ${formatBytes(it)}" }
-                    StorageProtocol.SFTP -> sftp.upload(remote(name), it) { progress = "$name: ${formatBytes(it)}" }
-                    StorageProtocol.SMB -> smb.upload(remote(name), it) { progress = "$name: ${formatBytes(it)}" }
-                    StorageProtocol.WEBDAV -> webDav.upload(remote(name), it) { progress = "$name: ${formatBytes(it)}" }
+                    StorageProtocol.FTP, StorageProtocol.FTPS ->
+                        ftp.uploadResumable(destination, temporary, input, offset, sourceSize) {
+                            persistUploadState(it)
+                            progress = "$name: ${formatBytes(it)} / ${formatBytes(sourceSize)}"
+                        }
+                    StorageProtocol.SFTP ->
+                        sftp.uploadResumable(destination, temporary, input, offset, sourceSize) {
+                            persistUploadState(it)
+                            progress = "$name: ${formatBytes(it)} / ${formatBytes(sourceSize)}"
+                        }
+                    StorageProtocol.SMB ->
+                        smb.uploadResumable(destination, temporary, input, offset, sourceSize) {
+                            persistUploadState(it)
+                            progress = "$name: ${formatBytes(it)} / ${formatBytes(sourceSize)}"
+                        }
+                    StorageProtocol.WEBDAV ->
+                        webDav.upload(destination, input) {
+                            progress = "$name: ${formatBytes(it)} / ${formatBytes(sourceSize)} (WebDAV atomic upload; resume not supported)"
+                        }
                 }
             }
+            staged.delete()
+            metadata.delete()
         }, { listCurrent() })
     }
 
@@ -426,5 +518,18 @@ fun NetworkStorageScreen(onBack: () -> Unit) {
             },
             dismissButton = { TextButton({ deleteTarget = null }) { Text("Cancel") } }
         )
+    }
+}
+
+private fun skipUploadBytes(input: FileInputStream, requested: Long) {
+    var remaining = requested
+    while (remaining > 0L) {
+        val skipped = input.skip(remaining)
+        if (skipped > 0L) {
+            remaining -= skipped
+        } else {
+            if (input.read() < 0) throw IllegalStateException("Staged upload source ended before the saved resume offset")
+            remaining--
+        }
     }
 }
