@@ -67,6 +67,7 @@ import com.kayx.manager.data.storage.formatBytes
 import com.kayx.manager.data.storage.MediaCounts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 
 @Composable
 fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -> Unit = {}, onPush: (String, Tool) -> Unit = { _, _ -> }, onOpen: (String) -> Unit, onSearch: () -> Unit = {}) {
@@ -142,6 +143,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
                 Category.values().forEach { m[it.name] = MediaCounts.category(ctx, it) }
                 QuickAccess.targets.forEach { m["QA:" + it.name] = MediaCounts.folders(ctx, it.dirs) }
                 m["QA:Apps"] = runCatching { ctx.packageManager.getInstalledApplications(0).size }.getOrDefault(0)
+                m["QA:Private"] = runInterruptible { PrivateSpace.fileCount(ctx) }
                 m
             }
         }
@@ -155,7 +157,7 @@ fun HomeScreen(onSettings: () -> Unit, onApps: () -> Unit = {}, onTool: (Tool) -
             CatTile("APKs", Icons.Default.Android, Color(0xFF2ECC71), cnt(Category.APKS), artworkRes = R.drawable.home3d_apks) { onPush(Category.APKS.name, Tool.CATEGORY) },
             CatTile("Archives", Icons.Default.FolderZip, Color(0xFFF2B01E), cnt(Category.ARCHIVES), artworkRes = R.drawable.home3d_archives) { onPush(Category.ARCHIVES.name, Tool.CATEGORY) },
             CatTile("Tags", Icons.AutoMirrored.Filled.Label, Color(0xFF4A90F5), TagStore.totalFiles().toString(), artworkRes = R.drawable.home3d_tags) { onTool(Tool.TAGS) },
-            CatTile("Private space", Icons.Default.Shield, Color(0xFF2ECC71), PrivateSpace.fileCount(ctx).toString(), artworkRes = R.drawable.home3d_private_space) { onTool(Tool.PRIVATE) },
+            CatTile("Private space", Icons.Default.Shield, Color(0xFF2ECC71), num(counts["QA:Private"]), artworkRes = R.drawable.home3d_private_space) { onTool(Tool.PRIVATE) },
         )
         GlassCard(Modifier.fillMaxWidth().animateContentSize(), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(vertical = 14.dp, horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
