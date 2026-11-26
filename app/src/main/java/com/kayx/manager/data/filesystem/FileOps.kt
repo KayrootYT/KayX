@@ -141,9 +141,11 @@ object FileOps {
             for ((index, child) in children.withIndex()) {
                 if (index % 64 == 0) currentCoroutineContext().ensureActive()
                 if (Files.isSymbolicLink(child.toPath())) continue
-                entries++
                 when {
-                    child.isFile -> totalBytes += child.length()
+                    child.isFile -> {
+                        totalBytes += child.length()
+                        entries++
+                    }
                     child.isDirectory -> pending.addLast(child)
                 }
             }
