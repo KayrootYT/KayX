@@ -30,6 +30,26 @@ class FileTransferControlTest {
     }
 
     @Test
+    fun cancellableDeleteRemovesTreeWithoutFollowingSymlinks() = runBlocking {
+        val base = createTempDir(prefix = "kayx-delete-tree-")
+        try {
+            val root = File(base, "root").apply { mkdirs() }
+            File(root, "nested").mkdirs()
+            File(root, "nested/data.txt").writeText("delete")
+            val outside = File(base, "outside.txt").apply { writeText("preserve") }
+            runCatching { java.nio.file.Files.createSymbolicLink(File(root, "external").toPath(), outside.toPath()) }
+
+            FileOps.deleteTreeCancellable(root)
+
+            assertFalse(root.exists())
+            assertTrue(outside.exists())
+            assertEquals("preserve", outside.readText())
+        } finally {
+            base.deleteRecursively()
+        }
+    }
+
+    @Test
     fun cancelledTransferDoesNotLeaveDestinationPayload() {
         val base = createTempDir(prefix = "kayx-transfer-cancel-")
         try {
