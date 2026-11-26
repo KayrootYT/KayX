@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -82,7 +84,7 @@ fun AiSettingsDialog(onDismiss: () -> Unit) {
                     }) { Text("Remove saved API key") }
                 }
                 Spacer(Modifier.height(8.dp))
-                androidx.compose.material3.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     androidx.compose.material3.Switch(checked = enabled, onCheckedChange = { enabled = it; error = null })
                     Spacer(Modifier.width(8.dp))
                     Text("Enable optional AI requests")
