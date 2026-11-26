@@ -20,7 +20,7 @@ data class AiToolSpec(
     val parameters: Map<String, AiArgumentType>,
     val required: Set<String> = emptySet(),
     val access: AiToolAccess = AiToolAccess.READ_ONLY,
-    val requiredPermission: String? = null,
+    val requiredPermission: String = "ai.tool",
     val timeoutMs: Long = DEFAULT_TIMEOUT_MS
 ) {
     init {
@@ -29,7 +29,8 @@ data class AiToolSpec(
         // OpenAI strict function schemas require every declared property to be required.
         require(required == parameters.keys)
         require(timeoutMs in 1..MAX_TIMEOUT_MS)
-        require(requiredPermission == null || requiredPermission.isNotBlank() && requiredPermission.length <= 128)
+        require(requiredPermission.isNotBlank() && requiredPermission.length <= 128)
+        require(parameters.size <= MAX_PARAMETERS)
         parameters.forEach { (key, type) ->
             require(key.matches(Regex("[a-zA-Z][a-zA-Z0-9_]{0,63}")))
             when (type) {
@@ -43,6 +44,7 @@ data class AiToolSpec(
 
     companion object {
         const val DEFAULT_TIMEOUT_MS = 15_000L
+        const val MAX_PARAMETERS = 32
         const val MAX_TIMEOUT_MS = 120_000L
     }
 }
@@ -96,6 +98,7 @@ class AiToolRegistry(
     private val toolsByName: Map<String, KayXAiTool>
 
     init {
+        require(tools.size <= 32) { "Too many AI tools" }
         require(tools.map { it.spec.name }.distinct().size == tools.size) { "Duplicate AI tool name" }
         toolsByName = tools.associateBy { it.spec.name }
     }
@@ -108,25 +111,23 @@ class AiToolRegistry(
         }
         val tool = toolsByName[call.name] ?: return AiToolResult.Rejected("Tool is not available")
         val spec = tool.spec
+        if (call.arguments.size > AiToolSpec.MAX_PARAMETERS) return AiToolResult.Rejected("Too many arguments")
         val validationError = validateArguments(spec, call.arguments)
         if (validationError != null) {
             recordAudit(spec.name, AiToolAuditOutcome.REJECTED)
             return AiToolResult.Rejected(validationError)
         }
 
-        val permission = spec.requiredPermission
-        if (permission != null) {
-            val granted = try {
-                permissionGate.isGranted(permission)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                false
-            }
-            if (!granted) {
-                recordAudit(spec.name, AiToolAuditOutcome.DENIED)
-                return AiToolResult.PermissionDenied
-            }
+        val granted = try {
+            permissionGate.isGranted(spec.requiredPermission)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            false
+        }
+        if (!granted) {
+            recordAudit(spec.name, AiToolAuditOutcome.DENIED)
+            return AiToolResult.PermissionDenied
         }
         if (spec.access == AiToolAccess.DESTRUCTIVE) {
             val approved = try {
