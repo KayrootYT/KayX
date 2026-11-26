@@ -1,6 +1,7 @@
 package com.kayx.manager.ui
 
 import android.content.Context
+import android.app.ActivityManager
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -39,10 +40,39 @@ import java.io.File
 /** Real preview for images, videos, APKs, PDFs and audio covers; a colored type badge for everything else. */
 object Thumbs {
     private const val PX = 160
-    private val cache = object : LruCache<String, Bitmap>(48 * 1024 * 1024) {
-        override fun sizeOf(key: String, v: Bitmap) = v.byteCount
-    }
+    private const val MAX_CACHE_BYTES = 48 * 1024 * 1024
+    @Volatile private var bitmapCache: LruCache<String, Bitmap>? = null
     private val gate = Semaphore(3)
+
+    private fun cache(ctx: Context): LruCache<String, Bitmap> {
+        bitmapCache?.let { return it }
+        return synchronized(this) {
+            bitmapCache ?: run {
+                val manager = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                val budget = (manager.memoryClass.toLong() * 1024L * 1024L / 8L)
+                    .coerceIn(8L * 1024L * 1024L, MAX_CACHE_BYTES.toLong()).toInt()
+                LruCache<String, Bitmap>(budget) {
+                    override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+                }.also { bitmapCache = it }
+            }
+        }
+    }
+
+    fun trimMemory(level: Int) {
+        val current = bitmapCache ?: return
+        when {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> current.evictAll()
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> current.trimToSize(current.maxSize() / 2)
+        }
+    }
+
+    internal fun sampledSize(width: Int, height: Int, target: Int = PX): Int {
+        if (width <= 0 || height <= 0 || target <= 0) return 1
+        val longest = maxOf(width, height)
+        var sample = 1
+        while (longest / (sample * 2) >= target) sample *= 2
+        return sample
+    }
     private val IMG = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif")
     private val VID = setOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "flv", "m4v", "ts")
     private val AUD = setOf("mp3", "m4a", "flac", "ogg", "opus", "aac", "wav")
@@ -50,12 +80,13 @@ object Thumbs {
     fun hasPreview(ext: String) = ext in IMG || ext in VID || ext == "apk" || ext == "pdf" || ext in AUD
 
     suspend fun load(ctx: Context, path: String, ext: String): Bitmap? {
-        val key = path + File(path).lastModified()
-        cache.get(key)?.let { return it }
+        val file = File(path)
+        val key = "${file.absolutePath}|${file.length()}|${file.lastModified()}|${ext.lowercase()}"
+        cache(ctx).get(key)?.let { return it }
         val bmp = withContext(Dispatchers.IO) {
             gate.withPermit { runCatching { make(ctx, path, ext) }.getOrNull() }
         }
-        if (bmp != null) cache.put(key, bmp)
+        if (bmp != null) cache(ctx).put(key, bmp)
         return bmp
     }
 
@@ -63,17 +94,34 @@ object Thumbs {
         ext in IMG -> {
             val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(path, o)
-            var s = 1
-            while (o.outWidth / (s * 2) >= PX && o.outHeight / (s * 2) >= PX) s *= 2
-            BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = s })
+            BitmapFactory.decodeFile(path, BitmapFactory.Options().apply {
+                inSampleSize = sampledSize(o.outWidth, o.outHeight)
+            })
         }
         ext in VID -> MediaMetadataRetriever().run {
-            try { setDataSource(path); getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.let { Bitmap.createScaledBitmap(it, PX, (PX * it.height / it.width.coerceAtLeast(1)).coerceAtLeast(1), true) } }
-            finally { release() }
+            try {
+                setDataSource(path)
+                getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.let { frame ->
+                    val scale = minOf(1f, PX.toFloat() / maxOf(frame.width, frame.height).coerceAtLeast(1))
+                    val width = (frame.width * scale).toInt().coerceAtLeast(1)
+                    val height = (frame.height * scale).toInt().coerceAtLeast(1)
+                    Bitmap.createScaledBitmap(frame, width, height, true).also {
+                        if (it !== frame) frame.recycle()
+                    }
+                }
+            } finally { release() }
         }
         ext in AUD -> MediaMetadataRetriever().run {
-            try { setDataSource(path); embeddedPicture?.let { BitmapFactory.decodeByteArray(it, 0, it.size, BitmapFactory.Options().apply { inSampleSize = 4 }) } }
-            finally { release() }
+            try {
+                setDataSource(path)
+                embeddedPicture?.let { bytes ->
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
+                        inSampleSize = sampledSize(bounds.outWidth, bounds.outHeight)
+                    })
+                }
+            } finally { release() }
         }
         ext == "apk" -> {
             val pm = ctx.packageManager
@@ -88,7 +136,9 @@ object Thumbs {
         ext == "pdf" -> ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
             PdfRenderer(fd).use { r ->
                 r.openPage(0).use { p ->
-                    val w = PX; val h = (PX * p.height / p.width.coerceAtLeast(1)).coerceAtLeast(1)
+                    val scale = minOf(1f, PX.toFloat() / maxOf(p.width, p.height).coerceAtLeast(1))
+                    val w = (p.width * scale).toInt().coerceAtLeast(1)
+                    val h = (p.height * scale).toInt().coerceAtLeast(1)
                     val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); b.eraseColor(android.graphics.Color.WHITE)
                     p.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY); b
                 }
