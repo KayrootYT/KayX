@@ -747,7 +747,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                 withContext(Dispatchers.IO) {
                     keys.zip(plannedUndoTargets).forEach { (key, target) ->
                         val source = (locationOf(key) as StorageLocation.Local).directory
-                        if (cut) operationJournal?.recordMove(source, target) else operationJournal?.recordCopy(target)
+                        if (cut) operationJournal?.recordMove(source, target)
+                        else runInterruptible { operationJournal?.recordCopy(target) }
                     }
                 }
                 _s.update { it.copy(undoAvailable = operationJournal?.entries()?.isNotEmpty() == true) }
@@ -811,7 +812,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun undoLastOperation() {
         val journal = operationJournal ?: return notify("Undo is not ready")
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { journal.undo() }
+            val result = withContext(Dispatchers.IO) { runInterruptible { journal.undo() } }
             repo.invalidateSearchCache()
             _s.update { it.copy(undoAvailable = journal.entries().isNotEmpty(),
                 message = result.fold({ "Undid " + it.kind.name.lowercase() }, { it.message ?: "Undo failed" })) }
