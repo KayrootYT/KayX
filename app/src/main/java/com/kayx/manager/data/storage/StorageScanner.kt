@@ -86,8 +86,8 @@ object QuickAccess {
 object MediaCounts {
     fun category(ctx: Context, c: Category): Int? = runCatching { StorageScanner.count(c) }.getOrNull()
 
-    fun folders(ctx: Context, dirs: List<File>): Int = dirs.filter { it.isDirectory }.sumOf { d ->
-        runCatching { d.walkTopDown().maxDepth(6).count { it.isFile } }.getOrDefault(0)
+    fun folders(ctx: Context, dirs: List<File>): Int = dirs.filter { it.isDirectory }.sumOf { directory ->
+        runCatching { walkFilesBounded(directory, maxDepth = 6, parallelism = 2).size }.getOrDefault(0)
     }
 }
 
@@ -152,37 +152,21 @@ object StorageScanner {
         return out
     }
 
-    /** Folder walk split across 4 threads (shared storage is slow on one thread). */
+    /** Fixed-size, interruptible traversal; never creates one task per nested directory. */
     private fun walkParallel(root: File): List<ScanFile> {
-        val results = java.util.concurrent.ConcurrentLinkedQueue<ScanFile>()
-        val dirs = ArrayList<File>()
-        fun add(f: File) { results.add(ScanFile(f.absolutePath, f.length(), f.lastModified(), Category.of(f.name))); progress.incrementAndGet() }
-        fun ok(d: File) = d.name != ".Trash" && d.name != ".trashed" && !d.name.startsWith(".thumb") && !(d.parentFile == root && d.name == "Android")
-        fun expand(d: File, depth: Int) {
-            for (c in d.listFiles().orEmpty()) {
-                if (c.isFile) add(c) else if (c.isDirectory && ok(c)) { if (depth < 2) expand(c, depth + 1) else dirs.add(c) }
-            }
+        fun includeDirectory(directory: File): Boolean =
+            directory.name != ".Trash" && directory.name != ".trashed" &&
+                !directory.name.startsWith(".thumb") &&
+                !(directory.parentFile == root && directory.name == "Android")
+
+        val files = walkFilesBounded(root, maxDepth = 20, parallelism = 4, includeDirectory = ::includeDirectory)
+        val results = ArrayList<ScanFile>(files.size)
+        for (file in files) {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException("Storage scan cancelled")
+            results += ScanFile(file.absolutePath, file.length(), file.lastModified(), Category.of(file.name))
+            progress.incrementAndGet()
         }
-        expand(root, 0)
-        val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
-        val futures = dirs.map { d ->
-            pool.submit {
-                runCatching {
-                    Files.walkFileTree(d.toPath(), emptySet(), 20, object : SimpleFileVisitor<Path>() {
-                        override fun preVisitDirectory(dir: Path, a: BasicFileAttributes): FileVisitResult =
-                            if (ok(dir.toFile())) FileVisitResult.CONTINUE else FileVisitResult.SKIP_SUBTREE
-                        override fun visitFile(file: Path, a: BasicFileAttributes): FileVisitResult {
-                            if (a.isRegularFile) { results.add(ScanFile(file.toString(), a.size(), a.lastModifiedTime().toMillis(), Category.of(file.fileName.toString()))); progress.incrementAndGet() }
-                            return FileVisitResult.CONTINUE
-                        }
-                        override fun visitFileFailed(file: Path, exc: java.io.IOException): FileVisitResult = FileVisitResult.CONTINUE
-                    })
-                }
-            }
-        }
-        futures.forEach { runCatching { it.get() } }
-        pool.shutdown()
-        return results.toList()
+        return results
     }
 
     private fun allEntries(): List<ScanFile> = entries ?: synchronized(lock) {
