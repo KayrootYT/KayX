@@ -45,6 +45,8 @@ data class AiToolSpec(
     companion object {
         const val DEFAULT_TIMEOUT_MS = 15_000L
         const val MAX_PARAMETERS = 32
+        const val MAX_TOTAL_ARGUMENT_CHARS = 16_384
+        const val MAX_RESULT_CHARS = 16_384
         const val MAX_TIMEOUT_MS = 120_000L
     }
 }
@@ -146,8 +148,13 @@ class AiToolRegistry(
         recordAudit(spec.name, AiToolAuditOutcome.STARTED)
         return try {
             val value = withTimeout(spec.timeoutMs) { tool.execute(call.arguments.toMap(), context) }
-            recordAudit(spec.name, AiToolAuditOutcome.SUCCEEDED)
-            AiToolResult.Success(value)
+            if (value.length > AiToolSpec.MAX_RESULT_CHARS) {
+                recordAudit(spec.name, AiToolAuditOutcome.FAILED)
+                AiToolResult.Failed
+            } else {
+                recordAudit(spec.name, AiToolAuditOutcome.SUCCEEDED)
+                AiToolResult.Success(value)
+            }
         } catch (_: TimeoutCancellationException) {
             recordAudit(spec.name, AiToolAuditOutcome.TIMED_OUT)
             AiToolResult.TimedOut
@@ -167,6 +174,7 @@ class AiToolRegistry(
 
     private fun validateArguments(spec: AiToolSpec, args: Map<String, Any?>): String? {
         if (args.keys.any { it !in spec.parameters }) return "Unknown argument"
+        if (args.values.filterIsInstance<String>().sumOf { it.length } > AiToolSpec.MAX_TOTAL_ARGUMENT_CHARS) return "Arguments exceed the allowed size"
         if (spec.required.any { it !in args }) return "Required argument is missing"
         for ((key, value) in args) {
             val valid = when (val type = spec.parameters.getValue(key)) {
