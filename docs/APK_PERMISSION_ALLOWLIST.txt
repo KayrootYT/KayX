@@ -1,16 +1,25 @@
 # Permissions intentionally declared by KayX. Any new merged APK permission requires review.
+# Network access for remote storage and update/download workflows.
 android.permission.INTERNET
 android.permission.ACCESS_NETWORK_STATE
+# QR/barcode scanning camera access.
 android.permission.CAMERA
+# Android foreground work and WorkManager scheduling.
 android.permission.FOREGROUND_SERVICE
+android.permission.WAKE_LOCK
+android.permission.RECEIVE_BOOT_COMPLETED
+# Storage and package-management features exposed by KayX.
 android.permission.MANAGE_EXTERNAL_STORAGE
-android.permission.PACKAGE_USAGE_STATS
-android.permission.QUERY_ALL_PACKAGES
 android.permission.READ_EXTERNAL_STORAGE
+android.permission.WRITE_EXTERNAL_STORAGE
 android.permission.READ_MEDIA_AUDIO
 android.permission.READ_MEDIA_IMAGES
 android.permission.READ_MEDIA_VIDEO
-android.permission.RECEIVE_BOOT_COMPLETED
 android.permission.REQUEST_DELETE_PACKAGES
 android.permission.REQUEST_INSTALL_PACKAGES
-android.permission.WRITE_EXTERNAL_STORAGE
+android.permission.QUERY_ALL_PACKAGES
+android.permission.PACKAGE_USAGE_STATS
+# AndroidX Core protects non-exported dynamic receivers with this app-scoped permission.
+com.kayx.manager.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+# Official Shizuku API permission used by the optional user-granted privileged backend.
+moe.shizuku.manager.permission.API_V23
