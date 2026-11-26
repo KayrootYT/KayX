@@ -51,6 +51,15 @@ class FtpClientSafetyTest {
         assertThrows(IllegalArgumentException::class.java) { validateFtpResumeOffset(0L, -1L) }
     }
 
+    @Test fun ftpUploadResumeRequiresExactTemporarySizeAndValidRange() {
+        validateFtpUploadResumeState(0L, 100L, 0L)
+        validateFtpUploadResumeState(40L, 100L, 40L)
+        validateFtpUploadResumeState(100L, 100L, 100L)
+        assertThrows(IllegalArgumentException::class.java) { validateFtpUploadResumeState(-1L, 100L, 0L) }
+        assertThrows(IllegalArgumentException::class.java) { validateFtpUploadResumeState(101L, 100L, 101L) }
+        assertThrows(IllegalArgumentException::class.java) { validateFtpUploadResumeState(40L, 100L, 39L) }
+    }
+
     @Test fun pasvValidatesOctetsAndPort() {
         assertEquals(50000, parseFtpPasvPort("227 Entering Passive Mode (10,0,0,5,195,80)"))
         assertEquals(null, parseFtpPasvPort("227 Entering Passive Mode (999,0,0,5,195,80)"))

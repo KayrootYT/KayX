@@ -105,6 +105,51 @@ class SftpClient {
         }
     }
 
+    /**
+     * Resume into a caller-persisted temporary sibling. The remote temporary size must
+     * exactly match [offset]; the destination is published only after final size verification.
+     */
+    fun uploadResumable(
+        remotePath: String,
+        temporaryPath: String,
+        input: InputStream,
+        offset: Long,
+        totalSize: Long,
+        onBytes: (Long) -> Unit = {}
+    ) {
+        validateSftpPath(remotePath)
+        validateSftpPath(temporaryPath)
+        require(remotePath != temporaryPath) { "Temporary upload path must differ from destination" }
+        require(offset >= 0L && totalSize >= 0L && offset <= totalSize) { "Invalid upload resume range" }
+        val sftp = requireChannel()
+        val remoteSize = runCatching { sftp.stat(temporaryPath).size }.getOrElse { failure ->
+            if (failure is com.jcraft.jsch.SftpException && failure.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) 0L
+            else throw failure
+        }
+        try { validateSftpUploadResumeState(offset, totalSize, remoteSize) } catch (failure: IllegalArgumentException) { throw SftpException(failure.message ?: "Invalid upload resume state") }
+        if (offset < totalSize) {
+            val mode = if (offset == 0L) ChannelSftp.OVERWRITE else ChannelSftp.RESUME
+            val buffer = ByteArray(64 * 1024)
+            var sent = 0L
+            sftp.put(temporaryPath, mode).use { output ->
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (sent > totalSize - offset - count) {
+                        throw SftpException("Upload source exceeded the declared size")
+                    }
+                    output.write(buffer, 0, count)
+                    sent += count
+                    onBytes(offset + sent)
+                }
+                output.flush()
+            }
+        }
+        val verifiedSize = sftp.stat(temporaryPath).size
+        if (verifiedSize != totalSize) throw SftpException("Temporary upload size verification failed")
+        sftp.rename(temporaryPath, remotePath)
+    }
+
     fun createDirectory(path: String) { validateSftpPath(path); requireChannel().mkdir(path) }
     fun deleteFile(path: String) { validateSftpPath(path); requireChannel().rm(path) }
     fun deleteDirectory(path: String) { validateSftpPath(path); requireChannel().rmdir(path) }
@@ -166,4 +211,10 @@ internal fun validateSftpResumeOffset(offset: Long, remoteSize: Long): Long {
     require(remoteSize >= 0L) { "Remote file size is invalid" }
     require(offset <= remoteSize) { "Partial download is larger than the remote file; remove it and retry" }
     return offset
+}
+
+
+internal fun validateSftpUploadResumeState(offset: Long, totalSize: Long, remoteSize: Long) {
+    require(totalSize >= 0L && offset >= 0L && offset <= totalSize) { "Invalid upload resume range" }
+    require(remoteSize == offset) { "Temporary upload size changed; restart this upload" }
 }

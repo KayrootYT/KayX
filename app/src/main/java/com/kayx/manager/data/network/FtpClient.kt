@@ -280,6 +280,58 @@ class FtpClient {
         }
     }
 
+    /**
+     * Resume into a caller-persisted temporary sibling. [offset] must equal the
+     * server-reported temporary size; publication happens only after final SIZE verification.
+     * The caller must persist [temporary] and the acknowledged offset across process restarts.
+     */
+    fun uploadResumable(
+        remote: String,
+        temporary: String,
+        input: InputStream,
+        offset: Long,
+        totalSize: Long,
+        onBytes: (Long) -> Unit = {}
+    ) {
+        val destination = cleanName(remote)
+        val temp = cleanName(temporary)
+        require(temp != destination) { "Temporary upload name must differ from destination" }
+        require(offset >= 0L && totalSize >= 0L && offset <= totalSize) { "Invalid upload resume range" }
+        val (sizeCode, sizeReply) = send("SIZE $temp")
+        val remoteSize = when (sizeCode) {
+            213 -> sizeReply.substringAfter(' ', "").trim().toLongOrNull()
+                ?: throw FtpException("Invalid temporary upload SIZE response")
+            550 -> 0L
+            else -> throw FtpException("Cannot verify temporary upload size: $sizeReply")
+        }
+        validateFtpUploadResumeState(offset, totalSize, remoteSize)
+        if (offset == totalSize) {
+            rename(temp, destination)
+            return
+        }
+        val ds = openData()
+        activeDataSocket = ds
+        try {
+            val (code, message) = send(if (offset == 0L) "STOR $temp" else "APPE $temp")
+            if (code != 150 && code != 125) throw FtpException(message)
+            protectDataSocket(ds).getOutputStream().use { copy(input, it) { sent ->
+                if (offset > Long.MAX_VALUE - sent || offset + sent > totalSize) {
+                    throw FtpException("Upload source exceeded the declared size")
+                }
+                onBytes(offset + sent)
+            } }
+            val (finalCode, finalMessage) = reply()
+            if (finalCode != 226 && finalCode != 250) throw FtpException(finalMessage)
+        } finally {
+            if (activeDataSocket === ds) activeDataSocket = null
+            runCatching { ds.close() }
+        }
+        val (verifyCode, verifyReply) = send("SIZE $temp")
+        val verifiedSize = if (verifyCode == 213) verifyReply.substringAfter(' ', "").trim().toLongOrNull() else null
+        if (verifiedSize != totalSize) throw FtpException("Temporary upload size verification failed")
+        rename(temp, destination)
+    }
+
     private fun uploadDirect(remote: String, input: InputStream, onBytes: (Long) -> Unit) {
         val ds = openData()
         activeDataSocket = ds
@@ -369,4 +421,10 @@ internal fun parseFtpPasvPort(reply: String): Int? {
         .find(reply)?.groupValues?.drop(1)?.mapNotNull { it.toIntOrNull() } ?: return null
     if (values.size != 6 || values.any { it !in 0..255 }) return null
     return (values[4] * 256 + values[5]).takeIf { it in 1..65535 }
+}
+
+
+internal fun validateFtpUploadResumeState(offset: Long, totalSize: Long, remoteSize: Long) {
+    require(totalSize >= 0L && offset >= 0L && offset <= totalSize) { "Invalid upload resume range" }
+    require(remoteSize == offset) { "Temporary upload size changed; restart this upload" }
 }
