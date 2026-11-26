@@ -22,7 +22,7 @@ data class AiProviderConfig(
         if (!uri.scheme.equals("https", ignoreCase = true)) {
             return Validation.Invalid("AI endpoint must use HTTPS")
         }
-        if (uri.host.isNullOrBlank() || uri.userInfo != null || uri.fragment != null) {
+        if (uri.host.isNullOrBlank() || uri.userInfo != null || uri.fragment != null || uri.query != null) {
             return Validation.Invalid("AI endpoint URL is not allowed")
         }
         if (model.isBlank()) return Validation.Invalid("AI model name is required")
