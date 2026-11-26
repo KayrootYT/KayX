@@ -71,10 +71,11 @@ object PrivateSpace {
     fun hasPin(ctx: Context) = !prefs(ctx).getString("hash", null).isNullOrEmpty()
     fun isUnlocked(): Boolean = PrivateSpaceVault.isUnlocked()
     fun fileCount(ctx: Context): Int {
-        val root = if (isUnlocked()) stagingDir(ctx) else File(ctx.applicationContext.filesDir, "private_space_vault")
-        if (!root.isDirectory) return 0
-        return walkFilesBounded(root, maxDepth = 128, parallelism = 2).count {
-            if (isUnlocked()) true else it.name.endsWith(".kxv")
+        return if (isUnlocked()) {
+            val root = stagingDir(ctx)
+            if (root.isDirectory) walkFilesBounded(root, maxDepth = 128, parallelism = 2).size else 0
+        } else {
+            PrivateSpaceVault.fileCount(ctx)
         }
     }
 
