@@ -103,7 +103,7 @@ fun AiSettingsDialog(onDismiss: () -> Unit) {
                             if (apiKey.isNotBlank()) vault.saveApiKey(apiKey)
                             if (enabled && !vault.hasApiKey()) error("Add an API key before enabling AI")
                             AiSettingsStore.save(context, config)
-                        }.onSuccess(onDismiss).onFailure {
+                        }.onSuccess { onDismiss() }.onFailure {
                             error = it.message ?: "Could not save AI settings"
                         }
                     }
