@@ -116,7 +116,9 @@ object AiLocalRetriever {
         if (terms.isEmpty() || limit <= 0) return emptyList()
         return chunks.mapIndexed { index, chunk ->
             val contentTerms = tokenize(chunk.text)
-            val score = terms.sumOf { term -> contentTerms.count { it == term }.coerceAtMost(4) }
+            val score = if (terms.all { term -> term in contentTerms }) {
+                terms.sumOf { term -> contentTerms.count { it == term }.coerceAtMost(4) }
+            } else 0
             Triple(index, score, chunk)
         }.filter { it.second > 0 }
             .sortedWith(compareByDescending<Triple<Int, Int, AiDocumentChunk>> { it.second }.thenBy { it.first })
