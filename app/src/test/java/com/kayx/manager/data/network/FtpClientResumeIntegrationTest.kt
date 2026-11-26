@@ -105,11 +105,10 @@ class FtpClientResumeIntegrationTest {
                     val writer = BufferedWriter(OutputStreamWriter(control.getOutputStream(), Charsets.UTF_8))
                     fun reply(value: String) {
                         writer.write(value)
-                        writer.write("\\r\\n")
+                        writer.write("\r\n")
                         writer.flush()
                     }
                     var dataServer: ServerSocket? = null
-                    var sizeChecks = 0
                     reply("220 KayX disposable FTP upload test server")
                     while (true) {
                         val command = reader.readLine() ?: break
@@ -125,7 +124,7 @@ class FtpClientResumeIntegrationTest {
                             command == "EPSV" -> {
                                 dataServer?.close()
                                 dataServer = ServerSocket(0)
-                                reply("229 Entering Extended Passive Mode (|||\\${dataServer!!.localPort}|)")
+                                reply("229 Entering Extended Passive Mode (|||${dataServer!!.localPort}|)")
                             }
                             command == "APPE .kayx-upload-test.part" -> {
                                 reply("150 Opening binary data connection")
@@ -177,6 +176,5 @@ class FtpClientResumeIntegrationTest {
         assertNull(serverFailure.get())
     }
 
-    private fun sizeChecksForAssertion(): Int = 2
 
 }
