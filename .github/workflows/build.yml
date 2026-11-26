@@ -75,23 +75,34 @@ jobs:
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             ./gradlew assembleDebug --no-daemon
-          else
-            ./gradlew assembleRelease --no-daemon
+            keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/kayx-ci-release.jks" \
+              -storepass changeit -keypass changeit -alias kayx \
+              -dname "CN=KayX CI Temporary" -keyalg RSA -keysize 2048 -validity 2
+            export KAYX_KEYSTORE_PATH="$RUNNER_TEMP/kayx-ci-release.jks"
+            export KAYX_KEYSTORE_PASSWORD=changeit
+            export KAYX_KEY_ALIAS=kayx
+            export KAYX_KEY_PASSWORD=changeit
           fi
+          ./gradlew assembleRelease --no-daemon
       - name: Verify APK artifact + native libs
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             APK="app/build/outputs/apk/debug/app-debug.apk"
+            RELEASE_APK="app/build/outputs/apk/release/app-release.apk"
           else
             APK="app/build/outputs/apk/release/app-release.apk"
-            APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort | tail -n 1)"
-            "$APKSIGNER" verify --verbose --print-certs "$APK"
+            RELEASE_APK="$APK"
           fi
           test -s "$APK"
+          test -s "$RELEASE_APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$RELEASE_APK"
           unzip -l "$APK" | grep libkayx_core.so
+          unzip -l "$RELEASE_APK" | grep libkayx_core.so
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort | tail -n 1)"
           test -x "$AAPT"
-          "$AAPT" dump permissions "$APK" | grep "uses-permission" | sed -E "s/.*name='([^']+)'.*/\\1/" | sort -u > "$RUNNER_TEMP/kayx-apk-permissions.txt"
+          "$AAPT" dump permissions "$RELEASE_APK" | grep "uses-permission" | sed -E "s/.*name='([^']+)'.*/\\1/" | sort -u > "$RUNNER_TEMP/kayx-apk-permissions.txt"
           while IFS= read -r permission; do
             grep -Fxq "$permission" docs/APK_PERMISSION_ALLOWLIST.txt || {
               echo "::error::Unreviewed permission in APK: $permission"
