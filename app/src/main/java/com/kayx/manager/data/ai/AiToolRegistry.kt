@@ -26,7 +26,8 @@ data class AiToolSpec(
     init {
         require(name.matches(Regex("[a-zA-Z][a-zA-Z0-9_]{0,63}")))
         require(description.isNotBlank() && description.length <= 512)
-        require(required.all(parameters::containsKey))
+        // OpenAI strict function schemas require every declared property to be required.
+        require(required == parameters.keys)
         require(timeoutMs in 1..MAX_TIMEOUT_MS)
         require(requiredPermission == null || requiredPermission.isNotBlank() && requiredPermission.length <= 128)
         parameters.forEach { (key, type) ->
