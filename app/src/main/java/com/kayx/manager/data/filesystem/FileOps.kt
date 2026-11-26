@@ -3,6 +3,11 @@ package com.kayx.manager.data.filesystem
 import android.system.Os
 import com.kayx.manager.domain.model.FileItem
 import java.io.File
+import java.nio.file.Files
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 
 enum class Conflict { REPLACE, KEEP_BOTH, SKIP }
 
@@ -34,6 +39,33 @@ object FileOps {
         var size = 0L; var n = 0
         f.walkTopDown().forEach { if (it != f) { n++; if (it.isFile) size += it.length() } }
         return size to n
+    }
+
+    /** Cancellable, symlink-safe folder metrics for properties screens and large selections. */
+    suspend fun sizeAndCountCancellable(root: File): Pair<Long, Int> = withContext(Dispatchers.IO) {
+        if (Files.isSymbolicLink(root.toPath())) return@withContext 0L to 0
+        if (root.isFile) return@withContext root.length() to 1
+        if (!root.isDirectory) return@withContext 0L to 0
+
+        var totalBytes = 0L
+        var entries = 0
+        val pending = ArrayDeque<File>()
+        pending.addLast(root)
+        while (pending.isNotEmpty()) {
+            currentCoroutineContext().ensureActive()
+            val directory = pending.removeLast()
+            val children = directory.listFiles() ?: continue
+            for ((index, child) in children.withIndex()) {
+                if (index % 64 == 0) currentCoroutineContext().ensureActive()
+                if (Files.isSymbolicLink(child.toPath())) continue
+                entries++
+                when {
+                    child.isFile -> totalBytes += child.length()
+                    child.isDirectory -> pending.addLast(child)
+                }
+            }
+        }
+        totalBytes to entries
     }
 
     fun modeOf(f: File): Int? = runCatching { Os.stat(f.absolutePath).st_mode and 0xFFF }.getOrNull()
