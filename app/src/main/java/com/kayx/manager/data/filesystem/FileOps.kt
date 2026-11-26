@@ -41,6 +41,67 @@ object FileOps {
         return size to n
     }
 
+    private fun checkThreadNotInterrupted() {
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("File operation cancelled")
+    }
+
+    /** Interruptible, symlink-safe copy used by synchronous recovery operations on IO threads. */
+    fun copyTreeInterruptible(source: File, destination: File) {
+        require(source.exists() && !Files.isSymbolicLink(source.toPath())) { "Invalid copy source" }
+        val pending = ArrayDeque<Pair<File, File>>()
+        pending.addLast(source to destination)
+        while (pending.isNotEmpty()) {
+            checkThreadNotInterrupted()
+            val (src, dst) = pending.removeLast()
+            require(!Files.isSymbolicLink(src.toPath())) { "Symbolic links are not copied" }
+            if (src.isDirectory) {
+                check(dst.mkdirs() || dst.isDirectory) { "Cannot create folder ${dst.name}" }
+                val children = src.listFiles() ?: error("Cannot read folder ${src.name}")
+                children.sortedByDescending { it.name }.forEach { child ->
+                    pending.addLast(child to File(dst, child.name))
+                }
+            } else if (src.isFile) {
+                dst.parentFile?.let { check(it.mkdirs() || it.isDirectory) }
+                src.inputStream().buffered().use { input ->
+                    java.io.FileOutputStream(dst).buffered().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            checkThreadNotInterrupted()
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                        }
+                        output.flush()
+                    }
+                }
+                dst.setLastModified(src.lastModified())
+            } else {
+                error("Unsupported file type: ${src.name}")
+            }
+        }
+    }
+
+    /** Interruptible post-order deletion for synchronous IO workers. */
+    fun deleteTreeInterruptible(root: File): Boolean {
+        if (!root.exists() && !Files.isSymbolicLink(root.toPath())) return true
+        val pending = ArrayDeque<Pair<File, Boolean>>()
+        pending.addLast(root to false)
+        while (pending.isNotEmpty()) {
+            checkThreadNotInterrupted()
+            val (item, visited) = pending.removeLast()
+            if (Files.isSymbolicLink(item.toPath()) || !item.isDirectory) {
+                if ((item.exists() || Files.isSymbolicLink(item.toPath())) && !item.delete()) return false
+            } else if (visited) {
+                if (!item.delete()) return false
+            } else {
+                pending.addLast(item to true)
+                val children = item.listFiles() ?: return false
+                children.forEach { pending.addLast(it to false) }
+            }
+        }
+        return true
+    }
+
     /** Cancellable post-order deletion. Symbolic links are unlinked, never traversed. */
     suspend fun deleteTreeCancellable(root: File) = withContext(Dispatchers.IO) {
         if (!root.exists() && !Files.isSymbolicLink(root.toPath())) return@withContext
