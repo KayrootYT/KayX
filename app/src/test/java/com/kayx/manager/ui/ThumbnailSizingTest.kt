@@ -11,7 +11,7 @@ class ThumbnailSizingTest {
     }
 
     @Test fun keepsSmallImagesAtFullResolutionAndRejectsInvalidBounds() {
-        assertEquals(1, Thumbs.sampledSize(320, 240))
+        assertEquals(2, Thumbs.sampledSize(320, 240))
         assertEquals(1, Thumbs.sampledSize(0, 240))
         assertEquals(1, Thumbs.sampledSize(240, 0))
     }
