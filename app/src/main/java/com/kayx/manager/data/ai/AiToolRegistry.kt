@@ -28,6 +28,7 @@ data class AiToolSpec(
         require(description.isNotBlank() && description.length <= 512)
         require(required.all(parameters::containsKey))
         require(timeoutMs in 1..MAX_TIMEOUT_MS)
+        require(requiredPermission == null || requiredPermission.isNotBlank() && requiredPermission.length <= 128)
         parameters.forEach { (key, type) ->
             require(key.matches(Regex("[a-zA-Z][a-zA-Z0-9_]{0,63}")))
             when (type) {
@@ -101,42 +102,65 @@ class AiToolRegistry(
     fun definitions(): List<AiToolSpec> = toolsByName.values.map { it.spec }
 
     suspend fun execute(call: AiToolCall, context: AiToolExecutionContext): AiToolResult {
+        if (call.id.isBlank() || call.id.length > 128 || context.requestId.isBlank() || context.requestId.length > 128) {
+            return AiToolResult.Rejected("Invalid tool call")
+        }
         val tool = toolsByName[call.name] ?: return AiToolResult.Rejected("Tool is not available")
         val spec = tool.spec
         val validationError = validateArguments(spec, call.arguments)
         if (validationError != null) {
-            audit.record(spec.name, AiToolAuditOutcome.REJECTED)
+            recordAudit(spec.name, AiToolAuditOutcome.REJECTED)
             return AiToolResult.Rejected(validationError)
         }
 
         val permission = spec.requiredPermission
-        if (permission != null && !permissionGate.isGranted(permission)) {
-            audit.record(spec.name, AiToolAuditOutcome.DENIED)
-            return AiToolResult.PermissionDenied
+        if (permission != null) {
+            val granted = try {
+                permissionGate.isGranted(permission)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
+            if (!granted) {
+                recordAudit(spec.name, AiToolAuditOutcome.DENIED)
+                return AiToolResult.PermissionDenied
+            }
         }
         if (spec.access == AiToolAccess.DESTRUCTIVE) {
-            val approved = confirmation.confirm(spec.name, tool.confirmationSummary(call.arguments))
+            val approved = try {
+                confirmation.confirm(spec.name, tool.confirmationSummary(call.arguments).take(256))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
             if (!approved) {
-                audit.record(spec.name, AiToolAuditOutcome.DENIED)
+                recordAudit(spec.name, AiToolAuditOutcome.DENIED)
                 return AiToolResult.ConfirmationRequired
             }
         }
 
-        audit.record(spec.name, AiToolAuditOutcome.STARTED)
+        recordAudit(spec.name, AiToolAuditOutcome.STARTED)
         return try {
             val value = withTimeout(spec.timeoutMs) { tool.execute(call.arguments.toMap(), context) }
-            audit.record(spec.name, AiToolAuditOutcome.SUCCEEDED)
+            recordAudit(spec.name, AiToolAuditOutcome.SUCCEEDED)
             AiToolResult.Success(value)
         } catch (_: TimeoutCancellationException) {
-            audit.record(spec.name, AiToolAuditOutcome.TIMED_OUT)
+            recordAudit(spec.name, AiToolAuditOutcome.TIMED_OUT)
             AiToolResult.TimedOut
         } catch (cancelled: CancellationException) {
-            audit.record(spec.name, AiToolAuditOutcome.CANCELLED)
+            recordAudit(spec.name, AiToolAuditOutcome.CANCELLED)
             throw cancelled
         } catch (_: Exception) {
-            audit.record(spec.name, AiToolAuditOutcome.FAILED)
+            recordAudit(spec.name, AiToolAuditOutcome.FAILED)
             AiToolResult.Failed
         }
+    }
+
+    private fun recordAudit(toolName: String, outcome: AiToolAuditOutcome) {
+        // An audit sink must never crash execution or receive sensitive payloads.
+        runCatching { audit.record(toolName, outcome) }
     }
 
     private fun validateArguments(spec: AiToolSpec, args: Map<String, Any?>): String? {
@@ -146,9 +170,9 @@ class AiToolRegistry(
             val valid = when (val type = spec.parameters.getValue(key)) {
                 is AiArgumentType.Text -> value is String && value.length <= type.maxLength &&
                     (type.allowedValues == null || value in type.allowedValues)
-                is AiArgumentType.Integer -> value is Long && value in type.min..type.max
-                is AiArgumentType.Decimal -> value is Double && value.isFinite() &&
-                    value >= type.min && value <= type.max
+                is AiArgumentType.Integer -> value is Long && value >= type.min && value <= type.max
+                is AiArgumentType.Decimal -> value is Number && value.toDouble().isFinite() &&
+                    value.toDouble() >= type.min && value.toDouble() <= type.max
                 AiArgumentType.BooleanValue -> value is Boolean
             }
             if (!valid) return "Invalid argument: $key"
