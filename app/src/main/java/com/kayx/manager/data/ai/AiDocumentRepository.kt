@@ -49,7 +49,7 @@ class AiDocumentRepository(
                     .trim()
                 if (normalized.isBlank()) return AiDocumentResult.Failure("The selected document contains no readable text")
                 if (normalized.length > MAX_DOCUMENT_CHARS) {
-                    return AiDocumentResult.Failure("Document exceeds the 1,000,000 character processing limit")
+                    return AiDocumentResult.Failure("Document exceeds the 120,000 character processing limit")
                 }
                 AiDocumentResult.Success(
                     AiDocumentLoadResult(displayName.take(256), chunk(displayName, normalized), normalized.length)
@@ -132,6 +132,7 @@ object AiLocalRetriever {
 object AiDocumentShareGate {
     fun contextForRemoteRequest(chunks: List<AiDocumentChunk>, consentGranted: Boolean): String {
         require(consentGranted) { "Explicit document-sharing consent is required" }
+        require(chunks.isNotEmpty()) { "No document excerpts were selected" }
         return chunks.joinToString("\n\n") { "[Source: ${it.documentName} · chunk ${it.index + 1}]\n${it.text}" }
             .take(MAX_SHARED_CONTEXT_CHARS)
     }
