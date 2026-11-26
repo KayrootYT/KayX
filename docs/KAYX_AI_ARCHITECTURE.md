@@ -35,7 +35,9 @@ KayX UI
 - `AiToolRegistry` rejects unknown tools/arguments and wrong types, checks declared permissions, enforces timeouts/cancellation, and requires explicit confirmation for destructive tools.
 - Audit events contain tool names/outcomes only; arguments, prompts, credentials and results are not passed to the audit interface.
 - No file-operation tools are registered by default. The registry is infrastructure, not permission to access user files.
-- File selection/consent UX and RAG ingestion.
+- Phase 3 currently adds explicit SAF document selection, bounded UTF-8 text ingestion, in-memory chunking, local lexical retrieval and source labels.
+- A fail-closed consent gate is available for constructing bounded remote context, but it is not yet wired to a chat/send flow. This branch does not upload documents.
+- PDF and Office extraction, and physical-device validation remain outstanding.
 - Local vector index and semantic search.
 - Agent loop, MCP, persistent AI memory and workflow orchestration.
 - Physical-device validation and provider contract tests.
