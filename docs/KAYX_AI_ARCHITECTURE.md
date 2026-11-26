@@ -29,9 +29,8 @@ KayX UI
 - `OpenAiCompatibleChatClient` sends bounded, non-streaming Chat Completions requests over HTTPS and does not log prompts, response bodies, or credentials.
 - Transport errors are deliberately sanitized before reaching the UI.
 
-## Not implemented yet
+## Implemented in the current branch
 
-- Physical-device validation of settings and credentials.
 - Function calling is now available through `AiToolChatClient`; only app-registered `AiToolSpec` definitions are sent to the provider.
 - `AiToolRegistry` rejects unknown tools/arguments and wrong types, checks declared permissions, enforces timeouts/cancellation, and requires explicit confirmation for destructive tools.
 - Audit events contain tool names/outcomes only; arguments, prompts, credentials and results are not passed to the audit interface.
