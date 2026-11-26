@@ -5,8 +5,30 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 class FileTransferControlTest {
+    @Test
+    fun cancellableFolderMetricsCountRegularFilesAndDoNotFollowSymlinks() = runBlocking {
+        val base = createTempDir(prefix = "kayx-folder-metrics-")
+        try {
+            val root = File(base, "root").apply { mkdirs() }
+            val nested = File(root, "nested").apply { mkdirs() }
+            File(root, "one.bin").writeBytes(ByteArray(17))
+            File(nested, "two.bin").writeBytes(ByteArray(23))
+            val outside = File(base, "outside.bin").apply { writeBytes(ByteArray(99)) }
+            val link = File(root, "external")
+            val linked = runCatching { java.nio.file.Files.createSymbolicLink(link.toPath(), outside.toPath()) }.isSuccess
+
+            val (bytes, count) = FileOps.sizeAndCountCancellable(root)
+            assertEquals(40L, bytes)
+            assertEquals(2, count)
+            if (linked) assertTrue(link.exists())
+        } finally {
+            base.deleteRecursively()
+        }
+    }
+
     @Test
     fun cancelledTransferDoesNotLeaveDestinationPayload() {
         val base = createTempDir(prefix = "kayx-transfer-cancel-")
