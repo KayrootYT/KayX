@@ -15,7 +15,8 @@ KayX remains an offline-first Android file manager. AI is an optional, user-conf
 KayX UI
   -> AI feature/use cases (later phase)
     -> AiChatClient interface
-      -> OpenAiCompatibleChatClient transport
+      -> AiToolRegistry (strict app-code allow-list, typed validation, permission + confirmation gates)
+      -> OpenAiCompatibleChatClient transport (bounded function-call schema + response parsing)
         -> HTTPS provider endpoint
       -> AiCredentialVault (Android Keystore AES-GCM)
 ```
@@ -28,10 +29,12 @@ KayX UI
 - `OpenAiCompatibleChatClient` sends bounded, non-streaming Chat Completions requests over HTTPS and does not log prompts, response bodies, or credentials.
 - Transport errors are deliberately sanitized before reaching the UI.
 
-## Not implemented yet
+## Implemented in the current branch
 
-- Settings UI for provider/model/key management.
-- Tool registry and function calling.
+- Function calling is now available through `AiToolChatClient`; only app-registered `AiToolSpec` definitions are sent to the provider.
+- `AiToolRegistry` rejects unknown tools/arguments and wrong types, checks declared permissions, enforces timeouts/cancellation, and requires explicit confirmation for destructive tools.
+- Audit events contain tool names/outcomes only; arguments, prompts, credentials and results are not passed to the audit interface.
+- No file-operation tools are registered by default. The registry is infrastructure, not permission to access user files.
 - File selection/consent UX and RAG ingestion.
 - Local vector index and semantic search.
 - Agent loop, MCP, persistent AI memory and workflow orchestration.
