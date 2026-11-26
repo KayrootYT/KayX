@@ -176,7 +176,7 @@ object RecycleBin {
         for (entry in entries) {
             val item = payload(entry.first)
             if (isRecycleExpired(entry.third, now)) {
-                if (!item.exists() || item.deleteRecursively()) removed++
+                if (!item.exists() || FileOps.deleteTreeInterruptible(item)) removed++
                 else keep += entry
             } else if (item.exists()) keep += entry
             // Missing payloads are stale index records and can be dropped safely.
