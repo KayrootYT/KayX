@@ -196,6 +196,7 @@ class SmbClient {
                 onBytes(position)
             }
             if (position != totalSize) throw SmbException("Upload source ended before the declared size")
+            if (input.read() != -1) throw SmbException("Upload source exceeded the declared size")
             val finalSize = it.getFileInformation(FileStandardInformation::class.java).endOfFile
             if (finalSize != totalSize) throw SmbException("Temporary upload size verification failed")
         }
