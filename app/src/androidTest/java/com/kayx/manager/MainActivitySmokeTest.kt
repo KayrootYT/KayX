@@ -3,7 +3,6 @@ package com.kayx.manager
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -20,7 +19,6 @@ class MainActivitySmokeTest {
     @Test
     fun activityStartsAndComposeRootIsRendered() {
         composeRule.waitForIdle()
-        composeRule.onRoot().assertExists()
         val root = composeRule.onRoot(useUnmergedTree = true).fetchSemanticsNode()
         val clickableNodes = flatten(root).filter { it.config.contains(SemanticsActions.OnClick) }
 
@@ -36,8 +34,16 @@ class MainActivitySmokeTest {
         listOf(node) + node.children.flatMap(::flatten)
 
     private fun hasAccessibleName(node: SemanticsNode): Boolean {
-        val text = node.config.getOrNull(SemanticsProperties.Text).orEmpty()
-        val descriptions = node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+        val text = if (node.config.contains(SemanticsProperties.Text)) {
+            node.config[SemanticsProperties.Text]
+        } else {
+            emptyList()
+        }
+        val descriptions = if (node.config.contains(SemanticsProperties.ContentDescription)) {
+            node.config[SemanticsProperties.ContentDescription]
+        } else {
+            emptyList()
+        }
         if (text.any { it.text.isNotBlank() } || descriptions.any { it.isNotBlank() }) return true
         return node.children.any(::hasAccessibleName)
     }
