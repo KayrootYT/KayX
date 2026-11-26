@@ -39,6 +39,10 @@ internal object PrivateSpaceVault {
 
     @Volatile private var sessionKey: ByteArray? = null
 
+    private fun ensureNotInterrupted() {
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("Private-space operation cancelled")
+    }
+
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private fun vaultDir(ctx: Context) = File(ctx.filesDir, "private_space_vault")
     private fun sessionMarker(ctx: Context) = File(ctx.filesDir, "private_space_session.active")
@@ -172,6 +176,7 @@ internal object PrivateSpaceVault {
         fun walk(src: File, dst: File, depth: Int) {
             require(depth <= 128) { "Private space folder nesting exceeds 128 levels" }
             src.listFiles().orEmpty().forEach { item ->
+                ensureNotInterrupted()
                 require(!java.nio.file.Files.isSymbolicLink(item.toPath())) { "Private space cannot contain symbolic links: ${item.name}" }
                 val out = File(dst, item.name + if (item.isFile) EXT else "")
                 if (item.isDirectory) {
@@ -194,6 +199,7 @@ internal object PrivateSpaceVault {
         fun walk(src: File, dst: File, depth: Int) {
             require(depth <= 128) { "Private vault folder nesting exceeds 128 levels" }
             src.listFiles().orEmpty().forEach { item ->
+                ensureNotInterrupted()
                 require(!java.nio.file.Files.isSymbolicLink(item.toPath())) { "Invalid symbolic link in private vault" }
                 if (item.isDirectory) {
                     check(dst.resolve(item.name).mkdirs() || dst.resolve(item.name).isDirectory)
@@ -222,6 +228,7 @@ internal object PrivateSpaceVault {
                 dst.write(iv)
                 val buffer = ByteArray(64 * 1024)
                 while (true) {
+                    ensureNotInterrupted()
                     val n = src.read(buffer)
                     if (n < 0) break
                     cipher.update(buffer, 0, n)?.let { encrypted -> dst.write(encrypted) }
@@ -247,6 +254,7 @@ internal object PrivateSpaceVault {
                 FileOutputStream(temp).use { dst ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
+                        ensureNotInterrupted()
                         val n = src.read(buffer)
                         if (n < 0) break
                         cipher.update(buffer, 0, n)?.let(dst::write)
@@ -275,6 +283,7 @@ internal object PrivateSpaceVault {
         fun walk(dir: File, depth: Int) {
             require(depth <= 128) { "Private space folder nesting exceeds 128 levels" }
             dir.listFiles().orEmpty().forEach { file ->
+                ensureNotInterrupted()
                 require(!java.nio.file.Files.isSymbolicLink(file.toPath()))
                 if (file.isDirectory) walk(file, depth + 1)
                 else if (file.isFile) {
@@ -292,6 +301,7 @@ internal object PrivateSpaceVault {
         file.inputStream().use { input ->
             val buffer = ByteArray(64 * 1024)
             while (true) {
+                ensureNotInterrupted()
                 val n = input.read(buffer)
                 if (n < 0) break
                 md.update(buffer, 0, n)
