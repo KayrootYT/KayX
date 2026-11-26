@@ -41,6 +41,28 @@ object FileOps {
         return size to n
     }
 
+    /** Cancellable post-order deletion. Symbolic links are unlinked, never traversed. */
+    suspend fun deleteTreeCancellable(root: File) = withContext(Dispatchers.IO) {
+        if (!root.exists() && !Files.isSymbolicLink(root.toPath())) return@withContext
+        val pending = ArrayDeque<Pair<File, Boolean>>()
+        pending.addLast(root to false)
+        while (pending.isNotEmpty()) {
+            currentCoroutineContext().ensureActive()
+            val (item, visited) = pending.removeLast()
+            if (Files.isSymbolicLink(item.toPath()) || !item.isDirectory) {
+                if (item.exists() || Files.isSymbolicLink(item.toPath())) {
+                    check(item.delete()) { "Could not delete ${item.name}" }
+                }
+            } else if (visited) {
+                check(item.delete()) { "Could not delete folder ${item.name}" }
+            } else {
+                pending.addLast(item to true)
+                val children = item.listFiles() ?: error("Cannot read folder ${item.name}")
+                children.forEach { pending.addLast(it to false) }
+            }
+        }
+    }
+
     /** Cancellable, symlink-safe folder metrics for properties screens and large selections. */
     suspend fun sizeAndCountCancellable(root: File): Pair<Long, Int> = withContext(Dispatchers.IO) {
         if (Files.isSymbolicLink(root.toPath())) return@withContext 0L to 0
