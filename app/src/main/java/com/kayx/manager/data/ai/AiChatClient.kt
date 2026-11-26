@@ -55,6 +55,7 @@ class OpenAiCompatibleChatClient(
                 connectTimeout = connectTimeoutMs
                 readTimeout = readTimeoutMs
                 doOutput = true
+                instanceFollowRedirects = false
                 setRequestProperty("Authorization", "Bearer $apiKey")
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
@@ -70,8 +71,20 @@ class OpenAiCompatibleChatClient(
             connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
 
             val status = connection.responseCode
+            if (status in 300..399) {
+                return@withContext AiChatResult.Failure("AI provider redirects are not allowed")
+            }
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText().take(MAX_RESPONSE_CHARS) }.orEmpty()
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { reader ->
+                val output = StringBuilder()
+                val buffer = CharArray(4096)
+                while (output.length < MAX_RESPONSE_CHARS) {
+                    val count = reader.read(buffer, 0, minOf(buffer.size, MAX_RESPONSE_CHARS - output.length))
+                    if (count < 0) break
+                    output.append(buffer, 0, count)
+                }
+                output.toString()
+            }.orEmpty()
             if (status !in 200..299) {
                 // Do not echo response headers or request details, which could contain credentials.
                 return@withContext AiChatResult.Failure("AI provider returned HTTP $status")
