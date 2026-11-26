@@ -2,9 +2,11 @@ package com.kayx.manager.data.storage
 
 import java.io.File
 import java.nio.file.Files
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
 
 class BoundedFileTreeWalkerTest {
     @Test fun walksFilesAcrossSubtreesWithoutFollowingSymlinks() {
@@ -20,7 +22,10 @@ class BoundedFileTreeWalkerTest {
             val link = File(root, "linked")
             val symlinkCreated = runCatching { Files.createSymbolicLink(link.toPath(), outside.toPath()) }.isSuccess
 
-            val result = walkFilesBounded(root, maxDepth = 8, parallelism = 2).toSet()
+            val progress = AtomicInteger()
+            val result = walkFilesBounded(root, maxDepth = 8, parallelism = 2,
+                onFileFound = { progress.incrementAndGet() }).toSet()
+            assertEquals(result.size, progress.get())
             assertTrue(a in result)
             assertTrue(b in result)
             if (symlinkCreated) assertFalse(external in result)
