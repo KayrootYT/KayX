@@ -159,7 +159,7 @@ object StorageScanner {
                 !directory.name.startsWith(".thumb") &&
                 !(directory.parentFile == root && directory.name == "Android")
 
-        val files = walkFilesBounded(root, maxDepth = 20, parallelism = 4, includeDirectory = ::includeDirectory)
+        val files = walkFilesBounded(root, maxDepth = 22, parallelism = 4, includeDirectory = ::includeDirectory)
         val results = ArrayList<ScanFile>(files.size)
         for (file in files) {
             if (Thread.currentThread().isInterrupted) throw InterruptedException("Storage scan cancelled")
