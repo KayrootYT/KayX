@@ -89,6 +89,17 @@ jobs:
           fi
           test -s "$APK"
           unzip -l "$APK" | grep libkayx_core.so
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort | tail -n 1)"
+          test -x "$AAPT"
+          "$AAPT" dump permissions "$APK" | grep "uses-permission" | sed -E "s/.*name='([^']+)'.*/\\1/" | sort -u > "$RUNNER_TEMP/kayx-apk-permissions.txt"
+          while IFS= read -r permission; do
+            grep -Fxq "$permission" docs/APK_PERMISSION_ALLOWLIST.txt || {
+              echo "::error::Unreviewed permission in APK: $permission"
+              exit 1
+            }
+          done < "$RUNNER_TEMP/kayx-apk-permissions.txt"
+          echo "Verified APK permissions:"
+          cat "$RUNNER_TEMP/kayx-apk-permissions.txt"
       - name: Run Android startup smoke and semantics tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
