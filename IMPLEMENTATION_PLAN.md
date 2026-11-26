@@ -143,20 +143,25 @@ This update repairs the specific build-log compiler error, improves file-type ic
 
 AI is an optional extension and must not weaken KayX's offline-first/free product rules. The first AI foundation is being delivered separately from existing file-manager phases.
 
-### AI Phase 1 — Provider foundation (in progress)
+### AI Phase 1 — Provider foundation (merged; CI green)
 - [x] Add provider-neutral configuration with HTTPS-only endpoint validation.
 - [x] Add Android Keystore AES-256-GCM storage for API credentials; never persist plaintext keys.
 - [x] Add a provider-neutral chat-client contract and bounded OpenAI-compatible Chat Completions transport.
 - [x] Add Settings entry for optional endpoint/model/key configuration; AI remains disabled by default.
 - [x] Add focused configuration validation unit tests.
-- [ ] Run Build & Test and Security Scan on the final PR head; verify release APK and permission audit.
+- [x] Build & Test, debug APK artifact verification and Security Scan passed on merge commit `7923e7d` (2026-11-26).
 - [ ] Validate credential save/read/clear and provider requests on a physical Android device with a test endpoint.
 
-### AI Phase 2 — Function calling and tool registry
-- [ ] Add a strict allow-listed tool registry with typed arguments and per-tool permission checks.
-- [ ] Separate read-only tools from destructive tools; destructive actions always require explicit user confirmation.
-- [ ] Add schema validation, tool timeouts, cancellation and audit-safe error handling.
-- [ ] Add tests for malformed arguments, unauthorized operations and confirmation gates.
+### AI Phase 2 — Function calling and tool registry (implementation in review)
+- [x] Add OpenAI-compatible strict function definitions and bounded tool-call response parsing.
+- [x] Add a strict app-code allow-listed registry with typed argument validation and unknown-key rejection.
+- [x] Separate read-only and destructive tools; destructive tools require a separate explicit confirmation callback.
+- [x] Add per-tool permission checks, bounded timeouts, coroutine cancellation propagation and sanitized failures.
+- [x] Add metadata-only audit events; no arguments, prompts, credentials or tool results are logged by the registry.
+- [x] Add JVM tests for unknown tools, malformed/missing/oversized arguments, denied permissions, confirmation gates, success, timeout and sanitized exceptions.
+- [ ] Run Build & Test and Security Scan on the final PR head; review any CI failures before merge.
+- [ ] Physical-device validation of provider function-call compatibility and real confirmation UI.
+- Note: no production file-operation tools are registered in this phase; registration requires a separately reviewed app implementation.
 
 ### AI Phase 3 — Document intelligence (RAG)
 - [ ] Add explicit file picker and per-request consent before any document content leaves the device.
