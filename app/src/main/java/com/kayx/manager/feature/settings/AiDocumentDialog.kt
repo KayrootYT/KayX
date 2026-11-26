@@ -72,7 +72,7 @@ fun AiDocumentDialog(onDismiss: () -> Unit) {
                 OutlinedButton(onClick = {
                     picker.launch(arrayOf(
                         "text/*", "application/json", "application/xml",
-                        "application/yaml", "application/x-yaml"
+                        "application/yaml", "application/x-yaml", "*/*"
                     ))
                 }, modifier = Modifier.fillMaxWidth()) { Text("Choose text document") }
                 if (documents.isNotEmpty()) {
@@ -105,7 +105,7 @@ fun AiDocumentDialog(onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    "Supported: TXT, Markdown, CSV, JSON, XML, HTML, logs and common source/config text. PDF and Office files are currently unsupported. Maximum 2 MB per document.",
+                    "Supported: TXT, Markdown, CSV, JSON, XML, HTML, logs and common source/config text. PDF and Office files are currently unsupported. Maximum 2 MB and 120,000 characters per document.",
                     style = MaterialTheme.typography.labelSmall
                 )
             }
