@@ -30,6 +30,27 @@ class FileTransferControlTest {
     }
 
     @Test
+    fun interruptibleTreeCopyPreservesNestedFilesAndTimestamps() {
+        val base = createTempDir(prefix = "kayx-tree-copy-")
+        try {
+            val source = File(base, "source").apply { mkdirs() }
+            val nested = File(source, "nested").apply { mkdirs() }
+            val file = File(nested, "data.txt").apply { writeText("copy-me") }
+            val stamp = file.lastModified()
+            val destination = File(base, "destination")
+
+            FileOps.copyTreeInterruptible(source, destination)
+
+            assertEquals("copy-me", File(destination, "nested/data.txt").readText())
+            assertEquals(stamp, File(destination, "nested/data.txt").lastModified())
+            assertTrue(FileOps.deleteTreeInterruptible(destination))
+            assertFalse(destination.exists())
+        } finally {
+            base.deleteRecursively()
+        }
+    }
+
+    @Test
     fun cancellableDeleteRemovesTreeWithoutFollowingSymlinks() = runBlocking {
         val base = createTempDir(prefix = "kayx-delete-tree-")
         try {
