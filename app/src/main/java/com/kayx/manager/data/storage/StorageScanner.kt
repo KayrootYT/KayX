@@ -14,6 +14,10 @@ import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 
 enum class Category(val label: String, val exts: Set<String>) {
     IMAGES("Images", setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif")),
@@ -86,8 +90,20 @@ object QuickAccess {
 object MediaCounts {
     fun category(ctx: Context, c: Category): Int? = runCatching { StorageScanner.count(c) }.getOrNull()
 
-    fun folders(ctx: Context, dirs: List<File>): Int = dirs.filter { it.isDirectory }.sumOf { directory ->
-        runCatching { walkFilesBounded(directory, maxDepth = 6, parallelism = 2).size }.getOrDefault(0)
+    suspend fun folders(ctx: Context, dirs: List<File>): Int {
+        var total = 0
+        for (directory in dirs) {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (!directory.isDirectory) continue
+            total += try {
+                runInterruptible { walkFilesBounded(directory, maxDepth = 6, parallelism = 2).size }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                0
+            }
+        }
+        return total
     }
 }
 
