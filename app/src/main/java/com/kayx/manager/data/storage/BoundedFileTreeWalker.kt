@@ -28,7 +28,10 @@ internal fun walkFilesBounded(
 
     val files = java.util.concurrent.ConcurrentLinkedQueue<File>()
     val children = root.listFiles()?.toList().orEmpty()
-    children.filter { it.isFile && !Files.isSymbolicLink(it.toPath()) }.forEach(files::add)
+    children.filter { it.isFile && !Files.isSymbolicLink(it.toPath()) }.forEach {
+        files.add(it)
+        onFileFound(it)
+    }
     val directories = children.filter {
         it.isDirectory && !Files.isSymbolicLink(it.toPath()) && includeDirectory(it)
     }
