@@ -191,8 +191,9 @@ class SmbClient {
             while (position < totalSize) {
                 val count = input.read(buffer, 0, minOf(buffer.size.toLong(), totalSize - position).toInt())
                 if (count < 0) break
-                it.write(buffer, position, 0, count)
-                position += count
+                val written = it.write(buffer, position, 0, count)
+                if (written != count.toLong()) throw SmbException("SMB server accepted only a partial write")
+                position += written
                 onBytes(position)
             }
             if (position != totalSize) throw SmbException("Upload source ended before the declared size")
