@@ -1,6 +1,7 @@
 package com.kayx.manager.data.ai
 
 import android.content.Context
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -129,7 +130,7 @@ class OpenAiCompatibleChatClient(
                     val id = item.optString("id")
                     val name = function.optString("name")
                     val rawArguments = function.optString("arguments")
-                    if (id.isBlank() || id.length > 128 || name.isBlank() || name.length > 64 ||
+                    if (!id.matches(Regex("[a-zA-Z0-9_-]{1,128}")) || name.isBlank() || name.length > 64 ||
                         rawArguments.length > MAX_TOOL_ARGUMENT_CHARS
                     ) return@withContext AiChatResult.Failure("AI provider returned an invalid tool call")
                     val args = runCatching { parseFlatArguments(rawArguments) }.getOrNull()
@@ -141,6 +142,8 @@ class OpenAiCompatibleChatClient(
             val text = message.optString("content").orEmpty()
             if (text.isBlank()) AiChatResult.Failure("AI provider returned an empty response")
             else AiChatResult.Success(text)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: java.net.SocketTimeoutException) {
             AiChatResult.Failure("AI request timed out")
         } catch (_: Exception) {
