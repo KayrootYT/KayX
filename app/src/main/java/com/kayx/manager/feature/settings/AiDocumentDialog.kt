@@ -40,9 +40,11 @@ fun AiDocumentDialog(onDismiss: () -> Unit) {
     var error by remember { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
-            val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-                ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
-                ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Selected document"
+            val name = runCatching {
+                context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                    ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            }.getOrNull()?.take(256)
+                ?: uri.lastPathSegment?.substringAfterLast('/')?.take(256) ?: "Selected document"
             when (val result = repository.load(uri, name, context.contentResolver.getType(uri))) {
                 is AiDocumentResult.Success -> {
                     chunks = (chunks + result.document.chunks).takeLast(AiDocumentRepository.MAX_CHUNKS)
