@@ -102,7 +102,7 @@ class AiDocumentRepository(
 
     companion object {
         const val MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
-        const val MAX_DOCUMENT_CHARS = 1_000_000
+        const val MAX_DOCUMENT_CHARS = 120_000
         const val MAX_CHUNKS = 128
         const val CHUNK_SIZE = 1_200
         const val CHUNK_OVERLAP = 160
