@@ -53,6 +53,8 @@ import com.kayx.manager.ui.theme.Accent
 import com.kayx.manager.ui.theme.Fg
 import com.kayx.manager.ui.theme.LocalPalette
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
@@ -652,9 +654,17 @@ internal fun MultiPropertiesDialog(paths: List<String>, onDismiss: () -> Unit) {
         info = withContext(Dispatchers.IO) {
             var folders = 0; var files = 0; var size = 0L
             for (path in paths) {
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 val f = File(path)
-                if (f.isDirectory) { folders++; val (sz, n) = FileOps.sizeAndCount(f); size += sz; files += n }
-                else { files++; size += f.length() }
+                if (f.isDirectory) {
+                    folders++
+                    val (bytes, count) = FileOps.sizeAndCountCancellable(f)
+                    size += bytes
+                    files += count
+                } else if (f.isFile) {
+                    files++
+                    size += f.length()
+                }
             }
             Triple(folders, files, size)
         }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.kayx.manager.data.filesystem.FileOps
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -39,6 +40,10 @@ internal object PrivateSpaceVault {
 
     @Volatile private var sessionKey: ByteArray? = null
 
+    private fun ensureNotInterrupted() {
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("Private-space operation cancelled")
+    }
+
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private fun vaultDir(ctx: Context) = File(ctx.filesDir, "private_space_vault")
     private fun sessionMarker(ctx: Context) = File(ctx.filesDir, "private_space_session.active")
@@ -47,7 +52,7 @@ internal object PrivateSpaceVault {
     fun fileCount(ctx: Context): Int {
         val root = vaultDir(ctx)
         if (!root.isDirectory) return 0
-        return root.walkTopDown().count { it.isFile && it.name.endsWith(EXT) }
+        return walkFilesBounded(root, maxDepth = 128, parallelism = 2).count { it.name.endsWith(EXT) }
     }
 
     @Synchronized fun initialize(ctx: Context, pin: String, stage: File): Result<Unit> {
@@ -131,7 +136,7 @@ internal object PrivateSpaceVault {
         // Remove the marker before wiping plaintext. A crash during deletion then forces a fresh
         // decrypt from the already-committed vault instead of re-encrypting a partial tree.
         check(sessionMarker(ctx).delete() || !sessionMarker(ctx).exists()) { "Could not clear private-space session marker" }
-        check(stage.deleteRecursively()) { "Could not clear plaintext private-space staging files" }
+        check(FileOps.deleteTreeInterruptible(stage)) { "Could not clear plaintext private-space staging files" }
         check(stage.mkdirs()) { "Could not recreate private-space staging directory" }
         sessionKey = null
         key.fill(0)
@@ -163,7 +168,7 @@ internal object PrivateSpaceVault {
             if (hadVault) check(backup.renameTo(vault)) { "Could not restore previous private vault" }
             throw t
         }
-        backup.deleteRecursively()
+        if (backup.exists()) check(FileOps.deleteTreeInterruptible(backup)) { "Could not remove previous private vault backup" }
     }
 
     private fun encryptTree(source: File, target: File, key: ByteArray) {
@@ -172,6 +177,7 @@ internal object PrivateSpaceVault {
         fun walk(src: File, dst: File, depth: Int) {
             require(depth <= 128) { "Private space folder nesting exceeds 128 levels" }
             src.listFiles().orEmpty().forEach { item ->
+                ensureNotInterrupted()
                 require(!java.nio.file.Files.isSymbolicLink(item.toPath())) { "Private space cannot contain symbolic links: ${item.name}" }
                 val out = File(dst, item.name + if (item.isFile) EXT else "")
                 if (item.isDirectory) {
@@ -194,6 +200,7 @@ internal object PrivateSpaceVault {
         fun walk(src: File, dst: File, depth: Int) {
             require(depth <= 128) { "Private vault folder nesting exceeds 128 levels" }
             src.listFiles().orEmpty().forEach { item ->
+                ensureNotInterrupted()
                 require(!java.nio.file.Files.isSymbolicLink(item.toPath())) { "Invalid symbolic link in private vault" }
                 if (item.isDirectory) {
                     check(dst.resolve(item.name).mkdirs() || dst.resolve(item.name).isDirectory)
@@ -222,6 +229,7 @@ internal object PrivateSpaceVault {
                 dst.write(iv)
                 val buffer = ByteArray(64 * 1024)
                 while (true) {
+                    ensureNotInterrupted()
                     val n = src.read(buffer)
                     if (n < 0) break
                     cipher.update(buffer, 0, n)?.let { encrypted -> dst.write(encrypted) }
@@ -247,6 +255,7 @@ internal object PrivateSpaceVault {
                 FileOutputStream(temp).use { dst ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
+                        ensureNotInterrupted()
                         val n = src.read(buffer)
                         if (n < 0) break
                         cipher.update(buffer, 0, n)?.let(dst::write)
@@ -275,6 +284,7 @@ internal object PrivateSpaceVault {
         fun walk(dir: File, depth: Int) {
             require(depth <= 128) { "Private space folder nesting exceeds 128 levels" }
             dir.listFiles().orEmpty().forEach { file ->
+                ensureNotInterrupted()
                 require(!java.nio.file.Files.isSymbolicLink(file.toPath()))
                 if (file.isDirectory) walk(file, depth + 1)
                 else if (file.isFile) {
@@ -292,6 +302,7 @@ internal object PrivateSpaceVault {
         file.inputStream().use { input ->
             val buffer = ByteArray(64 * 1024)
             while (true) {
+                ensureNotInterrupted()
                 val n = input.read(buffer)
                 if (n < 0) break
                 md.update(buffer, 0, n)

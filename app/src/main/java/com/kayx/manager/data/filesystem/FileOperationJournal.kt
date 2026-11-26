@@ -61,7 +61,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
                 require(fingerprint(destination) == entry.fingerprint) {
                     "Copied item changed since the operation; refusing to delete it"
                 }
-                require(destination.deleteRecursively()) { "Could not remove copied item" }
+                require(FileOps.deleteTreeInterruptible(destination)) { "Could not remove copied item" }
             }
         }
         writeEntries(current.dropLast(1))
@@ -69,6 +69,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
     }
 
     private fun append(entry: Entry) {
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("Undo journal operation cancelled")
         require(maxEntries > 0)
         require(entry.destination.isNotBlank())
         if (entry.kind != Kind.TRASH) require(File(entry.destination).isAbsolute)
@@ -168,45 +169,69 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
         }
     }
 
-    private fun fingerprint(target: File): String? = runCatching {
-        require(target.exists())
-        val digest = MessageDigest.getInstance("SHA-256")
-        if (target.isFile) {
-            digest.update("FILE".toByteArray(Charsets.UTF_8))
-            FileInputStream(target).use { input ->
-                val buffer = ByteArray(64 * 1024)
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    digest.update(buffer, 0, count)
+    private fun fingerprint(target: File): String? {
+        return try {
+            require(target.exists())
+            val digest = MessageDigest.getInstance("SHA-256")
+            if (target.isFile) {
+                digest.update("FILE".toByteArray(Charsets.UTF_8))
+                FileInputStream(target).use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        if (Thread.currentThread().isInterrupted) throw InterruptedException("Undo fingerprint cancelled")
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        digest.update(buffer, 0, count)
+                    }
                 }
-            }
-        } else {
-            digest.update("DIRECTORY".toByteArray(Charsets.UTF_8))
-            target.walkTopDown().filter { it != target }
-                .sortedBy { it.relativeTo(target).invariantSeparatorsPath }
-                .forEach { item ->
-                    digest.update(item.relativeTo(target).invariantSeparatorsPath.toByteArray(Charsets.UTF_8))
+            } else {
+                digest.update("DIRECTORY".toByteArray(Charsets.UTF_8))
+                val pending = ArrayDeque<File>()
+                val items = ArrayList<File>()
+                target.listFiles()?.forEach(pending::addLast)
+                while (pending.isNotEmpty()) {
+                    if (Thread.currentThread().isInterrupted) throw InterruptedException("Undo fingerprint cancelled")
+                    val item = pending.removeLast()
+                    items += item
+                    if (item.isDirectory && !java.nio.file.Files.isSymbolicLink(item.toPath())) {
+                        val children = item.listFiles() ?: error("Cannot read folder ${item.name}")
+                        children.forEach(pending::addLast)
+                    }
+                }
+                // Keep the exact relative-path ordering used by existing journal fingerprints.
+                items.sortedBy { it.relativeTo(target).invariantSeparatorsPath }.forEach { item ->
+                    if (Thread.currentThread().isInterrupted) throw InterruptedException("Undo fingerprint cancelled")
+                    val relative = item.relativeTo(target).invariantSeparatorsPath
+                    digest.update(relative.toByteArray(Charsets.UTF_8))
                     digest.update((if (item.isDirectory) 1 else 0).toByte())
-                    if (item.isFile) FileInputStream(item).use { input ->
-                        val buffer = ByteArray(64 * 1024)
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            digest.update(buffer, 0, count)
+                    if (item.isFile) {
+                        FileInputStream(item).use { input ->
+                            val buffer = ByteArray(64 * 1024)
+                            while (true) {
+                                if (Thread.currentThread().isInterrupted) throw InterruptedException("Undo fingerprint cancelled")
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                digest.update(buffer, 0, count)
+                            }
                         }
                     }
                 }
-        }
-        val hex = "0123456789abcdef"
-        buildString(64) {
-            digest.digest().forEach { byte ->
-                val value = byte.toInt() and 0xff
-                append(hex[value ushr 4])
-                append(hex[value and 0x0f])
             }
+            val hex = "0123456789abcdef"
+            buildString(64) {
+                digest.digest().forEach { byte ->
+                    val value = byte.toInt() and 0xff
+                    append(hex[value ushr 4])
+                    append(hex[value and 0x0f])
+                }
+            }
+        } catch (cancelled: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw cancelled
+        } catch (_: Throwable) {
+            null
         }
-    }.getOrNull()
+    }
 
     private companion object {
         const val MAGIC = 0x4B58554A // KXUJ

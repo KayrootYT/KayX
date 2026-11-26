@@ -3,6 +3,11 @@ package com.kayx.manager.data.filesystem
 import android.system.Os
 import com.kayx.manager.domain.model.FileItem
 import java.io.File
+import java.nio.file.Files
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 
 enum class Conflict { REPLACE, KEEP_BOTH, SKIP }
 
@@ -34,6 +39,118 @@ object FileOps {
         var size = 0L; var n = 0
         f.walkTopDown().forEach { if (it != f) { n++; if (it.isFile) size += it.length() } }
         return size to n
+    }
+
+    private fun checkThreadNotInterrupted() {
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("File operation cancelled")
+    }
+
+    /** Interruptible, symlink-safe copy used by synchronous recovery operations on IO threads. */
+    fun copyTreeInterruptible(source: File, destination: File) {
+        require(source.exists() && !Files.isSymbolicLink(source.toPath())) { "Invalid copy source" }
+        val pending = ArrayDeque<Pair<File, File>>()
+        pending.addLast(source to destination)
+        while (pending.isNotEmpty()) {
+            checkThreadNotInterrupted()
+            val (src, dst) = pending.removeLast()
+            require(!Files.isSymbolicLink(src.toPath())) { "Symbolic links are not copied" }
+            if (src.isDirectory) {
+                check(dst.mkdirs() || dst.isDirectory) { "Cannot create folder ${dst.name}" }
+                val children = src.listFiles() ?: error("Cannot read folder ${src.name}")
+                children.sortedByDescending { it.name }.forEach { child ->
+                    pending.addLast(child to File(dst, child.name))
+                }
+            } else if (src.isFile) {
+                dst.parentFile?.let { check(it.mkdirs() || it.isDirectory) }
+                src.inputStream().buffered().use { input ->
+                    java.io.FileOutputStream(dst).buffered().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            checkThreadNotInterrupted()
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                        }
+                        output.flush()
+                    }
+                }
+                dst.setLastModified(src.lastModified())
+            } else {
+                error("Unsupported file type: ${src.name}")
+            }
+        }
+    }
+
+    /** Interruptible post-order deletion for synchronous IO workers. */
+    fun deleteTreeInterruptible(root: File): Boolean {
+        if (!root.exists() && !Files.isSymbolicLink(root.toPath())) return true
+        val pending = ArrayDeque<Pair<File, Boolean>>()
+        pending.addLast(root to false)
+        while (pending.isNotEmpty()) {
+            checkThreadNotInterrupted()
+            val (item, visited) = pending.removeLast()
+            if (Files.isSymbolicLink(item.toPath()) || !item.isDirectory) {
+                if ((item.exists() || Files.isSymbolicLink(item.toPath())) && !item.delete()) return false
+            } else if (visited) {
+                if (!item.delete()) return false
+            } else {
+                pending.addLast(item to true)
+                val children = item.listFiles() ?: return false
+                children.forEach { pending.addLast(it to false) }
+            }
+        }
+        return true
+    }
+
+    /** Cancellable post-order deletion. Symbolic links are unlinked, never traversed. */
+    suspend fun deleteTreeCancellable(root: File) = withContext(Dispatchers.IO) {
+        if (!root.exists() && !Files.isSymbolicLink(root.toPath())) return@withContext
+        val pending = ArrayDeque<Pair<File, Boolean>>()
+        pending.addLast(root to false)
+        while (pending.isNotEmpty()) {
+            currentCoroutineContext().ensureActive()
+            val (item, visited) = pending.removeLast()
+            if (Files.isSymbolicLink(item.toPath()) || !item.isDirectory) {
+                if (item.exists() || Files.isSymbolicLink(item.toPath())) {
+                    check(item.delete()) { "Could not delete ${item.name}" }
+                }
+            } else if (visited) {
+                check(item.delete()) { "Could not delete folder ${item.name}" }
+            } else {
+                pending.addLast(item to true)
+                val children = item.listFiles() ?: error("Cannot read folder ${item.name}")
+                children.forEach { pending.addLast(it to false) }
+            }
+        }
+    }
+
+    /** Cancellable, symlink-safe folder metrics for properties screens and large selections. */
+    suspend fun sizeAndCountCancellable(root: File): Pair<Long, Int> = withContext(Dispatchers.IO) {
+        if (Files.isSymbolicLink(root.toPath())) return@withContext 0L to 0
+        if (root.isFile) return@withContext root.length() to 1
+        if (!root.isDirectory) return@withContext 0L to 0
+
+        var totalBytes = 0L
+        var entries = 0
+        val pending = ArrayDeque<File>()
+        pending.addLast(root)
+        while (pending.isNotEmpty()) {
+            currentCoroutineContext().ensureActive()
+            val directory = pending.removeLast()
+            val children = directory.listFiles() ?: continue
+            for ((index, child) in children.withIndex()) {
+                if (index % 64 == 0) currentCoroutineContext().ensureActive()
+                if (Files.isSymbolicLink(child.toPath())) continue
+                when {
+                    child.isFile -> {
+                        totalBytes += child.length()
+                        entries++
+                    }
+                    child.isDirectory -> pending.addLast(child)
+                }
+            }
+        }
+        totalBytes to entries
     }
 
     fun modeOf(f: File): Int? = runCatching { Os.stat(f.absolutePath).st_mode and 0xFFF }.getOrNull()
@@ -116,6 +233,26 @@ object FileOps {
         } else copyFileControlled(src, dest, control, onBytesCopied)
     }
 
+    /** Cancellable post-order source cleanup after a verified move copy. */
+    private fun deleteTreeControlled(root: File, control: TransferControl): Boolean {
+        val pending = ArrayDeque<Pair<File, Boolean>>()
+        pending.addLast(root to false)
+        while (pending.isNotEmpty()) {
+            awaitTransfer(control)
+            val (item, visited) = pending.removeLast()
+            if (java.nio.file.Files.isSymbolicLink(item.toPath()) || !item.isDirectory) {
+                if ((item.exists() || java.nio.file.Files.isSymbolicLink(item.toPath())) && !item.delete()) return false
+            } else if (visited) {
+                if (!item.delete()) return false
+            } else {
+                pending.addLast(item to true)
+                val children = item.listFiles() ?: return false
+                children.forEach { pending.addLast(it to false) }
+            }
+        }
+        return true
+    }
+
     /** Like [copyAny], but removes a half-written destination when the copy fails. */
     private fun copyClean(src: File, dest: File) {
         try { copyAny(src, dest) } catch (e: Exception) { dest.deleteRecursively(); throw e }
@@ -171,7 +308,7 @@ object FileOps {
                         // Once the full destination copy exists and the move is committed, never
                         // delete it merely because source cleanup fails after partial progress.
                         preserveCompletedCopy = true
-                        if (!f.deleteRecursively()) {
+                        if (!deleteTreeControlled(f, control)) {
                             replaceBackup?.let { backup ->
                                 if (backup.exists()) {
                                     val preservedOld = uniqueName(dst, f.name)

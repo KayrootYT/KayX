@@ -70,7 +70,14 @@ object PrivateSpace {
     }
     fun hasPin(ctx: Context) = !prefs(ctx).getString("hash", null).isNullOrEmpty()
     fun isUnlocked(): Boolean = PrivateSpaceVault.isUnlocked()
-    fun fileCount(ctx: Context): Int = if (isUnlocked()) stagingDir(ctx).walkTopDown().count { it.isFile } else PrivateSpaceVault.fileCount(ctx)
+    fun fileCount(ctx: Context): Int {
+        return if (isUnlocked()) {
+            val root = stagingDir(ctx)
+            if (root.isDirectory) walkFilesBounded(root, maxDepth = 128, parallelism = 2).size else 0
+        } else {
+            PrivateSpaceVault.fileCount(ctx)
+        }
+    }
 
     fun setPin(ctx: Context, pin: String): Result<Unit> = runCatching {
         require(pin.length in 4..8 && pin.all(Char::isDigit)) { "PIN must contain 4–8 digits" }

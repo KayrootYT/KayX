@@ -37,15 +37,19 @@ object RecycleBin {
         if (src.renameTo(dest)) return
         check(src.canonicalPath == src.absolutePath) { "Cannot safely copy a symbolic link into the recycle bin" }
         try {
-            if (src.isDirectory) check(src.copyRecursively(dest, overwrite = false)) { "Copy failed: ${src.name}" }
-            else src.copyTo(dest, overwrite = false)
+            FileOps.copyTreeInterruptible(src, dest)
         } catch (t: Throwable) {
             runCatching { dest.deleteRecursively() }
             throw t
         }
-        // Keep the completed recovery copy and its index if source cleanup fails.
-        if (!src.deleteRecursively()) throw SourceCleanupFailed(
-            "Copied ${src.name}, but could not completely remove the original", dest
+        // Keep the completed recovery copy and its index if source cleanup fails or is cancelled.
+        val removed = try {
+            FileOps.deleteTreeInterruptible(src)
+        } catch (_: InterruptedException) {
+            false
+        }
+        if (!removed) throw SourceCleanupFailed(
+            "Copied ${src.name}, but source cleanup did not complete; recovery copy was preserved", dest
         )
     }
 
@@ -152,7 +156,7 @@ object RecycleBin {
     @Synchronized
     fun purge(e: Entry): Result<Unit> = runCatching {
         val item = payload(e.id)
-        if (item.exists()) check(item.deleteRecursively()) { "Could not permanently delete ${e.name}" }
+        if (item.exists()) check(FileOps.deleteTreeInterruptible(item)) { "Could not permanently delete ${e.name}" }
         writeIndex(rawEntries().filter { it.first != e.id })
     }
 
@@ -172,7 +176,7 @@ object RecycleBin {
         for (entry in entries) {
             val item = payload(entry.first)
             if (isRecycleExpired(entry.third, now)) {
-                if (!item.exists() || item.deleteRecursively()) removed++
+                if (!item.exists() || FileOps.deleteTreeInterruptible(item)) removed++
                 else keep += entry
             } else if (item.exists()) keep += entry
             // Missing payloads are stale index records and can be dropped safely.
@@ -189,7 +193,7 @@ object RecycleBin {
         val root = dir()
         val contents = root.listFiles() ?: error("Could not read recycle bin")
         for (item in contents) {
-            if (item.name != "index.tsv") check(item.deleteRecursively()) { "Could not remove ${item.name}" }
+            if (item.name != "index.tsv") check(FileOps.deleteTreeInterruptible(item)) { "Could not remove ${item.name}" }
         }
         val indexFile = index()
         if (indexFile.exists()) check(indexFile.delete()) { "Could not clear recycle-bin index" }

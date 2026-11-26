@@ -10,11 +10,12 @@ import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 
 /** Daily retryable purge: expired entries are removed even if the user does not reopen KayX. */
 class RecycleBinPurgeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val result = RecycleBin.purgeExpired()
+        val result = runInterruptible { RecycleBin.purgeExpired() }
         if (result.isSuccess) Result.success() else Result.retry()
     }
 

@@ -37,6 +37,7 @@ import com.kayx.manager.ui.theme.Fg
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
@@ -54,7 +55,7 @@ fun RecycleBinScreen(onBack: () -> Unit) {
     fun refresh() = scope.launch { items = withContext(Dispatchers.IO) { RecycleBin.list() } }
     LaunchedEffect(Unit) { refresh() }
     fun act(msg: String, block: () -> Result<Any?>) = scope.launch {
-        val r = withContext(Dispatchers.IO) { block() }
+        val r = withContext(Dispatchers.IO) { runInterruptible { block() } }
         snack.showSnackbar(r.exceptionOrNull()?.message ?: msg); refresh()
     }
 

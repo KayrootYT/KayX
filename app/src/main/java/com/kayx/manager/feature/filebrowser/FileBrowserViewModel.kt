@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 import java.io.File
 
 data class BrowserState(
@@ -746,7 +747,8 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                 withContext(Dispatchers.IO) {
                     keys.zip(plannedUndoTargets).forEach { (key, target) ->
                         val source = (locationOf(key) as StorageLocation.Local).directory
-                        if (cut) operationJournal?.recordMove(source, target) else operationJournal?.recordCopy(target)
+                        if (cut) operationJournal?.recordMove(source, target)
+                        else runInterruptible { operationJournal?.recordCopy(target) }
                     }
                 }
                 _s.update { it.copy(undoAvailable = operationJournal?.entries()?.isNotEmpty() == true) }
@@ -810,7 +812,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun undoLastOperation() {
         val journal = operationJournal ?: return notify("Undo is not ready")
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { journal.undo() }
+            val result = withContext(Dispatchers.IO) { runInterruptible { journal.undo() } }
             repo.invalidateSearchCache()
             _s.update { it.copy(undoAvailable = journal.entries().isNotEmpty(),
                 message = result.fold({ "Undid " + it.kind.name.lowercase() }, { it.message ?: "Undo failed" })) }
@@ -860,7 +862,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             if (SettingsStore.useRecycleBin) {
                 val pane = _s.value.activeIdx
                 viewModelScope.launch {
-                    val result = withContext(Dispatchers.IO) { RecycleBin.trashWithEntries(files) }
+                    val result = withContext(Dispatchers.IO) { runInterruptible { RecycleBin.trashWithEntries(files) } }
                     if (result.isSuccess) withContext(Dispatchers.IO) {
                         result.getOrThrow().forEach { operationJournal?.recordTrash(it.id) }
                     }
@@ -879,7 +881,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             val results = withContext(Dispatchers.IO) {
                 keys.map { key ->
                     when (val location = locationOf(key)) {
-                        is StorageLocation.Local -> runCatching { location.directory.deleteRecursively() }.getOrDefault(false)
+                        is StorageLocation.Local -> runCatching { FileOps.deleteTreeCancellable(location.directory); true }.getOrDefault(false)
                         is StorageLocation.Saf -> {
                             val doc = SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)
                             doc?.let { SafRepository.delete(context, it.uri) } ?: false

@@ -53,6 +53,7 @@ import com.kayx.manager.ui.theme.TextMuted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
@@ -310,8 +311,10 @@ fun PrivateSpaceScreen(onBack: () -> Unit, onUnlocked: (String) -> Unit) {
                     else -> scope.launch {
                         busy = true
                         val accepted = withContext(Dispatchers.IO) {
-                            if (hasPin) PrivateSpace.verify(ctx, pin)
-                            else PrivateSpace.setPin(ctx, pin).isSuccess
+                            runInterruptible {
+                                if (hasPin) PrivateSpace.verify(ctx, pin)
+                                else PrivateSpace.setPin(ctx, pin).isSuccess
+                            }
                         }
                         busy = false
                         if (accepted) onUnlocked(PrivateSpace.dir(ctx).absolutePath) else error = if (hasPin) "Wrong PIN or encrypted vault could not be opened" else "Could not create encrypted private vault"

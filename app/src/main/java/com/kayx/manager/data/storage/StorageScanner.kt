@@ -14,6 +14,10 @@ import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 
 enum class Category(val label: String, val exts: Set<String>) {
     IMAGES("Images", setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif")),
@@ -86,8 +90,20 @@ object QuickAccess {
 object MediaCounts {
     fun category(ctx: Context, c: Category): Int? = runCatching { StorageScanner.count(c) }.getOrNull()
 
-    fun folders(ctx: Context, dirs: List<File>): Int = dirs.filter { it.isDirectory }.sumOf { d ->
-        runCatching { d.walkTopDown().maxDepth(6).count { it.isFile } }.getOrDefault(0)
+    suspend fun folders(ctx: Context, dirs: List<File>): Int {
+        var total = 0
+        for (directory in dirs) {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (!directory.isDirectory) continue
+            total += try {
+                runInterruptible { walkFilesBounded(directory, maxDepth = 6, parallelism = 2).size }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                0
+            }
+        }
+        return total
     }
 }
 
@@ -98,6 +114,7 @@ object StorageScanner {
     @Volatile private var entries: List<ScanFile>? = null
     @Volatile private var analysis: CleanupAnalysis? = null
     @Volatile private var appCtx: Context? = null
+    @Volatile private var scanThread: Thread? = null
     /** Files found so far by the running scan, shown as live progress. */
     val progress = java.util.concurrent.atomic.AtomicInteger(0)
     /** Which source produced the list (or why MediaStore was skipped); handy for diagnosing. */
@@ -108,10 +125,27 @@ object StorageScanner {
     /** Starts scanning in the background right away so lists are usually ready before the user taps. */
     fun init(ctx: Context) {
         appCtx = ctx.applicationContext
-        Thread({ runCatching { allEntries() } }, "kayx-prefetch").apply { isDaemon = true; start() }
+        synchronized(lock) {
+            if (entries != null || scanThread?.isAlive == true) return
+            scanThread = Thread({
+                try {
+                    allEntries()
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                } finally {
+                    synchronized(lock) {
+                        if (scanThread === Thread.currentThread()) scanThread = null
+                    }
+                }
+            }, "kayx-prefetch").apply { isDaemon = true; start() }
+        }
     }
 
-    fun invalidate() { synchronized(lock) { entries = null; analysis = null } }
+    fun invalidate() {
+        // Interrupt before acquiring the cache lock: an active scan may hold that lock.
+        scanThread?.interrupt()
+        synchronized(lock) { entries = null; analysis = null }
+    }
 
     fun cachedAnalysis(): CleanupAnalysis? = analysis
 
@@ -127,6 +161,7 @@ object StorageScanner {
                 val ip = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA); val isz = it.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE); val id = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
                 val skip = root.path + "/Android/"
                 while (it.moveToNext()) {
+                    if (Thread.currentThread().isInterrupted) throw InterruptedException("Storage scan cancelled")
                     val path = it.getString(ip) ?: continue
                     if (path.startsWith(skip) || path.contains("/.")) continue
                     out.add(ScanFile(path, it.getLong(isz), it.getLong(id) * 1000, Category.of(path.substringAfterLast('/'))))
@@ -134,6 +169,9 @@ object StorageScanner {
                 }
             }
             if (out.size < 50) { status = "MediaStore gave only ${out.size} files, scanning folders"; null } else { status = "MediaStore"; out }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw e
         } catch (e: Throwable) {
             status = "MediaStore failed: ${e.javaClass.simpleName}"; null
         }
@@ -141,7 +179,9 @@ object StorageScanner {
 
     /** Rust folder walk (rayon, 4 threads). Null when the native library is unavailable. */
     private fun walkNative(root: File): List<ScanFile>? {
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("Storage scan cancelled")
         val lines = NativeCore.scan(root.absolutePath) ?: return null
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("Storage scan cancelled")
         val out = ArrayList<ScanFile>(lines.size)
         for (l in lines) {
             val p = l.split('\t', limit = 3)
@@ -152,37 +192,26 @@ object StorageScanner {
         return out
     }
 
-    /** Folder walk split across 4 threads (shared storage is slow on one thread). */
+    /** Fixed-size, interruptible traversal; never creates one task per nested directory. */
     private fun walkParallel(root: File): List<ScanFile> {
-        val results = java.util.concurrent.ConcurrentLinkedQueue<ScanFile>()
-        val dirs = ArrayList<File>()
-        fun add(f: File) { results.add(ScanFile(f.absolutePath, f.length(), f.lastModified(), Category.of(f.name))); progress.incrementAndGet() }
-        fun ok(d: File) = d.name != ".Trash" && d.name != ".trashed" && !d.name.startsWith(".thumb") && !(d.parentFile == root && d.name == "Android")
-        fun expand(d: File, depth: Int) {
-            for (c in d.listFiles().orEmpty()) {
-                if (c.isFile) add(c) else if (c.isDirectory && ok(c)) { if (depth < 2) expand(c, depth + 1) else dirs.add(c) }
-            }
+        fun includeDirectory(directory: File): Boolean =
+            directory.name != ".Trash" && directory.name != ".trashed" &&
+                !directory.name.startsWith(".thumb") &&
+                !(directory.parentFile == root && directory.name == "Android")
+
+        val files = walkFilesBounded(
+            root,
+            maxDepth = 22,
+            parallelism = 4,
+            onFileFound = { progress.incrementAndGet() },
+            includeDirectory = ::includeDirectory
+        )
+        val results = ArrayList<ScanFile>(files.size)
+        for (file in files) {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException("Storage scan cancelled")
+            results += ScanFile(file.absolutePath, file.length(), file.lastModified(), Category.of(file.name))
         }
-        expand(root, 0)
-        val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
-        val futures = dirs.map { d ->
-            pool.submit {
-                runCatching {
-                    Files.walkFileTree(d.toPath(), emptySet(), 20, object : SimpleFileVisitor<Path>() {
-                        override fun preVisitDirectory(dir: Path, a: BasicFileAttributes): FileVisitResult =
-                            if (ok(dir.toFile())) FileVisitResult.CONTINUE else FileVisitResult.SKIP_SUBTREE
-                        override fun visitFile(file: Path, a: BasicFileAttributes): FileVisitResult {
-                            if (a.isRegularFile) { results.add(ScanFile(file.toString(), a.size(), a.lastModifiedTime().toMillis(), Category.of(file.fileName.toString()))); progress.incrementAndGet() }
-                            return FileVisitResult.CONTINUE
-                        }
-                        override fun visitFileFailed(file: Path, exc: java.io.IOException): FileVisitResult = FileVisitResult.CONTINUE
-                    })
-                }
-            }
-        }
-        futures.forEach { runCatching { it.get() } }
-        pool.shutdown()
-        return results.toList()
+        return results
     }
 
     private fun allEntries(): List<ScanFile> = entries ?: synchronized(lock) {
