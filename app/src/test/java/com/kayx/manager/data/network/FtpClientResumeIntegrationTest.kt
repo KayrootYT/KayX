@@ -8,6 +8,7 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -95,6 +96,7 @@ class FtpClientResumeIntegrationTest {
         val controlServer = ServerSocket(0)
         val serverFailure = AtomicReference<Throwable?>()
         val uploaded = ByteArrayOutputStream()
+        val sizeChecks = AtomicInteger()
         val serverThread = Thread {
             try {
                 controlServer.accept().use { control ->
@@ -117,8 +119,8 @@ class FtpClientResumeIntegrationTest {
                             command.startsWith("OPTS ") -> reply("200 UTF8 enabled")
                             command == "TYPE I" -> reply("200 Binary mode")
                             command == "SIZE .kayx-upload-test.part" -> {
-                                sizeChecks++
-                                reply(if (sizeChecks == 1) "213 5" else "213 10")
+                                val checkNumber = sizeChecks.incrementAndGet()
+                                reply(if (checkNumber == 1) "213 5" else "213 10")
                             }
                             command == "EPSV" -> {
                                 dataServer?.close()
@@ -166,7 +168,7 @@ class FtpClientResumeIntegrationTest {
             ) { lastProgress = it }
             assertEquals("world", uploaded.toString("UTF-8"))
             assertEquals(10L, lastProgress)
-            assertEquals(2, sizeChecksForAssertion())
+            assertEquals(2, sizeChecks.get())
         } finally {
             client.disconnect()
             serverThread.join(5_000)
