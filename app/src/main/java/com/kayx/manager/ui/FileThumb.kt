@@ -51,7 +51,7 @@ object Thumbs {
                 val manager = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
                 val budget = (manager.memoryClass.toLong() * 1024L * 1024L / 8L)
                     .coerceIn(8L * 1024L * 1024L, MAX_CACHE_BYTES.toLong()).toInt()
-                LruCache<String, Bitmap>(budget) {
+                object : LruCache<String, Bitmap>(budget) {
                     override fun sizeOf(key: String, value: Bitmap) = value.byteCount
                 }.also { bitmapCache = it }
             }
