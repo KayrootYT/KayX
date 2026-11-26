@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 import java.io.File
 
 data class BrowserState(
@@ -860,7 +861,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             if (SettingsStore.useRecycleBin) {
                 val pane = _s.value.activeIdx
                 viewModelScope.launch {
-                    val result = withContext(Dispatchers.IO) { RecycleBin.trashWithEntries(files) }
+                    val result = withContext(Dispatchers.IO) { runInterruptible { RecycleBin.trashWithEntries(files) } }
                     if (result.isSuccess) withContext(Dispatchers.IO) {
                         result.getOrThrow().forEach { operationJournal?.recordTrash(it.id) }
                     }
