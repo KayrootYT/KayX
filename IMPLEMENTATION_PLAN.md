@@ -137,3 +137,46 @@ This update repairs the specific build-log compiler error, improves file-type ic
 - Long-press timeout 650 ms app-wide (Theme.kt).
 - Pull-down: dual pane = short pull selects that pane, long pull also refreshes; single pane = refresh only (`PullHost`).
 - Folder icons follow content (`ui/FolderKind.kt`, toggle in Settings).
+
+
+## AI expansion roadmap (added 2026-11-27)
+
+AI is an optional extension and must not weaken KayX's offline-first/free product rules. The first AI foundation is being delivered separately from existing file-manager phases.
+
+### AI Phase 1 — Provider foundation (in progress)
+- [x] Add provider-neutral configuration with HTTPS-only endpoint validation.
+- [x] Add Android Keystore AES-256-GCM storage for API credentials; never persist plaintext keys.
+- [x] Add a provider-neutral chat-client contract and bounded OpenAI-compatible Chat Completions transport.
+- [x] Add Settings entry for optional endpoint/model/key configuration; AI remains disabled by default.
+- [x] Add focused configuration validation unit tests.
+- [ ] Run Build & Test and Security Scan on the final PR head; verify release APK and permission audit.
+- [ ] Validate credential save/read/clear and provider requests on a physical Android device with a test endpoint.
+
+### AI Phase 2 — Function calling and tool registry
+- [ ] Add a strict allow-listed tool registry with typed arguments and per-tool permission checks.
+- [ ] Separate read-only tools from destructive tools; destructive actions always require explicit user confirmation.
+- [ ] Add schema validation, tool timeouts, cancellation and audit-safe error handling.
+- [ ] Add tests for malformed arguments, unauthorized operations and confirmation gates.
+
+### AI Phase 3 — Document intelligence (RAG)
+- [ ] Add explicit file picker and per-request consent before any document content leaves the device.
+- [ ] Add bounded text extraction, chunking, metadata and local-only retrieval by default.
+- [ ] Add source citations and clear handling for unsupported/encrypted files.
+- [ ] Add retrieval quality fixtures and privacy regression tests.
+
+### AI Phase 4 — Semantic search
+- [ ] Add an on-device vector index and embedding-provider abstraction.
+- [ ] Keep filename search available offline and retain exact-match fallback.
+- [ ] Add index lifecycle, deletion synchronization and storage-budget controls.
+
+### AI Phase 5 — Agent and MCP
+- [ ] Add bounded agent orchestration only after the tool registry is stable.
+- [ ] Add MCP client support with explicit server trust and tool consent.
+- [ ] Prevent untrusted document text and tool output from changing authorization policy.
+
+### AI Phase 6 — Memory, workflows and guardrails
+- [ ] Add opt-in, user-visible memory with clear/reset controls.
+- [ ] Add resumable, cancellable workflows with progress and confirmation checkpoints.
+- [ ] Add prompt-injection defenses, output validation, rate limits and privacy/security tests.
+
+AI phase completion requires green CI on the final PR head and device validation for Android-specific behavior. No phase is complete merely because a source file exists.
