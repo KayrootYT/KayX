@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.kayx.manager.data.filesystem.FileOps
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -135,7 +136,7 @@ internal object PrivateSpaceVault {
         // Remove the marker before wiping plaintext. A crash during deletion then forces a fresh
         // decrypt from the already-committed vault instead of re-encrypting a partial tree.
         check(sessionMarker(ctx).delete() || !sessionMarker(ctx).exists()) { "Could not clear private-space session marker" }
-        check(stage.deleteRecursively()) { "Could not clear plaintext private-space staging files" }
+        check(FileOps.deleteTreeInterruptible(stage)) { "Could not clear plaintext private-space staging files" }
         check(stage.mkdirs()) { "Could not recreate private-space staging directory" }
         sessionKey = null
         key.fill(0)
@@ -167,7 +168,7 @@ internal object PrivateSpaceVault {
             if (hadVault) check(backup.renameTo(vault)) { "Could not restore previous private vault" }
             throw t
         }
-        backup.deleteRecursively()
+        if (backup.exists()) check(FileOps.deleteTreeInterruptible(backup)) { "Could not remove previous private vault backup" }
     }
 
     private fun encryptTree(source: File, target: File, key: ByteArray) {
