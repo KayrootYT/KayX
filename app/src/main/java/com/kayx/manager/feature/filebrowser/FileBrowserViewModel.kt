@@ -879,7 +879,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             val results = withContext(Dispatchers.IO) {
                 keys.map { key ->
                     when (val location = locationOf(key)) {
-                        is StorageLocation.Local -> runCatching { location.directory.deleteRecursively() }.getOrDefault(false)
+                        is StorageLocation.Local -> runCatching { FileOps.deleteTreeCancellable(location.directory); true }.getOrDefault(false)
                         is StorageLocation.Saf -> {
                             val doc = SafRepository.findByRelativePath(context, Uri.parse(location.treeUri), location.relativePath)
                             doc?.let { SafRepository.delete(context, it.uri) } ?: false
