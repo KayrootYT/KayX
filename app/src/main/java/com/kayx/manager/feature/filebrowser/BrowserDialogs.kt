@@ -97,7 +97,7 @@ internal fun PropertiesDialog(f: FileItem, onClose: () -> Unit, onChanged: () ->
     var recursive by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(f.path) {
-        if (!safBacked) info = withContext(Dispatchers.IO) { FileOps.sizeAndCount(file) }
+        if (!safBacked) info = FileOps.sizeAndCountCancellable(file)
     }
     AlertDialog(onClose, title = { Text("Properties") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
