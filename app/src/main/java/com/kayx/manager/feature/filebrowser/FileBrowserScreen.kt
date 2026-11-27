@@ -228,7 +228,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     }
                     val folderMatches = if (query is OfflineAssistantCommand.FolderSize) {
                         result.entries.filter { entry ->
-                            entry.path.replace('\\\\', '/').split('/').dropLast(1).any { it.equals(query.folderName, ignoreCase = true) }
+                            entry.path.replace("\\", "/").split('/').dropLast(1).any { it.equals(query.folderName, ignoreCase = true) }
                         }
                     } else emptyList()
                     val details = when (query) {
