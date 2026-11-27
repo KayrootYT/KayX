@@ -1,5 +1,6 @@
 package com.kayx.manager.feature.filebrowser
 
+import com.kayx.manager.data.filesystem.StorageLocation
 import com.kayx.manager.data.storage.Category
 import com.kayx.manager.data.storage.OfflineStorageInventory
 import java.io.File
@@ -64,6 +65,30 @@ class OfflineOrganizationPlannerTest {
         val plan = OfflineOrganizationPlanner.create(listOf(entry), Category.IMAGES, destination.absolutePath).getOrThrow()
         photo.writeText("changed content")
         assertFalse(OfflineOrganizationPlanner.isStillValid(plan))
+    }
+
+    @Test fun includesSafSourcesUsingTreeRelativeStableKeys() {
+        val destination = temporaryFolder.newFolder("saf-destination")
+        val key = StorageLocation.Saf(
+            "content://com.android.externalstorage.documents/tree/ABCD%3A",
+            "DCIM/Camera/photo.jpg"
+        ).stableKey()
+        val entry = OfflineStorageInventory.Entry(
+            key = key,
+            path = key,
+            name = "photo.jpg",
+            size = 42L,
+            modified = 1234L,
+            category = Category.IMAGES,
+            saf = true
+        )
+
+        val plan = OfflineOrganizationPlanner.create(
+            listOf(entry), Category.IMAGES, destination.absolutePath
+        ).getOrThrow()
+
+        assertEquals(listOf(key), plan.files.map { it.key })
+        assertTrue(OfflineOrganizationPlanner.isStillValid(plan))
     }
 
     @Test fun refusesMoreThanOneHundredFiles() {
