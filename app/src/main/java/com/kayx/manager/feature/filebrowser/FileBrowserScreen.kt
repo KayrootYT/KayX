@@ -808,7 +808,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("${plan.files.size} local files · ${fmtSize(plan.totalBytes)}")
+                        Text("${plan.files.size} files · ${fmtSize(plan.totalBytes)}")
                         Text("Destination:\n${plan.destinationPath}")
                         Text("No files have been changed. Confirm only if this list and destination are correct.")
                         plan.files.forEach { entry ->

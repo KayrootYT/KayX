@@ -6,6 +6,7 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import com.kayx.manager.data.filesystem.SafRepository
+import com.kayx.manager.data.filesystem.StorageLocation
 import java.io.File
 import java.security.MessageDigest
 import java.util.ArrayDeque
@@ -124,7 +125,7 @@ object OfflineStorageInventory {
                         }
                     } else if (child.isFile) {
                         if (found.size >= maxEntries) { truncated = true; break }
-                        val key = child.uri.toString()
+                        val key = StorageLocation.Saf(treeUri.toString(), childPath).stableKey()
                         val size = runCatching { child.length() }.getOrDefault(0L).coerceAtLeast(0L)
                         val modified = runCatching { child.lastModified() }.getOrDefault(0L)
                         found += Entry(key, treeUri.toString() + "/" + childPath, name, size, modified,
@@ -175,8 +176,14 @@ object OfflineStorageInventory {
 
     private suspend fun digest(context: Context, entry: Entry): String? {
         val input = try {
-            if (entry.saf) context.contentResolver.openInputStream(Uri.parse(entry.key))
-            else File(entry.key).takeIf { it.isFile && it.canRead() }?.inputStream()
+            if (entry.saf) {
+                val location = StorageLocation.fromStableKey(entry.key) as? StorageLocation.Saf ?: return null
+                val tree = Uri.parse(location.treeUri)
+                if (tree !in SafRepository.persistedTrees(context)) return null
+                val document = SafRepository.findByRelativePath(context, tree, location.relativePath)
+                    ?.takeIf { it.isFile } ?: return null
+                context.contentResolver.openInputStream(document.uri)
+            } else File(entry.key).takeIf { it.isFile && it.canRead() }?.inputStream()
         } catch (_: Exception) { null } ?: return null
         return input.use { stream ->
             val md = MessageDigest.getInstance("SHA-256")

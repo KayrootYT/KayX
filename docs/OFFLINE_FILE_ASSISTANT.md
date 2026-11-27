@@ -36,7 +36,7 @@ Hindi and Hinglish aliases are provided for common navigation, selection, hidden
 - Operations still run through KayX's existing repository/SAF permission checks and undo journal where supported.
 - The assistant can only open/select/extract items visible in the current folder listing. It does not silently crawl the entire phone for arbitrary commands.
 - `organize CATEGORY to ABSOLUTE_FOLDER_PATH` is preview-first and copy-only: it lists the exact source files, total bytes and destination, and does not mutate anything until the user taps Confirm copy. It is capped at 100 files, uses KEEP_BOTH naming, revalidates source path/size/modified time and destination immediately before transfer, and never deletes originals.
-- Bulk organization currently supports readable local filesystem files only. SAF/provider entries remain searchable in inventory but are excluded from this copy workflow until stable provider-key revalidation is implemented. Move/delete are deliberately not included.
+- Sources may come from readable local storage or persisted SAF/SD-card/provider tree grants. SAF entries use tree-relative stable keys; the app rechecks the persisted grant, resolves the document again, verifies name/size/modified time and opens it for reading immediately before transfer. Copies currently target an explicit writable local filesystem folder; SAF destinations are a separate follow-up.
 
 ## Whole-storage inventory (Phase 2 foundation)
 
@@ -49,4 +49,4 @@ Hindi and Hinglish aliases are provided for common navigation, selection, hidden
 - Category filters use the scanned filename extension metadata and report up to eight names; supported groups are images, videos, audio, documents and APK packages.
 - `folder size NAME` totals accessible files below every directory named NAME. If the same folder name exists in multiple locations, the output combines them and says so; it is a read-only estimate based on files visible to the bounded scan.
 - Result summaries show at most eight names per command. The inventory is in-memory only; no paths, file content, or scan history are uploaded or persisted.
-- Current limitations: scan resume/checkpoint persistence, SAF bulk organization, move/delete organization actions, and broader cross-screen commands remain pending. Organization copies are limited to 100 local files per explicit confirmation.
+- Current limitations: scan resume/checkpoint persistence, SAF bulk organization, move/delete organization actions, and broader cross-screen commands remain pending. Organization copies are limited to 100 files per explicit confirmation; SAF/provider sources can currently be copied to local destinations, while SAF destinations and move/delete remain unavailable.

@@ -1,5 +1,6 @@
 package com.kayx.manager.feature.filebrowser
 
+import com.kayx.manager.data.filesystem.StorageLocation
 import com.kayx.manager.data.storage.Category
 import com.kayx.manager.data.storage.OfflineStorageInventory
 import java.io.File
@@ -13,7 +14,7 @@ import org.junit.Rule
 class OfflineOrganizationPlannerTest {
     @get:Rule val temporaryFolder = TemporaryFolder()
 
-    @Test fun createsLocalOnlyPreviewAndPreservesSourceFiles() {
+    @Test fun createsLocalAndSafPreviewAndPreservesLocalSourceFiles() {
         val source = temporaryFolder.newFolder("source")
         val destination = temporaryFolder.newFolder("destination")
         val photo = File(source, "photo.jpg").apply { writeText("photo-data") }
@@ -29,8 +30,8 @@ class OfflineOrganizationPlannerTest {
                 saf = false
             )
         } + OfflineStorageInventory.Entry(
-            key = "content://provider/document/1",
-            path = "content://provider/document/1",
+            key = StorageLocation.Saf("content://provider/tree/root", "DCIM/cloud-photo.jpg").stableKey(),
+            path = StorageLocation.Saf("content://provider/tree/root", "DCIM/cloud-photo.jpg").stableKey(),
             name = "cloud-photo.jpg",
             size = 10,
             modified = 1,
@@ -40,8 +41,9 @@ class OfflineOrganizationPlannerTest {
 
         val plan = OfflineOrganizationPlanner.create(entries, Category.IMAGES, destination.absolutePath).getOrThrow()
 
-        assertEquals(listOf(photo.absolutePath), plan.files.map { it.path })
-        assertEquals(photo.length(), plan.totalBytes)
+        assertEquals(2, plan.files.size)
+        assertTrue(plan.files.any { it.path == photo.absolutePath })
+        assertEquals(photo.length() + 10L, plan.totalBytes)
         assertTrue(photo.exists())
         assertTrue(OfflineOrganizationPlanner.isStillValid(plan))
     }
@@ -64,6 +66,46 @@ class OfflineOrganizationPlannerTest {
         val plan = OfflineOrganizationPlanner.create(listOf(entry), Category.IMAGES, destination.absolutePath).getOrThrow()
         photo.writeText("changed content")
         assertFalse(OfflineOrganizationPlanner.isStillValid(plan))
+    }
+
+    @Test fun rejectsMalformedSafSourceKey() {
+        val destination = temporaryFolder.newFolder("invalid-saf-destination")
+        val entry = OfflineStorageInventory.Entry(
+            key = "content://provider/document/1",
+            path = "content://provider/document/1",
+            name = "invalid.jpg",
+            size = 10L,
+            modified = 1L,
+            category = Category.IMAGES,
+            saf = true
+        )
+        assertTrue(OfflineOrganizationPlanner.create(
+            listOf(entry), Category.IMAGES, destination.absolutePath
+        ).isFailure)
+    }
+
+    @Test fun includesSafSourcesUsingTreeRelativeStableKeys() {
+        val destination = temporaryFolder.newFolder("saf-destination")
+        val key = StorageLocation.Saf(
+            "content://com.android.externalstorage.documents/tree/ABCD%3A",
+            "DCIM/Camera/photo.jpg"
+        ).stableKey()
+        val entry = OfflineStorageInventory.Entry(
+            key = key,
+            path = key,
+            name = "photo.jpg",
+            size = 42L,
+            modified = 1234L,
+            category = Category.IMAGES,
+            saf = true
+        )
+
+        val plan = OfflineOrganizationPlanner.create(
+            listOf(entry), Category.IMAGES, destination.absolutePath
+        ).getOrThrow()
+
+        assertEquals(listOf(key), plan.files.map { it.key })
+        assertTrue(OfflineOrganizationPlanner.isStillValid(plan))
     }
 
     @Test fun refusesMoreThanOneHundredFiles() {
