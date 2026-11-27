@@ -20,6 +20,7 @@ import com.kayx.manager.data.filesystem.StorageLocation
 import com.kayx.manager.data.filesystem.StorageLocationRepository
 import com.kayx.manager.data.filesystem.SafRepository
 import com.kayx.manager.data.filesystem.FileSearchCategory
+import com.kayx.manager.data.storage.OfflineStorageInventory
 import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.domain.model.SortBy
