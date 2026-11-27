@@ -40,7 +40,15 @@ class AiDocumentRepository(
             stream.use { input ->
                 val bytes = readBounded(input, MAX_DOCUMENT_BYTES)
                     ?: return AiDocumentResult.Failure("Document exceeds the 2 MB processing limit")
-                val extension = displayName.substringAfterLast('.', "").lowercase()
+                val extension = displayName.substringAfterLast('.', "").lowercase().ifBlank {
+                    when (mimeType?.lowercase()) {
+                        "application/pdf" -> "pdf"
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> "docx"
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> "xlsx"
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> "pptx"
+                        else -> ""
+                    }
+                }
                 val extracted = when (extension) {
                     "pdf" -> {
                         val appContext = context?.applicationContext
