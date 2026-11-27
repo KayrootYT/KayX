@@ -51,6 +51,9 @@ import android.net.Uri
 import com.kayx.manager.data.filesystem.FileOps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import com.kayx.manager.data.storage.OfflineStorageInventory
 import kotlinx.coroutines.withContext
 import com.kayx.manager.data.filesystem.FileSearchCategory
 import java.io.File
@@ -109,6 +112,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     var sortPage by remember { mutableStateOf(false) }
     var searchModeMenu by remember { mutableStateOf(false) }
     var assistantMode by remember { mutableStateOf(false) }
+    var storageScanJob by remember { mutableStateOf<Job?>(null) }
     var openFor by remember { mutableStateOf<FileItem?>(null) }
     var webFor by remember { mutableStateOf<FileItem?>(null) }
     var itemMenu by remember { mutableStateOf<Pair<FileItem, Int>?>(null) }
@@ -187,6 +191,55 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
         else if (!vm.up()) onExit()
     }
 
+    val runInventoryQuery: (OfflineAssistantCommand) -> Unit = { query ->
+        if (storageScanJob?.isActive == true) {
+            vm.notify("Storage scan is already running. Say cancel scan first.")
+        } else {
+            storageScanJob = scope.launch {
+                vm.notify("Scanning accessible internal storage and granted SD-card folders…")
+                val result = try {
+                    withContext(Dispatchers.IO) {
+                        OfflineStorageInventory.scan(ctx) { count ->
+                            if (count > 0 && count % 1024 == 0) vm.notify("Storage scan progress: $count files")
+                        }
+                    }
+                } catch (_: CancellationException) {
+                    vm.notify("Storage scan cancelled")
+                    null
+                } catch (error: Exception) {
+                    vm.notify("Storage scan failed: ${error.message ?: "storage unavailable"}")
+                    null
+                }
+                if (result != null) {
+                    val matches = when (query) {
+                        OfflineAssistantCommand.FindLargeFiles -> result.largeFiles
+                        OfflineAssistantCommand.FindOldFiles -> result.oldFiles
+                        OfflineAssistantCommand.FindDuplicates -> result.duplicateCandidates
+                        else -> emptyList()
+                    }
+                    val heading = when (query) {
+                        OfflineAssistantCommand.FindLargeFiles -> "Large files (100 MB+)"
+                        OfflineAssistantCommand.FindOldFiles -> "Old files (180+ days)"
+                        OfflineAssistantCommand.FindDuplicates -> "Duplicate candidates (SHA-256 match)"
+                        else -> "Storage inventory"
+                    }
+                    val details = if (query == OfflineAssistantCommand.ScanStorage) {
+                        "Files: ${result.entries.size} · Data: ${fmtSize(result.totalBytes)} · Large: ${result.largeFiles.size} · Old: ${result.oldFiles.size} · Duplicate candidates: ${result.duplicateCandidates.size}"
+                    } else if (matches.isEmpty()) {
+                        "No matching files found in the accessible scan."
+                    } else {
+                        matches.take(8).joinToString("\n") { "• ${it.name} — ${fmtSize(it.size)}" } +
+                            if (matches.size > 8) "\n…and ${matches.size - 8} more" else ""
+                    }
+                    val coverage = "Roots: ${result.scannedRoots} · Inaccessible: ${result.inaccessibleRoots}" +
+                        if (result.truncated) " · Scan capped at ${OfflineStorageInventory.DEFAULT_MAX_ENTRIES} files" else ""
+                    vm.notify("$heading\n$details\n$coverage")
+                }
+                storageScanJob = null
+            }
+        }
+    }
+
     val executeAssistantCommand: (OfflineAssistantCommand) -> Unit = { command ->
                                 when (command) {
                                     OfflineAssistantCommand.Help -> vm.notify(OfflineAssistantParser.HELP_TEXT)
@@ -248,6 +301,15 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                         vm.notify(if (SettingsStore.addBookmark(activePath)) "Bookmark added" else "Already bookmarked")
                                     }
                                     OfflineAssistantCommand.ToggleDualPane -> vm.toggleDualPane()
+                                    OfflineAssistantCommand.ScanStorage,
+                                    OfflineAssistantCommand.FindLargeFiles,
+                                    OfflineAssistantCommand.FindOldFiles,
+                                    OfflineAssistantCommand.FindDuplicates -> runInventoryQuery(command)
+                                    OfflineAssistantCommand.CancelStorageScan -> {
+                                        storageScanJob?.cancel()
+                                        storageScanJob = null
+                                        vm.notify("Storage scan cancellation requested")
+                                    }
                                     OfflineAssistantCommand.StorageSummary -> {
                                         val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
                                         val usage = runCatching { android.os.StatFs(activePath).let {
