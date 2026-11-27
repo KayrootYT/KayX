@@ -421,6 +421,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         }
                         IconButton(vm::selectAll) { Icon(Icons.Default.SelectAll, "Select all") }
                         IconButton(vm::clearSelection) { Icon(Icons.Default.Close, "Clear selection") }
+                        IconButton(onClick = { if (!s.searching) vm.toggleSearch(); assistantMode = !assistantMode }) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "Open offline assistant")
+                        }
                     }
                 }
             }
