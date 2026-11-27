@@ -199,7 +199,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 vm.notify("Scanning accessible internal storage and granted SD-card folders…")
                 val result = try {
                     withContext(Dispatchers.IO) {
-                        OfflineStorageInventory.scan(ctx) { count ->
+                        OfflineStorageInventory.scan(ctx, includeDuplicates = query == OfflineAssistantCommand.FindDuplicates) { count ->
                             if (count > 0 && count % 1024 == 0) vm.notify("Storage scan progress: $count files")
                         }
                     }
@@ -215,21 +215,34 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         OfflineAssistantCommand.FindLargeFiles -> result.largeFiles
                         OfflineAssistantCommand.FindOldFiles -> result.oldFiles
                         OfflineAssistantCommand.FindDuplicates -> result.duplicateCandidates
+                        is OfflineAssistantCommand.FindCategory -> result.entries.filter { it.category == query.category }.sortedByDescending { it.size }
                         else -> emptyList()
                     }
                     val heading = when (query) {
                         OfflineAssistantCommand.FindLargeFiles -> "Large files (100 MB+)"
                         OfflineAssistantCommand.FindOldFiles -> "Old files (180+ days)"
                         OfflineAssistantCommand.FindDuplicates -> "Duplicate candidates (SHA-256 match)"
+                        is OfflineAssistantCommand.FindCategory -> "${query.category.label} files"
+                        is OfflineAssistantCommand.FolderSize -> "Folder size: ${query.folderName}"
                         else -> "Storage inventory"
                     }
-                    val details = if (query == OfflineAssistantCommand.ScanStorage) {
-                        "Files: ${result.entries.size} · Data: ${fmtSize(result.totalBytes)} · Large: ${result.largeFiles.size} · Old: ${result.oldFiles.size} · Duplicate candidates: ${result.duplicateCandidates.size}"
-                    } else if (matches.isEmpty()) {
-                        "No matching files found in the accessible scan."
-                    } else {
-                        matches.take(8).joinToString("\n") { "• ${it.name} — ${fmtSize(it.size)}" } +
-                            if (matches.size > 8) "\n…and ${matches.size - 8} more" else ""
+                    val folderMatches = if (query is OfflineAssistantCommand.FolderSize) {
+                        result.entries.filter { entry ->
+                            entry.path.replace('\\\\', '/').split('/').dropLast(1).any { it.equals(query.folderName, ignoreCase = true) }
+                        }
+                    } else emptyList()
+                    val details = when (query) {
+                        OfflineAssistantCommand.ScanStorage ->
+                            "Files: ${result.entries.size} · Data: ${fmtSize(result.totalBytes)} · Large: ${result.largeFiles.size} · Old: ${result.oldFiles.size}"
+                        is OfflineAssistantCommand.FolderSize ->
+                            if (folderMatches.isEmpty()) "No accessible files found inside a folder named '${query.folderName}'."
+                            else "Matching files: ${folderMatches.size} · Combined size: ${fmtSize(folderMatches.sumOf { it.size })}. This combines folders with the same name."
+                        else -> if (matches.isEmpty()) {
+                            "No matching files found in the accessible scan."
+                        } else {
+                            matches.take(8).joinToString("\n") { "• ${it.name} — ${fmtSize(it.size)}" } +
+                                if (matches.size > 8) "\n…and ${matches.size - 8} more" else ""
+                        }
                     }
                     val coverage = "Roots: ${result.scannedRoots} · Inaccessible: ${result.inaccessibleRoots}" +
                         if (result.truncated) " · Scan capped at ${OfflineStorageInventory.DEFAULT_MAX_ENTRIES} files" else ""
@@ -304,7 +317,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                     OfflineAssistantCommand.ScanStorage,
                                     OfflineAssistantCommand.FindLargeFiles,
                                     OfflineAssistantCommand.FindOldFiles,
-                                    OfflineAssistantCommand.FindDuplicates -> runInventoryQuery(command)
+                                    OfflineAssistantCommand.FindDuplicates,
+                                    is OfflineAssistantCommand.FindCategory,
+                                    is OfflineAssistantCommand.FolderSize -> runInventoryQuery(command)
                                     OfflineAssistantCommand.CancelStorageScan -> {
                                         storageScanJob?.cancel()
                                         storageScanJob = null
