@@ -108,6 +108,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     var menu by remember { mutableStateOf(false) }
     var sortPage by remember { mutableStateOf(false) }
     var searchModeMenu by remember { mutableStateOf(false) }
+    var assistantMode by remember { mutableStateOf(false) }
     var openFor by remember { mutableStateOf<FileItem?>(null) }
     var webFor by remember { mutableStateOf<FileItem?>(null) }
     var itemMenu by remember { mutableStateOf<Pair<FileItem, Int>?>(null) }
@@ -206,7 +207,53 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
             ) {
                 Row(Modifier.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton({ if (!vm.up()) onExit() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                    if (s.searching) TextField(
+                    if (s.searching && assistantMode) OfflineAssistantBar(
+                        onCommand = { command ->
+                            when (command) {
+                                OfflineAssistantCommand.Help -> vm.notify(OfflineAssistantParser.HELP_TEXT)
+                                is OfflineAssistantCommand.Search -> vm.setQuery(command.query)
+                                is OfflineAssistantCommand.OpenFolder -> {
+                                    val folder = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                        .firstOrNull { it.isDir && it.name.equals(command.name, ignoreCase = true) }
+                                    if (folder != null) vm.openActive(folder.path) else vm.notify("Folder not found in this location")
+                                }
+                                OfflineAssistantCommand.GoBack -> vm.goBack()
+                                OfflineAssistantCommand.GoUp -> vm.goUp()
+                                OfflineAssistantCommand.Refresh -> vm.reload()
+                                is OfflineAssistantCommand.ShowHidden -> if (s.showHidden != command.visible) vm.toggleHidden()
+                                is OfflineAssistantCommand.Sort -> vm.setSort(command.by)
+                                OfflineAssistantCommand.SelectAll -> vm.selectAll()
+                                OfflineAssistantCommand.ClearSelection -> vm.clearSelection()
+                                is OfflineAssistantCommand.SelectName -> {
+                                    val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                        .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
+                                    if (item != null) vm.selectPaths(setOf(item.path)) else vm.notify("Item not found in this location")
+                                }
+                                is OfflineAssistantCommand.Copy -> {
+                                    if (s.selected.isEmpty()) vm.notify("Select files first")
+                                    else vm.copySelected(command.cut)
+                                }
+                                OfflineAssistantCommand.Paste -> if (s.clipboard.isEmpty()) vm.notify("Clipboard is empty") else dlg = Dlg.ConfirmPaste
+                                is OfflineAssistantCommand.NewFolder -> { dlg = Dlg.NewFolder }
+                                is OfflineAssistantCommand.NewFile -> { dlg = Dlg.NewFile }
+                                is OfflineAssistantCommand.RenameSelected -> {
+                                    if (s.selected.size != 1) vm.notify("Select exactly one item to rename")
+                                    else dlg = Dlg.Rename(s.selected.first(), command.newName)
+                                }
+                                OfflineAssistantCommand.DeleteSelected -> {
+                                    if (s.selected.isEmpty()) vm.notify("Select files first") else dlg = Dlg.Delete
+                                }
+                                OfflineAssistantCommand.Undo -> vm.undoLastOperation()
+                                OfflineAssistantCommand.StorageSummary -> {
+                                    val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
+                                    val usage = runCatching { android.os.StatFs(activePath).let {
+                                        "Storage used: ${fmtSize(it.totalBytes - it.availableBytes)} / ${fmtSize(it.totalBytes)} · Free: ${fmtSize(it.availableBytes)}"
+                                    } }.getOrElse { "Storage information is unavailable for this location" }
+                                    vm.notify(usage)
+                                }
+                            }
+                        }
+                    ) else if (s.searching) TextField(
                         value = s.query,
                         onValueChange = vm::setQuery,
                         modifier = Modifier.weight(1f).focusRequester(searchFocusRequester),
@@ -282,6 +329,12 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         // The TextField owns the single clear (X) action while search is active.
                         if (!s.searching) IconButton(vm::toggleSearch) {
                             Icon(Icons.Default.Search, "Search")
+                        }
+                        IconButton(onClick = {
+                            if (!s.searching) vm.toggleSearch()
+                            assistantMode = !assistantMode
+                        }) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = if (assistantMode) "Close offline assistant" else "Open offline assistant")
                         }
                         Box {
                             IconButton({ menu = true }) { Icon(Icons.Default.MoreVert, "More options") }
