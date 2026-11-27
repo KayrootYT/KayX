@@ -1,6 +1,9 @@
 package com.kayx.manager.data.ai
 
-import org.junit.Assert.*\nimport java.io.ByteArrayOutputStream\nimport java.util.zip.ZipEntry\nimport java.util.zip.ZipOutputStream
+import org.junit.Assert.*
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import org.junit.Test
 
 class AiDocumentIntelligenceTest {
