@@ -648,7 +648,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
     fun notify(msg: String) = _s.update { it.copy(message = msg) }
     fun consumeMessage() = _s.update { it.copy(message = null) }
-    /** Copy a previously previewed, revalidated set of local files into an explicit destination. */
+    /** Copy a previewed set into an explicitly selected local or persisted SAF destination. */
     fun copyPreviewedFiles(entries: List<OfflineStorageInventory.Entry>, destinationPath: String) {
         val context = appContext
         if (context == null) {
@@ -662,9 +662,22 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         viewModelScope.launch {
             val validation = withContext(Dispatchers.IO) {
                 runCatching {
-                    val destination = File(destinationPath).canonicalFile
-                    require(destination.isDirectory && destination.canWrite() && destination.path == destinationPath) {
-                        "Organization destination is unavailable or not writable"
+                    val safDestination = StorageLocation.fromStableKey(destinationPath) as? StorageLocation.Saf
+                    val localDestination = if (safDestination == null) {
+                        File(destinationPath).canonicalFile.also { destination ->
+                            require(destination.isDirectory && destination.canWrite() && destination.path == destinationPath) {
+                                "Organization destination is unavailable or not writable"
+                            }
+                        }
+                    } else {
+                        val tree = Uri.parse(safDestination.treeUri)
+                        require(tree in SafRepository.persistedTrees(context) && SafRepository.hasWriteAccess(context, tree)) {
+                            "Selected SD-card folder does not have a persisted write grant. Select it again with write access."
+                        }
+                        SafRepository.findByRelativePath(context, tree, safDestination.relativePath)
+                            ?.takeIf { it.isDirectory }
+                            ?: error("Selected SD-card destination is unavailable or permission was revoked")
+                        null
                     }
                     val sourceKeys = entries.map { entry ->
                         if (entry.saf) {
@@ -673,6 +686,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                             val tree = Uri.parse(source.treeUri)
                             require(tree in SafRepository.persistedTrees(context)) {
                                 "Storage permission was revoked for ${entry.name}. Scan and preview again."
+                            }
+                            if (safDestination != null && tree == Uri.parse(safDestination.treeUri)) {
+                                val sourceParent = source.relativePath.substringBeforeLast('/', "")
+                                require(sourceParent != safDestination.relativePath) {
+                                    "A source file is already inside the selected destination folder."
+                                }
                             }
                             val document = SafRepository.findByRelativePath(context, tree, source.relativePath)
                                 ?.takeIf { it.isFile } ?: error("SAF source is unavailable: ${entry.name}")
@@ -689,21 +708,21 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                             require(!java.nio.file.Files.isSymbolicLink(source.toPath()) &&
                                 source.canonicalFile.path == source.absolutePath && source.isFile && source.canRead() &&
                                 source.length() == entry.size && source.lastModified() == entry.modified &&
-                                source.parentFile?.canonicalPath != destination.path) {
+                                (localDestination == null || source.parentFile?.canonicalPath != localDestination.path)) {
                                 "A previewed local file changed or became unavailable: ${entry.name}"
                             }
                             entry.path
                         }
                     }
                     require(sourceKeys.distinct().size == sourceKeys.size) { "The preview contains duplicate source keys" }
-                    destination to sourceKeys
+                    sourceKeys
                 }
             }
             validation.fold(
-                onSuccess = { (destination, sourceKeys) ->
+                onSuccess = { sourceKeys ->
                     startStorageTransfer(
                         sourceKeys,
-                        StorageLocation.Local(destination).stableKey(),
+                        safDestinationKey(destinationPath),
                         cut = false,
                         policy = Conflict.KEEP_BOTH,
                         sourcePane = null,
@@ -848,6 +867,10 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             reload()
         }
     }
+
+    private fun safDestinationKey(destination: String): String =
+        (StorageLocation.fromStableKey(destination) as? StorageLocation.Saf)?.stableKey()
+            ?: StorageLocation.Local(File(destination).canonicalFile).stableKey()
 
     fun dismissConflicts() = _s.update { it.copy(conflicts = emptyList(), pending = null) }
     fun pauseTransfer() { _s.value.transferControl?.pause() }

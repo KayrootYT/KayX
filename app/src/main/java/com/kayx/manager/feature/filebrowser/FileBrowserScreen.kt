@@ -251,7 +251,12 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     val coverage = "Roots: ${result.scannedRoots} · Inaccessible: ${result.inaccessibleRoots}" +
                         if (result.truncated) " · Scan capped at ${OfflineStorageInventory.DEFAULT_MAX_ENTRIES} files" else ""
                     if (query is OfflineAssistantCommand.PreviewOrganize) {
-                        OfflineOrganizationPlanner.create(result.entries, query.category, query.destinationPath)
+                        val activeFolder = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
+                        val destination = if (query.destinationPath.equals("here", ignoreCase = true)) {
+                            StorageLocation.fromStableKey(activeFolder)?.stableKey()
+                                ?: StorageLocation.Local(File(activeFolder).canonicalFile).stableKey()
+                        } else query.destinationPath
+                        OfflineOrganizationPlanner.create(result.entries, query.category, destination)
                             .onSuccess { dlg = Dlg.OrganizationPreview(it) }
                             .onFailure { vm.notify(it.message ?: "Could not prepare organization preview") }
                     } else vm.notify("$heading\n$details\n$coverage")
@@ -809,7 +814,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text("${plan.files.size} files · ${fmtSize(plan.totalBytes)}")
-                        Text("Destination:\n${plan.destinationPath}")
+                        Text("Destination:\n${plan.destinationLabel}")
                         Text("No files have been changed. Confirm only if this list and destination are correct.")
                         plan.files.forEach { entry ->
                             Text("• ${entry.name}", maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -45,7 +45,7 @@ sealed interface OfflineAssistantCommand {
 }
 
 object OfflineAssistantParser {
-    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, organize images to /storage/emulated/0/Pictures, cancel scan."
+    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, organize images to /storage/emulated/0/Pictures or organize images to here (current folder), cancel scan."
 
     fun parse(raw: String): OfflineAssistantCommand? {
         val input = raw.trim().replace(Regex("\\s+"), " ")
