@@ -35,7 +35,9 @@ import com.kayx.manager.data.ai.AiDocumentPromptBuilder
 import com.kayx.manager.data.ai.AiLocalRetriever
 import com.kayx.manager.data.ai.AiSettingsStore
 import com.kayx.manager.data.ai.OpenAiCompatibleChatClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun AiDocumentDialog(onDismiss: () -> Unit) {
@@ -57,16 +59,21 @@ fun AiDocumentDialog(onDismiss: () -> Unit) {
                     ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
             }.getOrNull()?.take(256)
                 ?: uri.lastPathSegment?.substringAfterLast('/')?.take(256) ?: "Selected document"
-            when (val result = repository.load(uri, name, context.contentResolver.getType(uri))) {
-                is AiDocumentResult.Success -> {
-                    chunks = (chunks + result.document.chunks).takeLast(AiDocumentRepository.MAX_CHUNKS)
-                    documents = (documents + result.document.documentName).distinct().takeLast(20)
-                    status = "Loaded ${result.document.characterCount} characters from ${result.document.documentName}. Text remains in memory only."
-                    error = false
-                    aiAnswer = null
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    repository.load(uri, name, context.contentResolver.getType(uri))
                 }
-                is AiDocumentResult.Unsupported -> { status = result.reason; error = true }
-                is AiDocumentResult.Failure -> { status = result.reason; error = true }
+                when (result) {
+                    is AiDocumentResult.Success -> {
+                        chunks = (chunks + result.document.chunks).takeLast(AiDocumentRepository.MAX_CHUNKS)
+                        documents = (documents + result.document.documentName).distinct().takeLast(20)
+                        status = "Loaded ${result.document.characterCount} characters from ${result.document.documentName}. Text remains in memory only."
+                        error = false
+                        aiAnswer = null
+                    }
+                    is AiDocumentResult.Unsupported -> { status = result.reason; error = true }
+                    is AiDocumentResult.Failure -> { status = result.reason; error = true }
+                }
             }
         }
     }
