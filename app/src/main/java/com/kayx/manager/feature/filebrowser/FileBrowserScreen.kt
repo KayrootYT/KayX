@@ -814,7 +814,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text("${plan.files.size} files · ${fmtSize(plan.totalBytes)}")
-                        Text("Destination:\n${plan.destinationPath}")
+                        Text("Destination:\n${plan.destinationLabel}")
                         Text("No files have been changed. Confirm only if this list and destination are correct.")
                         plan.files.forEach { entry ->
                             Text("• ${entry.name}", maxLines = 1, overflow = TextOverflow.Ellipsis)
