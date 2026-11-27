@@ -128,8 +128,8 @@ internal object AiStructuredDocumentExtractor {
                 require(!name.startsWith("/") && name.split('/').none { it == ".." }) { "Invalid Office archive path" }
                 if (!entry.isDirectory) {
                     val selected = name == "[Content_Types].xml" || name == "word/document.xml" ||
-                        name == "xl/sharedStrings.xml" || name.matches(Regex("xl/worksheets/sheet[0-9]+\\\\.xml")) ||
-                        name.matches(Regex("ppt/slides/slide[0-9]+\\\\.xml"))
+                        name == "xl/sharedStrings.xml" || name.matches(Regex("xl/worksheets/sheet[0-9]+\\.xml")) ||
+                        name.matches(Regex("ppt/slides/slide[0-9]+\\.xml"))
                     val out = if (selected) ByteArrayOutputStream() else null
                     val buffer = ByteArray(4096)
                     while (true) {
