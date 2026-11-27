@@ -113,7 +113,7 @@ fun OfflineAssistantBar(
 
     DisposableEffect(Unit) {
         onDispose {
-            recognizer?.runCatching { cancel(); destroy() }
+            recognizer?.let { speech -> runCatching { speech.cancel(); speech.destroy() } }
             recognizer = null
         }
     }
