@@ -111,7 +111,7 @@ fun OfflineAssistantBar(
         if (granted) startOfflineVoice() else status = "Microphone permission denied; text commands still work"
     }
 
-    DisposableEffect(recognizer) {
+    DisposableEffect(Unit) {
         onDispose {
             recognizer?.let { speech -> runCatching { speech.cancel(); speech.destroy() } }
             recognizer = null
