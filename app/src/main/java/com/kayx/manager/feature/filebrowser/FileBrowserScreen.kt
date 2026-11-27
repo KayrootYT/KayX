@@ -182,7 +182,10 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     }
     LaunchedEffect(Unit) { vm.syncDefaults() }
     LaunchedEffect(s.message) { s.message?.let { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show(); snack.showSnackbar(it); vm.consumeMessage() } }
-    BackHandler { if (!vm.up()) onExit() }
+    BackHandler {
+        if (assistantMode) assistantMode = false
+        else if (!vm.up()) onExit()
+    }
 
     val executeAssistantCommand: (OfflineAssistantCommand) -> Unit = { command ->
                                 when (command) {
