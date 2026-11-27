@@ -55,6 +55,19 @@ class OfflineAssistantParserTest {
         assertEquals(OfflineAssistantCommand.FolderSize("DCIM"), OfflineAssistantParser.parse("folder ka size DCIM"))
     }
 
+    @Test fun parsesPreviewFirstOrganizationCommands() {
+        assertEquals(
+            OfflineAssistantCommand.PreviewOrganize(Category.IMAGES, "/storage/emulated/0/Pictures/Sorted Photos"),
+            OfflineAssistantParser.parse("organize photos to /storage/emulated/0/Pictures/Sorted Photos")
+        )
+        assertEquals(
+            OfflineAssistantCommand.PreviewOrganize(Category.DOCUMENTS, "/storage/emulated/0/Documents"),
+            OfflineAssistantParser.parse("organize docs to /storage/emulated/0/Documents")
+        )
+        assertNull(OfflineAssistantParser.parse("organize everything to /storage/emulated/0"))
+        assertNull(OfflineAssistantParser.parse("organize images"))
+    }
+
     @Test fun rejectsEmptyOversizedAndUnknownCommands() {
         assertNull(OfflineAssistantParser.parse(""))
         assertNull(OfflineAssistantParser.parse("do something magical"))
