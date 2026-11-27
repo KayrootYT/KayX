@@ -40,12 +40,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun AiDocumentDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val repository = remember(context) { AiDocumentRepository(context.contentResolver) }
+    val repository = remember(context) { AiDocumentRepository(context.contentResolver, context) }
     val scope = rememberCoroutineScope()
     var chunks by remember { mutableStateOf(emptyList<AiDocumentChunk>()) }
     var documents by remember { mutableStateOf(emptyList<String>()) }
     var query by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf("Choose text documents to search locally on this device.") }
+    var status by remember { mutableStateOf("Choose documents to search locally on this device.") }
     var error by remember { mutableStateOf(false) }
     var showShareConsent by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
@@ -136,7 +136,7 @@ fun AiDocumentDialog(onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    "Supported: TXT, Markdown, CSV, JSON, XML, HTML, logs and common source/config text. PDF and Office files are currently unsupported. Maximum 2 MB and 120,000 characters per document.",
+                    "Supported: TXT, Markdown, CSV, JSON, XML, HTML, logs, source/config text, text-based PDF, DOCX, XLSX and PPTX. Legacy DOC/XLS/PPT, encrypted PDFs and scanned image-only PDFs are unsupported. Maximum 2 MB input, 120,000 extracted characters, 200 PDF pages and 2 MB expanded Office XML.",
                     style = MaterialTheme.typography.labelSmall
                 )
             }
