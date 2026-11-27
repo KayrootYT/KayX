@@ -804,14 +804,16 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 onDismissRequest = { dlg = null },
                 title = { Text("Copy preview · ${plan.category.label}") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text("${plan.files.size} local files · ${fmtSize(plan.totalBytes)}")
                         Text("Destination:\n${plan.destinationPath}")
                         Text("No files have been changed. Confirm only if this list and destination are correct.")
-                        plan.files.take(12).forEach { entry ->
+                        plan.files.forEach { entry ->
                             Text("• ${entry.name}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        if (plan.files.size > 12) Text("…and ${plan.files.size - 12} more")
                         Text("Existing names will be kept; copies receive a new name. Original files are not deleted.")
                     }
                 },
