@@ -77,8 +77,8 @@ private val FONT_EXTENSIONS = setOf("ttf", "otf", "woff", "woff2")
 private val OFFICE_EXTENSIONS = setOf("pdf", "doc", "docx", "docm", "dot", "dotx", "xls", "xlsx", "xlsm", "xltx", "ods", "odt", "ppt", "pptx", "pptm", "ppsx", "odp", "epub", "mobi")
 
 internal sealed interface Dlg {
-    data object NewFolder : Dlg
-    data object NewFile : Dlg
+    data class NewFolder(val initialName: String = "") : Dlg
+    data class NewFile(val initialName: String = "") : Dlg
     data class Rename(val path: String, val name: String) : Dlg
     data object Delete : Dlg
     data object Zip : Dlg
@@ -234,8 +234,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                     else vm.copySelected(command.cut)
                                 }
                                 OfflineAssistantCommand.Paste -> if (s.clipboard.isEmpty()) vm.notify("Clipboard is empty") else dlg = Dlg.ConfirmPaste
-                                is OfflineAssistantCommand.NewFolder -> { dlg = Dlg.NewFolder }
-                                is OfflineAssistantCommand.NewFile -> { dlg = Dlg.NewFile }
+                                is OfflineAssistantCommand.NewFolder -> { dlg = Dlg.NewFolder(command.name) }
+                                is OfflineAssistantCommand.NewFile -> { dlg = Dlg.NewFile(command.name) }
                                 is OfflineAssistantCommand.RenameSelected -> {
                                     if (s.selected.size != 1) vm.notify("Select exactly one item to rename")
                                     else dlg = Dlg.Rename(s.selected.first(), command.newName)
@@ -604,8 +604,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         var addMenu by remember { mutableStateOf(false) }
                         IconButton({ addMenu = true }) { Icon(Icons.Default.Add, "New") }
                         DropdownMenu(addMenu, { addMenu = false }) {
-                            DropdownMenuItem({ Text("New folder") }, { dlg = Dlg.NewFolder; addMenu = false })
-                            DropdownMenuItem({ Text("New file") }, { dlg = Dlg.NewFile; addMenu = false })
+                            DropdownMenuItem({ Text("New folder") }, { dlg = Dlg.NewFolder(); addMenu = false })
+                            DropdownMenuItem({ Text("New file") }, { dlg = Dlg.NewFile(); addMenu = false })
                         }
                     }
                     IconButton({ vm.toggleDualPane() }) { Icon(if (s.dualPane) Icons.Default.ViewAgenda else Icons.Default.ViewColumn, "Dual pane") }
@@ -634,8 +634,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     }
 
     when (val d = dlg) {
-        is Dlg.NewFolder -> NameDialog("New folder", "", { dlg = null }) { vm.newFolder(it); dlg = null }
-        is Dlg.NewFile -> NameDialog("New file", "", { dlg = null }) { vm.newFile(it); dlg = null }
+        is Dlg.NewFolder -> NameDialog("New folder", d.initialName, { dlg = null }) { vm.newFolder(it); dlg = null }
+        is Dlg.NewFile -> NameDialog("New file", d.initialName, { dlg = null }) { vm.newFile(it); dlg = null }
         is Dlg.Rename -> NameDialog("Rename", d.name, { dlg = null }) { vm.rename(d.path, it); dlg = null }
         is Dlg.Zip -> NameDialog("Create ZIP", "archive.zip", { dlg = null }) { vm.zipSelected(it); dlg = null }
         is Dlg.Delete -> AlertDialog({ dlg = null }, title = { Text("Delete ${s.selected.size} item(s)?") }, text = { Text("This cannot be undone.") },
