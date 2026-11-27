@@ -184,10 +184,84 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     LaunchedEffect(s.message) { s.message?.let { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show(); snack.showSnackbar(it); vm.consumeMessage() } }
     BackHandler { if (!vm.up()) onExit() }
 
+    val executeAssistantCommand: (OfflineAssistantCommand) -> Unit = { command ->
+                                when (command) {
+                                    OfflineAssistantCommand.Help -> vm.notify(OfflineAssistantParser.HELP_TEXT)
+                                    is OfflineAssistantCommand.Search -> vm.setQuery(command.query)
+                                    is OfflineAssistantCommand.SearchContent -> { if (!s.grep) vm.toggleGrep(); vm.setQuery(command.query) }
+                                    is OfflineAssistantCommand.OpenFolder -> {
+                                        val folder = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { it.isDir && it.name.equals(command.name, ignoreCase = true) }
+                                        if (folder != null) vm.openActive(folder.path) else vm.notify("Folder not found in this location")
+                                    }
+                                    is OfflineAssistantCommand.OpenItem -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
+                                        if (item == null) vm.notify("Item not found in this location")
+                                        else if (item.isDir) vm.openActive(item.path) else openItem(item)
+                                    }
+                                    OfflineAssistantCommand.GoBack -> vm.goBack()
+                                    OfflineAssistantCommand.GoUp -> vm.goUp()
+                                    OfflineAssistantCommand.Refresh -> vm.reload()
+                                    is OfflineAssistantCommand.ShowHidden -> if (s.showHidden != command.visible) vm.toggleHidden()
+                                    is OfflineAssistantCommand.Sort -> vm.setSort(command.by)
+                                    OfflineAssistantCommand.SelectAll -> vm.selectAll()
+                                    OfflineAssistantCommand.ClearSelection -> vm.clearSelection()
+                                    is OfflineAssistantCommand.SelectName -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
+                                        if (item != null) vm.selectPaths(setOf(item.path)) else vm.notify("Item not found in this location")
+                                    }
+                                    is OfflineAssistantCommand.Copy -> {
+                                        if (s.selected.isEmpty()) vm.notify("Select files first")
+                                        else vm.copySelected(command.cut)
+                                    }
+                                    OfflineAssistantCommand.Paste -> if (s.clipboard.isEmpty()) vm.notify("Clipboard is empty") else dlg = Dlg.ConfirmPaste
+                                    is OfflineAssistantCommand.NewFolder -> { dlg = Dlg.NewFolder(command.name) }
+                                    is OfflineAssistantCommand.NewFile -> { dlg = Dlg.NewFile(command.name) }
+                                    is OfflineAssistantCommand.RenameSelected -> {
+                                        if (s.selected.size != 1) vm.notify("Select exactly one item to rename")
+                                        else dlg = Dlg.Rename(s.selected.first(), command.newName)
+                                    }
+                                    OfflineAssistantCommand.DeleteSelected -> {
+                                        if (s.selected.isEmpty()) vm.notify("Select files first") else dlg = Dlg.Delete
+                                    }
+                                    OfflineAssistantCommand.Undo -> vm.undoLastOperation()
+                                    OfflineAssistantCommand.ZipSelected -> if (s.selected.isEmpty()) vm.notify("Select files first") else dlg = Dlg.Zip
+                                    OfflineAssistantCommand.ShareSelected -> {
+                                        if (s.selected.isEmpty()) vm.notify("Select files first")
+                                        else if (s.selected.any { StorageLocation.fromStableKey(it) is StorageLocation.Saf }) vm.notify("Sharing SAF items is not available from this menu yet")
+                                        else ExternalOps.share(ctx, s.selected.map(::File))
+                                    }
+                                    OfflineAssistantCommand.InvertSelection -> vm.invertSelection()
+                                    is OfflineAssistantCommand.SelectPattern -> vm.selectPattern(command.pattern)
+                                    is OfflineAssistantCommand.Extract -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
+                                        if (item == null) vm.notify("Archive not found in this location") else vm.extractHere(item.path)
+                                    }
+                                    OfflineAssistantCommand.BookmarkCurrent -> {
+                                        val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
+                                        vm.notify(if (SettingsStore.addBookmark(activePath)) "Bookmark added" else "Already bookmarked")
+                                    }
+                                    OfflineAssistantCommand.ToggleDualPane -> vm.toggleDualPane()
+                                    OfflineAssistantCommand.StorageSummary -> {
+                                        val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
+                                        val usage = runCatching { android.os.StatFs(activePath).let {
+                                            "Storage used: ${fmtSize(it.totalBytes - it.availableBytes)} / ${fmtSize(it.totalBytes)} · Free: ${fmtSize(it.availableBytes)}"
+                                        } }.getOrElse { "Storage information is unavailable for this location" }
+                                        vm.notify(usage)
+                                    }
+                                }
+                            }
+
     if (s.dualPane) DualPaneBrowser(
         s, vm, snack, onExit, onSettings, onBrowseSaf = { safLocationPicker.launch(null) }, onOpenFile = onOpenFile,
         onDialog = { dlg = it }, onOpenItem = openItem, onOpenWith = { openFor = it }, onProperties = { infoFor = it },
-        onItemMenu = { f, pane -> itemMenu = f to pane }
+        onItemMenu = { f, pane -> itemMenu = f to pane },
+        assistantMode = assistantMode,
+        onToggleAssistant = { if (!s.searching) vm.toggleSearch(); assistantMode = !assistantMode },
+        onAssistantCommand = executeAssistantCommand
     ) else Scaffold(
         modifier = Modifier.glassBackground(), containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snack) },
@@ -208,76 +282,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 Row(Modifier.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton({ if (!vm.up()) onExit() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                     if (s.searching && assistantMode) OfflineAssistantBar(
-                        onCommand = { command ->
-                            when (command) {
-                                OfflineAssistantCommand.Help -> vm.notify(OfflineAssistantParser.HELP_TEXT)
-                                is OfflineAssistantCommand.Search -> vm.setQuery(command.query)
-                                is OfflineAssistantCommand.SearchContent -> { if (!s.grep) vm.toggleGrep(); vm.setQuery(command.query) }
-                                is OfflineAssistantCommand.OpenFolder -> {
-                                    val folder = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
-                                        .firstOrNull { it.isDir && it.name.equals(command.name, ignoreCase = true) }
-                                    if (folder != null) vm.openActive(folder.path) else vm.notify("Folder not found in this location")
-                                }
-                                is OfflineAssistantCommand.OpenItem -> {
-                                    val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
-                                        .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
-                                    if (item == null) vm.notify("Item not found in this location")
-                                    else if (item.isDir) vm.openActive(item.path) else openItem(item)
-                                }
-                                OfflineAssistantCommand.GoBack -> vm.goBack()
-                                OfflineAssistantCommand.GoUp -> vm.goUp()
-                                OfflineAssistantCommand.Refresh -> vm.reload()
-                                is OfflineAssistantCommand.ShowHidden -> if (s.showHidden != command.visible) vm.toggleHidden()
-                                is OfflineAssistantCommand.Sort -> vm.setSort(command.by)
-                                OfflineAssistantCommand.SelectAll -> vm.selectAll()
-                                OfflineAssistantCommand.ClearSelection -> vm.clearSelection()
-                                is OfflineAssistantCommand.SelectName -> {
-                                    val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
-                                        .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
-                                    if (item != null) vm.selectPaths(setOf(item.path)) else vm.notify("Item not found in this location")
-                                }
-                                is OfflineAssistantCommand.Copy -> {
-                                    if (s.selected.isEmpty()) vm.notify("Select files first")
-                                    else vm.copySelected(command.cut)
-                                }
-                                OfflineAssistantCommand.Paste -> if (s.clipboard.isEmpty()) vm.notify("Clipboard is empty") else dlg = Dlg.ConfirmPaste
-                                is OfflineAssistantCommand.NewFolder -> { dlg = Dlg.NewFolder(command.name) }
-                                is OfflineAssistantCommand.NewFile -> { dlg = Dlg.NewFile(command.name) }
-                                is OfflineAssistantCommand.RenameSelected -> {
-                                    if (s.selected.size != 1) vm.notify("Select exactly one item to rename")
-                                    else dlg = Dlg.Rename(s.selected.first(), command.newName)
-                                }
-                                OfflineAssistantCommand.DeleteSelected -> {
-                                    if (s.selected.isEmpty()) vm.notify("Select files first") else dlg = Dlg.Delete
-                                }
-                                OfflineAssistantCommand.Undo -> vm.undoLastOperation()
-                                OfflineAssistantCommand.ZipSelected -> if (s.selected.isEmpty()) vm.notify("Select files first") else dlg = Dlg.Zip
-                                OfflineAssistantCommand.ShareSelected -> {
-                                    if (s.selected.isEmpty()) vm.notify("Select files first")
-                                    else if (s.selected.any { StorageLocation.fromStableKey(it) is StorageLocation.Saf }) vm.notify("Sharing SAF items is not available from this menu yet")
-                                    else ExternalOps.share(ctx, s.selected.map(::File))
-                                }
-                                OfflineAssistantCommand.InvertSelection -> vm.invertSelection()
-                                is OfflineAssistantCommand.SelectPattern -> vm.selectPattern(command.pattern)
-                                is OfflineAssistantCommand.Extract -> {
-                                    val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
-                                        .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
-                                    if (item == null) vm.notify("Archive not found in this location") else vm.extractHere(item.path)
-                                }
-                                OfflineAssistantCommand.BookmarkCurrent -> {
-                                    val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
-                                    vm.notify(if (SettingsStore.addBookmark(activePath)) "Bookmark added" else "Already bookmarked")
-                                }
-                                OfflineAssistantCommand.ToggleDualPane -> vm.toggleDualPane()
-                                OfflineAssistantCommand.StorageSummary -> {
-                                    val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
-                                    val usage = runCatching { android.os.StatFs(activePath).let {
-                                        "Storage used: ${fmtSize(it.totalBytes - it.availableBytes)} / ${fmtSize(it.totalBytes)} · Free: ${fmtSize(it.availableBytes)}"
-                                    } }.getOrElse { "Storage information is unavailable for this location" }
-                                    vm.notify(usage)
-                                }
-                            }
-                        }
+                        onCommand = executeAssistantCommand
                     ) else if (s.searching) TextField(
                         value = s.query,
                         onValueChange = vm::setQuery,
