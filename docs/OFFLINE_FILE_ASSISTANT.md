@@ -21,6 +21,8 @@ The Offline Assistant is opened from the sparkle button beside the file-browser 
 - File operations: `new folder Work`, `new file notes.txt`, `rename selected to notes-old.txt`, `delete selected`, `zip selected`, `extract archive.zip`, `share selected`, `undo`
 - Storage/navigation helpers: `storage info`, `bookmark current`
 - Whole-storage inventory: `scan storage`, `find large files`, `find old files`, `find duplicates`, `cancel scan`
+- Category filters: `find photos` / `find images`, `find videos`, `find audio`, `find documents`, `find apks`
+- Folder rollup: `folder size Download` (combines matching folder names across accessible roots; use a distinctive folder name)
 
 Hindi and Hinglish aliases are provided for common navigation, selection, hidden-file, copy/cut/paste and search commands. The grammar is intentionally explicit; unsupported or ambiguous phrases are rejected instead of guessed.
 
@@ -40,6 +42,8 @@ Hindi and Hinglish aliases are provided for common navigation, selection, hidden
 - Traversal is bounded to 50,000 files and 24 directory levels. It checks coroutine cancellation between directories/files and reports scan progress, inaccessible roots, and whether the entry cap was reached.
 - Android/data and Android/obb are excluded; Android/media remains eligible where the platform grants access.
 - `find large files` reports files at least 100 MiB; `find old files` reports files not modified for at least 180 days.
-- `find duplicates` reports SHA-256 duplicate candidates, not automatic deletion targets. Hashing is capped at 500 candidate files and 512 MiB total per scan. Files larger than the remaining hash budget are skipped.
+- `find duplicates` reports SHA-256 duplicate candidates, not automatic deletion targets. Hashing is capped at 500 candidate files and 512 MiB total per scan. Files larger than the remaining hash budget are skipped. Hashing runs only for this explicit command, not for category or general inventory scans.
+- Category filters use the scanned filename extension metadata and report up to eight names; supported groups are images, videos, audio, documents and APK packages.
+- `folder size NAME` totals accessible files below every directory named NAME. If the same folder name exists in multiple locations, the output combines them and says so; it is a read-only estimate based on files visible to the bounded scan.
 - Result summaries show at most eight names per command. The inventory is in-memory only; no paths, file content, or scan history are uploaded or persisted.
-- Current limitations: scan resume/checkpoint persistence, category-specific filters, folder-size rollups, preview-first bulk organization, and broader cross-screen commands are still pending. No bulk action is performed by these commands.
+- Current limitations: scan resume/checkpoint persistence, preview-first bulk organization, and broader cross-screen commands are still pending. No bulk action is performed by these commands.
