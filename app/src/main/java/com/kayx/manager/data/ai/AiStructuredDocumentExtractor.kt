@@ -64,7 +64,9 @@ internal object AiStructuredDocumentExtractor {
         override fun close() = Unit
         fun value(): String = content.toString()
     }
-\n    private fun extractSpreadsheet(entries: Map<String, ByteArray>): String {
+
+
+    private fun extractSpreadsheet(entries: Map<String, ByteArray>): String {
         val shared = entries["xl/sharedStrings.xml"]?.let { xml ->
             parseXml(xml).getElementsByTagNameNS("*", "si").let { nodes ->
                 (0 until nodes.length).map { index ->
@@ -152,7 +154,8 @@ internal object AiStructuredDocumentExtractor {
         .filter { it == '\n' || it == '\t' || it >= ' ' }
         .trim()
 
-    const val MAX_EXTRACTED_CHARS = 120_000\n    const val MAX_PDF_PAGES = 200
+    const val MAX_EXTRACTED_CHARS = 120_000
+        const val MAX_PDF_PAGES = 200
     const val MAX_ZIP_ENTRIES = 256
     const val MAX_EXPANDED_BYTES = 2 * 1024 * 1024
 }
