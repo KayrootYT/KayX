@@ -647,6 +647,34 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
     fun notify(msg: String) = _s.update { it.copy(message = msg) }
     fun consumeMessage() = _s.update { it.copy(message = null) }
+    /** Copy a previously previewed, revalidated set of local files into an explicit destination. */
+    fun copyPathsTo(paths: List<String>, destinationPath: String) {
+        val destination = runCatching { File(destinationPath).canonicalFile }.getOrNull()
+        if (destination == null || !destination.isDirectory || !destination.canWrite()) {
+            notify("Organization destination is unavailable or not writable")
+            return
+        }
+        val safePaths = paths.distinct().filter { path ->
+            val source = File(path)
+            runCatching {
+                !java.nio.file.Files.isSymbolicLink(source.toPath()) &&
+                    source.canonicalFile.path == source.absolutePath && source.isFile && source.canRead()
+            }.getOrDefault(false)
+        }
+        if (safePaths.size != paths.distinct().size || safePaths.isEmpty()) {
+            notify("One or more previewed files changed or became unavailable. Scan and preview again.")
+            return
+        }
+        startStorageTransfer(
+            safePaths,
+            StorageLocation.Local(destination).stableKey(),
+            cut = false,
+            policy = Conflict.KEEP_BOTH,
+            sourcePane = null,
+            fromClipboard = false
+        )
+    }
+
     fun copySelected(cut: Boolean) {
         FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else FileActionSound.COPY)
         _s.update { st ->
