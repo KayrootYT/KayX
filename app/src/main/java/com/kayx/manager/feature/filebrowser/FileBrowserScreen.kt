@@ -212,10 +212,17 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             when (command) {
                                 OfflineAssistantCommand.Help -> vm.notify(OfflineAssistantParser.HELP_TEXT)
                                 is OfflineAssistantCommand.Search -> vm.setQuery(command.query)
+                                is OfflineAssistantCommand.SearchContent -> { if (!s.grep) vm.toggleGrep(); vm.setQuery(command.query) }
                                 is OfflineAssistantCommand.OpenFolder -> {
                                     val folder = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
                                         .firstOrNull { it.isDir && it.name.equals(command.name, ignoreCase = true) }
                                     if (folder != null) vm.openActive(folder.path) else vm.notify("Folder not found in this location")
+                                }
+                                is OfflineAssistantCommand.OpenItem -> {
+                                    val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                        .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
+                                    if (item == null) vm.notify("Item not found in this location")
+                                    else if (item.isDir) vm.openActive(item.path) else openItem(item)
                                 }
                                 OfflineAssistantCommand.GoBack -> vm.goBack()
                                 OfflineAssistantCommand.GoUp -> vm.goUp()
@@ -244,6 +251,24 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                     if (s.selected.isEmpty()) vm.notify("Select files first") else dlg = Dlg.Delete
                                 }
                                 OfflineAssistantCommand.Undo -> vm.undoLastOperation()
+                                OfflineAssistantCommand.ZipSelected -> if (s.selected.isEmpty()) vm.notify("Select files first") else dlg = Dlg.Zip
+                                OfflineAssistantCommand.ShareSelected -> {
+                                    if (s.selected.isEmpty()) vm.notify("Select files first")
+                                    else if (s.selected.any { StorageLocation.fromStableKey(it) is StorageLocation.Saf }) vm.notify("Sharing SAF items is not available from this menu yet")
+                                    else ExternalOps.share(ctx, s.selected.map(::File))
+                                }
+                                OfflineAssistantCommand.InvertSelection -> vm.invertSelection()
+                                is OfflineAssistantCommand.SelectPattern -> vm.selectPattern(command.pattern)
+                                is OfflineAssistantCommand.Extract -> {
+                                    val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                        .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
+                                    if (item == null) vm.notify("Archive not found in this location") else vm.extractHere(item.path)
+                                }
+                                OfflineAssistantCommand.BookmarkCurrent -> {
+                                    val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
+                                    vm.notify(if (SettingsStore.addBookmark(activePath)) "Bookmark added" else "Already bookmarked")
+                                }
+                                OfflineAssistantCommand.ToggleDualPane -> vm.toggleDualPane()
                                 OfflineAssistantCommand.StorageSummary -> {
                                     val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
                                     val usage = runCatching { android.os.StatFs(activePath).let {
