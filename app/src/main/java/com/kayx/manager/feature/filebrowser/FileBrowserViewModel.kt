@@ -20,6 +20,7 @@ import com.kayx.manager.data.filesystem.StorageLocation
 import com.kayx.manager.data.filesystem.StorageLocationRepository
 import com.kayx.manager.data.filesystem.SafRepository
 import com.kayx.manager.data.filesystem.FileSearchCategory
+import com.kayx.manager.data.storage.OfflineStorageInventory
 import com.kayx.manager.data.settings.SettingsStore
 import com.kayx.manager.domain.model.FileItem
 import com.kayx.manager.domain.model.SortBy
@@ -647,6 +648,37 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     }
     fun notify(msg: String) = _s.update { it.copy(message = msg) }
     fun consumeMessage() = _s.update { it.copy(message = null) }
+    /** Copy a previously previewed, revalidated set of local files into an explicit destination. */
+    fun copyPreviewedFiles(entries: List<OfflineStorageInventory.Entry>, destinationPath: String) {
+        val destination = runCatching { File(destinationPath).canonicalFile }.getOrNull()
+        if (destination == null || !destination.isDirectory || !destination.canWrite()) {
+            notify("Organization destination is unavailable or not writable")
+            return
+        }
+        val safePaths = entries.mapNotNull { entry ->
+            val source = File(entry.path)
+            runCatching {
+                if (entry.saf || java.nio.file.Files.isSymbolicLink(source.toPath()) ||
+                    source.canonicalFile.path != source.absolutePath || !source.isFile || !source.canRead() ||
+                    source.length() != entry.size || source.lastModified() != entry.modified ||
+                    source.parentFile?.canonicalPath == destination.path) null
+                else entry.path
+            }.getOrNull()
+        }
+        if (safePaths.size != entries.size || safePaths.isEmpty()) {
+            notify("One or more previewed files changed or became unavailable. Scan and preview again.")
+            return
+        }
+        startStorageTransfer(
+            safePaths.distinct(),
+            StorageLocation.Local(destination).stableKey(),
+            cut = false,
+            policy = Conflict.KEEP_BOTH,
+            sourcePane = null,
+            fromClipboard = false
+        )
+    }
+
     fun copySelected(cut: Boolean) {
         FileOperationSounds.play(appContext, if (cut) FileActionSound.MOVE else FileActionSound.COPY)
         _s.update { st ->

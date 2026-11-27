@@ -94,6 +94,7 @@ internal sealed interface Dlg {
     data object ConfirmPaste : Dlg
     data object Tools : Dlg
     data object MultiProps : Dlg
+    data class OrganizationPreview(val plan: OfflineOrganizationPlan) : Dlg
 }
 
 private fun fmtSize(b: Long): String {
@@ -216,6 +217,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         OfflineAssistantCommand.FindOldFiles -> result.oldFiles
                         OfflineAssistantCommand.FindDuplicates -> result.duplicateCandidates
                         is OfflineAssistantCommand.FindCategory -> result.entries.filter { it.category == query.category }.sortedByDescending { it.size }
+                        is OfflineAssistantCommand.PreviewOrganize -> result.entries.filter { it.category == query.category }.sortedByDescending { it.size }
                         else -> emptyList()
                     }
                     val heading = when (query) {
@@ -224,6 +226,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         OfflineAssistantCommand.FindDuplicates -> "Duplicate candidates (SHA-256 match)"
                         is OfflineAssistantCommand.FindCategory -> "${query.category.label} files"
                         is OfflineAssistantCommand.FolderSize -> "Folder size: ${query.folderName}"
+                        is OfflineAssistantCommand.PreviewOrganize -> "Organization preview: ${query.category.label}"
                         else -> "Storage inventory"
                     }
                     val folderMatches = if (query is OfflineAssistantCommand.FolderSize) {
@@ -237,6 +240,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         is OfflineAssistantCommand.FolderSize ->
                             if (folderMatches.isEmpty()) "No accessible files found inside a folder named '${query.folderName}'."
                             else "Matching files: ${folderMatches.size} · Combined size: ${fmtSize(folderMatches.sumOf { it.size })}. This combines folders with the same name."
+                        is OfflineAssistantCommand.PreviewOrganize -> "Preparing a confirmation-only preview."
                         else -> if (matches.isEmpty()) {
                             "No matching files found in the accessible scan."
                         } else {
@@ -246,7 +250,11 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     }
                     val coverage = "Roots: ${result.scannedRoots} · Inaccessible: ${result.inaccessibleRoots}" +
                         if (result.truncated) " · Scan capped at ${OfflineStorageInventory.DEFAULT_MAX_ENTRIES} files" else ""
-                    vm.notify("$heading\n$details\n$coverage")
+                    if (query is OfflineAssistantCommand.PreviewOrganize) {
+                        OfflineOrganizationPlanner.create(result.entries, query.category, query.destinationPath)
+                            .onSuccess { dlg = Dlg.OrganizationPreview(it) }
+                            .onFailure { vm.notify(it.message ?: "Could not prepare organization preview") }
+                    } else vm.notify("$heading\n$details\n$coverage")
                 }
                 storageScanJob = null
             }
@@ -319,7 +327,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                     OfflineAssistantCommand.FindOldFiles,
                                     OfflineAssistantCommand.FindDuplicates,
                                     is OfflineAssistantCommand.FindCategory,
-                                    is OfflineAssistantCommand.FolderSize -> runInventoryQuery(command)
+                                    is OfflineAssistantCommand.FolderSize,
+                                    is OfflineAssistantCommand.PreviewOrganize -> runInventoryQuery(command)
                                     OfflineAssistantCommand.CancelStorageScan -> {
                                         storageScanJob?.cancel()
                                         storageScanJob = null
@@ -788,6 +797,36 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 if (one != null) add("Create symlink here…" to { dlg = Dlg.Symlink(one) })
                 if (one != null && MultiExtract.canExtract(one)) add("Extract here" to { vm.extractHere(one); vm.clearSelection() })
             }, { dlg = null })
+        }
+        is Dlg.OrganizationPreview -> {
+            val plan = d.plan
+            AlertDialog(
+                onDismissRequest = { dlg = null },
+                title = { Text("Copy preview · ${plan.category.label}") },
+                text = {
+                    Column(
+                        Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("${plan.files.size} local files · ${fmtSize(plan.totalBytes)}")
+                        Text("Destination:\n${plan.destinationPath}")
+                        Text("No files have been changed. Confirm only if this list and destination are correct.")
+                        plan.files.forEach { entry ->
+                            Text("• ${entry.name}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text("Existing names will be kept; copies receive a new name. Original files are not deleted.")
+                    }
+                },
+                confirmButton = {
+                    TextButton({
+                        if (OfflineOrganizationPlanner.isStillValid(plan)) {
+                            vm.copyPreviewedFiles(plan.files, plan.destinationPath)
+                        } else vm.notify("Preview is stale. Run the organize command again.")
+                        dlg = null
+                    }) { Text("Confirm copy") }
+                },
+                dismissButton = { TextButton({ dlg = null }) { Text("Cancel") } }
+            )
         }
         is Dlg.MultiProps -> {
             if (s.selected.any { StorageLocation.fromStableKey(it) is StorageLocation.Saf }) {

@@ -41,10 +41,11 @@ sealed interface OfflineAssistantCommand {
     data object CancelStorageScan : OfflineAssistantCommand
     data class FindCategory(val category: Category) : OfflineAssistantCommand
     data class FolderSize(val folderName: String) : OfflineAssistantCommand
+    data class PreviewOrganize(val category: Category, val destinationPath: String) : OfflineAssistantCommand
 }
 
 object OfflineAssistantParser {
-    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, cancel scan."
+    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, organize images to /storage/emulated/0/Pictures, cancel scan."
 
     fun parse(raw: String): OfflineAssistantCommand? {
         val input = raw.trim().replace(Regex("\\s+"), " ")
@@ -82,6 +83,21 @@ object OfflineAssistantParser {
             value in setOf("find apks", "find apk files", "apk dhundo", "एपीके खोजो") -> OfflineAssistantCommand.FindCategory(Category.APKS)
             value.startsWith("folder size ") || value.startsWith("size of folder ") || value.startsWith("folder ka size ") ->
                 tail("folder size", "size of folder", "folder ka size")?.let(OfflineAssistantCommand::FolderSize)
+            value.startsWith("organize ") -> {
+                val match = Regex("^organize\\s+(images|photos|videos|audio|music|documents|docs|apks)\\s+to\\s+(.+)$", RegexOption.IGNORE_CASE)
+                    .matchEntire(input)
+                match?.let {
+                    val category = when (it.groupValues[1].lowercase(Locale.ROOT)) {
+                        "images", "photos" -> Category.IMAGES
+                        "videos" -> Category.VIDEOS
+                        "audio", "music" -> Category.AUDIO
+                        "documents", "docs" -> Category.DOCUMENTS
+                        "apks" -> Category.APKS
+                        else -> null
+                    }
+                    category?.let { value -> OfflineAssistantCommand.PreviewOrganize(value, it.groupValues[2].trim()) }
+                }
+            }
             value in setOf("zip selected", "compress selected", "selected zip karo") -> OfflineAssistantCommand.ZipSelected
             value in setOf("share selected", "selected share karo", "share") -> OfflineAssistantCommand.ShareSelected
             value in setOf("invert selection", "selection ulta karo") -> OfflineAssistantCommand.InvertSelection
