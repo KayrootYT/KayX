@@ -163,16 +163,17 @@ AI is an optional extension and must not weaken KayX's offline-first/free produc
 - [ ] Physical-device validation of provider function-call compatibility and real confirmation UI.
 - Note: no production file-operation tools are registered in this phase; registration requires a separately reviewed app implementation.
 
-### AI Phase 3 — Document intelligence (RAG; implementation in review)
+### AI Phase 3 — Document intelligence (RAG; follow-up in progress)
 - [x] Add an explicit Android document picker; only user-selected files are read.
 - [x] Add bounded UTF-8 text ingestion (2 MB / 120,000 characters per file), chunking, and in-memory-only document state.
 - [x] Add deterministic local lexical retrieval with source filename and chunk references; no embeddings or network are used.
 - [x] Add a fail-closed share gate that refuses to construct remote context unless explicit consent is supplied; cap outgoing context at 24,000 characters.
 - [x] Add clear unsupported-format, invalid-encoding, binary-content and read-permission error handling. PDF and Office formats are explicitly unsupported in this first text-only slice.
-- [x] Add JVM tests for local retrieval, result bounds, source references, explicit consent and outgoing-context bounds.
-- [ ] Integrate the consent gate into an actual per-request AI chat/send flow; no document upload is implemented by this PR.
+- [x] Add JVM tests for local retrieval, result bounds, source references, explicit consent, prompt framing and outgoing-context bounds.
+- [x] Integrate the consent gate into an actual per-request AI send flow: show the exact selected source names and excerpt count, require a separate confirmation for every send, and send only locally retrieved bounded excerpts to the configured HTTPS provider.
+- [x] Frame document excerpts as untrusted reference data in the system prompt; never execute tool calls returned from document-question requests.
 - [ ] Add PDF/Office extraction with encrypted/unsupported-file fixtures and broader retrieval-quality/privacy tests.
-- [ ] Run Build & Test, APK artifact verification and Security Scan on the final PR head.
+- [ ] Run Build & Test, APK artifact verification and Security Scan on this follow-up PR's final head.
 - [ ] Physical-device validation of Storage Access Framework picker and provider consent behavior.
 
 ### AI Phase 4 — Semantic search
