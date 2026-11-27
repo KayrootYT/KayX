@@ -28,7 +28,7 @@ internal object OfflineOrganizationPlanner {
     ): Result<OfflineOrganizationPlan> = runCatching {
         val safDestination = StorageLocation.fromStableKey(destinationPath) as? StorageLocation.Saf
         val destination = if (safDestination != null) {
-            require(safDestination.relativePath.split('/').none { it == "." || it == ".." || it.contains('\\\\') }) {
+            require(safDestination.relativePath.split('/').none { it == "." || it == ".." || it.contains('\\') }) {
                 "SAF destination path is invalid."
             }
             null
