@@ -172,8 +172,10 @@ AI is an optional extension and must not weaken KayX's offline-first/free produc
 - [x] Add JVM tests for local retrieval, result bounds, source references, explicit consent, prompt framing and outgoing-context bounds.
 - [x] Integrate the consent gate into an actual per-request AI send flow: show the exact selected source names and excerpt count, require a separate confirmation for every send, and send only locally retrieved bounded excerpts to the configured HTTPS provider.
 - [x] Frame document excerpts as untrusted reference data in the system prompt; never execute tool calls returned from document-question requests.
-- [x] Add bounded local text extraction for PDFs (PDFBox Android), DOCX, XLSX and PPTX; reject encrypted/password-protected PDFs, legacy binary Office formats, malformed/unsafe Office XML, oversized archives and unsupported content.\n- [x] Add JVM fixture tests for DOCX paragraphs, PPTX slides, XLSX shared/inline cells and DTD/external-entity rejection.\n- [ ] Add Android PDF fixtures for normal, encrypted, scanned/image-only and oversized-page-count documents; validate PDFBox initialization on device.
-- [ ] Run Build & Test, APK artifact verification and Security Scan on this follow-up PR's final head.
+- [x] Add bounded local text extraction for PDFs (PDFBox Android), DOCX, XLSX and PPTX; reject encrypted/password-protected PDFs, legacy binary Office formats, malformed/unsafe Office XML, oversized archives and unsupported content.
+- [x] Add JVM fixture tests for DOCX paragraphs, PPTX slides, XLSX shared/inline cells and DTD/external-entity rejection.
+- [ ] Add Android PDF fixtures for normal, encrypted, scanned/image-only and oversized-page-count documents; validate PDFBox initialization on device.
+- [x] Run Build & Test, APK artifact verification and Security Scan on final PR head `8b32b38` (2026-11-27); Release/minified APK build passed.
 - [ ] Physical-device validation of Storage Access Framework picker and provider consent behavior.
 
 ### AI Phase 4 — Semantic search
