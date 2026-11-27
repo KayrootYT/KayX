@@ -40,6 +40,33 @@ class AiDocumentIntelligenceTest {
         assertTrue(context.contains("offline first file manager"))
     }
 
+    @Test fun remotePromptCannotBeBuiltWithoutConsent() {
+        try {
+            AiDocumentPromptBuilder.build("Summarize this", chunks.take(1), consentGranted = false)
+            fail("Prompt must not be built without explicit consent")
+        } catch (_: IllegalArgumentException) {
+            // Expected fail-closed behavior.
+        }
+    }
+
+    @Test fun remotePromptFramesDocumentTextAsUntrustedAndKeepsSources() {
+        val messages = AiDocumentPromptBuilder.build("What is KayX?", chunks.take(1), consentGranted = true)
+        assertEquals(2, messages.size)
+        assertEquals(AiChatMessage.Role.SYSTEM, messages[0].role)
+        assertTrue(messages[0].content.contains("untrusted data"))
+        assertTrue(messages[1].content.contains("Question: What is KayX?"))
+        assertTrue(messages[1].content.contains("[Source: notes.txt"))
+    }
+
+    @Test fun remotePromptRejectsBlankQuestion() {
+        try {
+            AiDocumentPromptBuilder.build("  ", chunks.take(1), consentGranted = true)
+            fail("A non-blank question is required")
+        } catch (_: IllegalArgumentException) {
+            // Expected validation.
+        }
+    }
+
     @Test fun remoteContextIsBounded() {
         val huge = listOf(AiDocumentChunk("large.txt", 0, "x".repeat(30_000)))
         val context = AiDocumentShareGate.contextForRemoteRequest(huge, true)
