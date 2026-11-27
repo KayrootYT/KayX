@@ -108,6 +108,28 @@ class OfflineOrganizationPlannerTest {
         assertTrue(OfflineOrganizationPlanner.isStillValid(plan))
     }
 
+
+    @Test fun acceptsSafDestinationStableKeyForPreview() {
+        val source = temporaryFolder.newFolder("saf-destination-source")
+        val photo = File(source, "photo.jpg").apply { writeText("photo") }
+        val key = StorageLocation.Saf(
+            "content://com.android.externalstorage.documents/tree/ABCD%3A",
+            "Pictures/Sorted"
+        ).stableKey()
+        val entry = OfflineStorageInventory.Entry(
+            key = photo.absolutePath,
+            path = photo.absolutePath,
+            name = photo.name,
+            size = photo.length(),
+            modified = photo.lastModified(),
+            category = Category.IMAGES,
+            saf = false
+        )
+        val plan = OfflineOrganizationPlanner.create(listOf(entry), Category.IMAGES, key).getOrThrow()
+        assertEquals("Sorted", plan.destinationLabel)
+        assertTrue(OfflineOrganizationPlanner.isStillValid(plan))
+    }
+
     @Test fun refusesMoreThanOneHundredFiles() {
         val source = temporaryFolder.newFolder("source")
         val destination = temporaryFolder.newFolder("destination")
