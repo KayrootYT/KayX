@@ -49,6 +49,7 @@ object OfflineStorageInventory {
         maxDepth: Int = DEFAULT_MAX_DEPTH,
         largeBytes: Long = DEFAULT_LARGE_BYTES,
         oldAgeDays: Long = DEFAULT_OLD_AGE_DAYS,
+        includeDuplicates: Boolean = false,
         onProgress: (Int) -> Unit = {}
     ): Result {
         require(maxEntries in 1..DEFAULT_MAX_ENTRIES)
@@ -143,7 +144,7 @@ object OfflineStorageInventory {
             .sortedByDescending { it.size }.take(100).toList()
         val old = found.asSequence().filter { it.modified in 1 until oldCutoff }
             .sortedBy { it.modified }.take(100).toList()
-        val duplicates = findDuplicateCandidates(app, found)
+        val duplicates = if (includeDuplicates) findDuplicateCandidates(app, found) else emptyList()
         onProgress(found.size)
         return Result(found, large, old, duplicates, found.sumOf { it.size },
             rootsScanned, inaccessibleRoots, truncated)
