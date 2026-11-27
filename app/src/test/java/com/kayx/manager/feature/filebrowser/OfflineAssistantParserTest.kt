@@ -9,6 +9,8 @@ class OfflineAssistantParserTest {
     @Test fun parsesSearchAndNavigationCommands() {
         assertEquals(OfflineAssistantCommand.Search("family photos"), OfflineAssistantParser.parse("Search family photos"))
         assertEquals(OfflineAssistantCommand.OpenFolder("Download"), OfflineAssistantParser.parse("open folder Download"))
+        assertEquals(OfflineAssistantCommand.OpenItem("report.pdf"), OfflineAssistantParser.parse("open report.pdf"))
+        assertEquals(OfflineAssistantCommand.SearchContent("invoice"), OfflineAssistantParser.parse("search content invoice"))
         assertEquals(OfflineAssistantCommand.GoBack, OfflineAssistantParser.parse("go back"))
         assertEquals(OfflineAssistantCommand.GoUp, OfflineAssistantParser.parse("upar jao"))
     }
@@ -28,11 +30,16 @@ class OfflineAssistantParserTest {
         assertEquals(OfflineAssistantCommand.RenameSelected("renamed.pdf"), OfflineAssistantParser.parse("rename selected to renamed.pdf"))
         assertEquals(OfflineAssistantCommand.DeleteSelected, OfflineAssistantParser.parse("delete selected"))
         assertEquals(OfflineAssistantCommand.Undo, OfflineAssistantParser.parse("undo"))
+        assertEquals(OfflineAssistantCommand.ZipSelected, OfflineAssistantParser.parse("zip selected"))
+        assertEquals(OfflineAssistantCommand.SelectPattern("*.jpg"), OfflineAssistantParser.parse("select pattern *.jpg"))
+        assertEquals(OfflineAssistantCommand.Extract("archive.zip"), OfflineAssistantParser.parse("extract archive.zip"))
     }
 
     @Test fun rejectsEmptyOversizedAndUnknownCommands() {
         assertNull(OfflineAssistantParser.parse(""))
         assertNull(OfflineAssistantParser.parse("do something magical"))
         assertNull(OfflineAssistantParser.parse("x".repeat(513)))
+        assertEquals(OfflineAssistantCommand.GoBack, OfflineAssistantParser.parse("वापस जाओ"))
+        assertEquals(OfflineAssistantCommand.ShowHidden(true), OfflineAssistantParser.parse("छिपी फाइलें दिखाओ"))
     }
 }
