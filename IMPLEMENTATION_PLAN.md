@@ -158,7 +158,7 @@ The user-facing assistant is a separate, fully local command feature. It is not 
 - [x] Add a bounded, read-only inventory over readable shared internal storage and persisted SAF tree grants, including user-granted SD-card/provider roots; avoid duplicate primary-tree scanning when the shared root is readable.
 - [x] Add offline commands for large files (100 MiB+), old files (180+ days), and SHA-256 duplicate candidates. Android/data and Android/obb are excluded; Android/media is included only where readable.
 - [x] Add cancellable traversal with a 50,000-file / 24-level cap, progress callbacks, and inaccessible-root/truncation reporting.
-- [ ] Add category-specific natural-language filters for media/documents and folder-size summaries.
+- [x] Add offline category filters for images, videos, audio, documents and APKs, plus folder-size rollups by folder name (same-name folders are combined and clearly reported).
 - [ ] Add byte-verified duplicate grouping and resumable/checkpointed scans; current duplicate results are bounded SHA-256 candidates and are never automatic deletion targets.
 - [ ] Add preview-first bulk organization workflows with explicit destination and destructive-action confirmations.
 - [ ] Add safe command history and user-controlled local preferences; no telemetry or cloud memory.
