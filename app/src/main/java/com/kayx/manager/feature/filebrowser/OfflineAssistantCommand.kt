@@ -3,16 +3,13 @@ package com.kayx.manager.feature.filebrowser
 import com.kayx.manager.domain.model.SortBy
 import java.util.Locale
 
-/**
- * Deterministic command grammar for KayX's fully local assistant.
- * It never invokes a hosted model, evaluates code, or interprets arbitrary shell commands.
- */
+/** Deterministic local command grammar; it never calls a hosted model or executes arbitrary shell text. */
 sealed interface OfflineAssistantCommand {
     data object Help : OfflineAssistantCommand
     data class Search(val query: String) : OfflineAssistantCommand
+    data class SearchContent(val query: String) : OfflineAssistantCommand
     data class OpenFolder(val name: String) : OfflineAssistantCommand
     data class OpenItem(val name: String) : OfflineAssistantCommand
-    data class SearchContent(val query: String) : OfflineAssistantCommand
     data object GoBack : OfflineAssistantCommand
     data object GoUp : OfflineAssistantCommand
     data object Refresh : OfflineAssistantCommand
@@ -45,9 +42,10 @@ object OfflineAssistantParser {
         val input = raw.trim().replace(Regex("\\s+"), " ")
         if (input.isEmpty() || input.length > 512) return null
         val value = input.lowercase(Locale.ROOT)
-        fun tail(vararg prefixes: String): String? = prefixes.firstNotNullOfOrNull { prefix ->
-            value.takeIf { it.startsWith("$prefix ") }?.substring(prefix.length + 1)?.trim()
-        }?.takeIf { it.isNotBlank() }?.let { input.substring(input.length - it.length) }
+        fun tail(vararg prefixes: String): String? {
+            val prefix = prefixes.firstOrNull { value.startsWith("$it ") } ?: return null
+            return input.substring(prefix.length + 1).trim().takeIf { it.isNotBlank() }
+        }
 
         return when {
             value in setOf("help", "commands", "madad", "sahayata") -> OfflineAssistantCommand.Help
@@ -64,11 +62,20 @@ object OfflineAssistantParser {
             value in setOf("delete", "delete selected", "selected delete karo", "चुनी हुई फाइलें हटाओ") -> OfflineAssistantCommand.DeleteSelected
             value in setOf("undo", "undo last", "last action undo karo") -> OfflineAssistantCommand.Undo
             value in setOf("storage info", "storage", "storage dikhao", "kitni storage khali hai") -> OfflineAssistantCommand.StorageSummary
+            value in setOf("zip selected", "compress selected", "selected zip karo") -> OfflineAssistantCommand.ZipSelected
+            value in setOf("share selected", "selected share karo", "share") -> OfflineAssistantCommand.ShareSelected
+            value in setOf("invert selection", "selection ulta karo") -> OfflineAssistantCommand.InvertSelection
+            value in setOf("bookmark current", "bookmark this folder") -> OfflineAssistantCommand.BookmarkCurrent
+            value in setOf("toggle dual pane", "dual pane on off") -> OfflineAssistantCommand.ToggleDualPane
+            value.startsWith("search content ") || value.startsWith("find text ") ->
+                tail("search content", "find text")?.let(OfflineAssistantCommand::SearchContent)
             value.startsWith("search ") || value.startsWith("find ") || value.startsWith("dhundo ") || value.startsWith("खोज ") ->
                 tail("search", "find", "dhundo", "खोज")?.let(OfflineAssistantCommand::Search)
-            value.startsWith("open folder ") || value.startsWith("folder kholo ") || value.startsWith("open ") ->
-                tail("open folder", "folder kholo", "open")?.let(OfflineAssistantCommand::OpenFolder)
-            value.startsWith("select ") || value.startsWith("select file ") || value.startsWith("select folder ") ->
+            value.startsWith("open folder ") || value.startsWith("folder kholo ") ->
+                tail("open folder", "folder kholo")?.let(OfflineAssistantCommand::OpenFolder)
+            value.startsWith("open ") -> tail("open")?.let(OfflineAssistantCommand::OpenItem)
+            value.startsWith("select pattern ") -> tail("select pattern")?.let(OfflineAssistantCommand::SelectPattern)
+            value.startsWith("select file ") || value.startsWith("select folder ") || value.startsWith("select ") ->
                 tail("select file", "select folder", "select")?.let(OfflineAssistantCommand::SelectName)
             value.startsWith("new folder ") || value.startsWith("create folder ") || value.startsWith("naya folder ") ->
                 tail("new folder", "create folder", "naya folder")?.let(OfflineAssistantCommand::NewFolder)
@@ -76,6 +83,7 @@ object OfflineAssistantParser {
                 tail("new file", "create file", "nayi file")?.let(OfflineAssistantCommand::NewFile)
             value.startsWith("rename selected to ") || value.startsWith("rename to ") || value.startsWith("rename ") ->
                 tail("rename selected to", "rename to", "rename")?.let(OfflineAssistantCommand::RenameSelected)
+            value.startsWith("extract ") -> tail("extract")?.let(OfflineAssistantCommand::Extract)
             value in setOf("sort by name", "name se sort", "naam se sort") -> OfflineAssistantCommand.Sort(SortBy.NAME)
             value in setOf("sort by size", "size se sort", "badi file pehle") -> OfflineAssistantCommand.Sort(SortBy.SIZE)
             value in setOf("sort by date", "date se sort", "recent first", "latest first") -> OfflineAssistantCommand.Sort(SortBy.DATE)
