@@ -133,6 +133,10 @@ fun OfflineAssistantBar(
                     recognizer?.cancel()
                     listening = false
                     status = "Voice input cancelled"
+                } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                    status = "Offline voice requires Android 12 or newer; text commands still work"
+                } else if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+                    status = "On-device speech pack is unavailable; install an offline language pack or use text"
                 } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                     startOfflineVoice()
                 } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
