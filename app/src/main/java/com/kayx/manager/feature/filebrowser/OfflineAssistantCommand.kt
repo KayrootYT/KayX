@@ -1,6 +1,7 @@
 package com.kayx.manager.feature.filebrowser
 
 import com.kayx.manager.domain.model.SortBy
+import com.kayx.manager.data.storage.Category
 import java.util.Locale
 
 /** Deterministic local command grammar; it never calls a hosted model or executes arbitrary shell text. */
@@ -38,10 +39,12 @@ sealed interface OfflineAssistantCommand {
     data object FindOldFiles : OfflineAssistantCommand
     data object FindDuplicates : OfflineAssistantCommand
     data object CancelStorageScan : OfflineAssistantCommand
+    data class FindCategory(val category: Category) : OfflineAssistantCommand
+    data class FolderSize(val folderName: String) : OfflineAssistantCommand
 }
 
 object OfflineAssistantParser {
-    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, cancel scan."
+    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, cancel scan."
 
     fun parse(raw: String): OfflineAssistantCommand? {
         val input = raw.trim().replace(Regex("\\s+"), " ")
@@ -72,6 +75,13 @@ object OfflineAssistantParser {
             value in setOf("find old files", "old files", "purani files dhundo", "पुरानी फाइलें खोजो") -> OfflineAssistantCommand.FindOldFiles
             value in setOf("find duplicates", "duplicate files", "same files dhundo", "डुप्लीकेट फाइलें खोजो") -> OfflineAssistantCommand.FindDuplicates
             value in setOf("cancel scan", "stop scan", "scan band karo") -> OfflineAssistantCommand.CancelStorageScan
+            value in setOf("find images", "find photos", "photos dhundo", "तस्वीरें खोजो") -> OfflineAssistantCommand.FindCategory(Category.IMAGES)
+            value in setOf("find videos", "videos dhundo", "वीडियो खोजो") -> OfflineAssistantCommand.FindCategory(Category.VIDEOS)
+            value in setOf("find audio", "find music", "audio dhundo", "ऑडियो खोजो") -> OfflineAssistantCommand.FindCategory(Category.AUDIO)
+            value in setOf("find documents", "find docs", "documents dhundo", "दस्तावेज खोजो") -> OfflineAssistantCommand.FindCategory(Category.DOCUMENTS)
+            value in setOf("find apks", "find apk files", "apk dhundo", "एपीके खोजो") -> OfflineAssistantCommand.FindCategory(Category.APKS)
+            value.startsWith("folder size ") || value.startsWith("size of folder ") || value.startsWith("folder ka size ") ->
+                tail("folder size", "size of folder", "folder ka size")?.let(OfflineAssistantCommand::FolderSize)
             value in setOf("zip selected", "compress selected", "selected zip karo") -> OfflineAssistantCommand.ZipSelected
             value in setOf("share selected", "selected share karo", "share") -> OfflineAssistantCommand.ShareSelected
             value in setOf("invert selection", "selection ulta karo") -> OfflineAssistantCommand.InvertSelection
