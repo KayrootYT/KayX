@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.weight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
@@ -85,7 +84,6 @@ fun OfflineAssistantBar(
                     }
                     override fun onPartialResults(partialResults: Bundle?) = Unit
                     override fun onEvent(eventType: Int, params: Bundle?) = Unit
-                    override fun onSegmentResults(segmentResults: Bundle?) = Unit
                     override fun onEndOfSegmentedSession() { listening = false }
                 })
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
