@@ -35,6 +35,15 @@ class OfflineAssistantParserTest {
         assertEquals(OfflineAssistantCommand.Extract("archive.zip"), OfflineAssistantParser.parse("extract archive.zip"))
     }
 
+    @Test fun parsesWholeStorageInventoryCommands() {
+        assertEquals(OfflineAssistantCommand.ScanStorage, OfflineAssistantParser.parse("scan storage"))
+        assertEquals(OfflineAssistantCommand.FindLargeFiles, OfflineAssistantParser.parse("find large files"))
+        assertEquals(OfflineAssistantCommand.FindOldFiles, OfflineAssistantParser.parse("purani files dhundo"))
+        assertEquals(OfflineAssistantCommand.FindDuplicates, OfflineAssistantParser.parse("find duplicates"))
+        assertEquals(OfflineAssistantCommand.CancelStorageScan, OfflineAssistantParser.parse("cancel scan"))
+        assertEquals(OfflineAssistantCommand.FindLargeFiles, OfflineAssistantParser.parse("बड़ी फाइलें खोजो"))
+    }
+
     @Test fun rejectsEmptyOversizedAndUnknownCommands() {
         assertNull(OfflineAssistantParser.parse(""))
         assertNull(OfflineAssistantParser.parse("do something magical"))
