@@ -33,10 +33,15 @@ sealed interface OfflineAssistantCommand {
     data object BookmarkCurrent : OfflineAssistantCommand
     data object ToggleDualPane : OfflineAssistantCommand
     data object StorageSummary : OfflineAssistantCommand
+    data object ScanStorage : OfflineAssistantCommand
+    data object FindLargeFiles : OfflineAssistantCommand
+    data object FindOldFiles : OfflineAssistantCommand
+    data object FindDuplicates : OfflineAssistantCommand
+    data object CancelStorageScan : OfflineAssistantCommand
 }
 
 object OfflineAssistantParser {
-    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info."
+    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, cancel scan."
 
     fun parse(raw: String): OfflineAssistantCommand? {
         val input = raw.trim().replace(Regex("\\s+"), " ")
@@ -62,6 +67,11 @@ object OfflineAssistantParser {
             value in setOf("delete", "delete selected", "selected delete karo", "चुनी हुई फाइलें हटाओ") -> OfflineAssistantCommand.DeleteSelected
             value in setOf("undo", "undo last", "last action undo karo") -> OfflineAssistantCommand.Undo
             value in setOf("storage info", "storage", "storage dikhao", "kitni storage khali hai") -> OfflineAssistantCommand.StorageSummary
+            value in setOf("scan storage", "scan all storage", "storage scan karo", "पूरी स्टोरेज स्कैन करो") -> OfflineAssistantCommand.ScanStorage
+            value in setOf("find large files", "large files", "badi files dhundo", "बड़ी फाइलें खोजो") -> OfflineAssistantCommand.FindLargeFiles
+            value in setOf("find old files", "old files", "purani files dhundo", "पुरानी फाइलें खोजो") -> OfflineAssistantCommand.FindOldFiles
+            value in setOf("find duplicates", "duplicate files", "same files dhundo", "डुप्लीकेट फाइलें खोजो") -> OfflineAssistantCommand.FindDuplicates
+            value in setOf("cancel scan", "stop scan", "scan band karo") -> OfflineAssistantCommand.CancelStorageScan
             value in setOf("zip selected", "compress selected", "selected zip karo") -> OfflineAssistantCommand.ZipSelected
             value in setOf("share selected", "selected share karo", "share") -> OfflineAssistantCommand.ShareSelected
             value in setOf("invert selection", "selection ulta karo") -> OfflineAssistantCommand.InvertSelection
