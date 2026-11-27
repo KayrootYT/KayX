@@ -518,8 +518,8 @@ private fun DualBottomBar(
                     var addMenu by remember { mutableStateOf(false) }
                     IconButton({ addMenu = true }) { Icon(Icons.Default.Add, "New") }
                     DropdownMenu(addMenu, { addMenu = false }) {
-                        DropdownMenuItem({ Text("New folder") }, { addMenu = false; onDialog(Dlg.NewFolder) })
-                        DropdownMenuItem({ Text("New file") }, { addMenu = false; onDialog(Dlg.NewFile) })
+                        DropdownMenuItem({ Text("New folder") }, { addMenu = false; onDialog(Dlg.NewFolder()) })
+                        DropdownMenuItem({ Text("New file") }, { addMenu = false; onDialog(Dlg.NewFile()) })
                     }
                 }
                 IconButton(vm::swapPanes, Modifier.weight(1f)) { Icon(Icons.Default.SwapHoriz, "Swap panes") }
