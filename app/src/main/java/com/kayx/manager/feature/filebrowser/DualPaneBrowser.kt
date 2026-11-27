@@ -133,7 +133,10 @@ internal fun DualPaneBrowser(
     onOpenItem: (FileItem) -> Unit,
     onOpenWith: (FileItem) -> Unit,
     onProperties: (FileItem) -> Unit,
-    onItemMenu: (FileItem, Int) -> Unit = { _, _ -> }
+    onItemMenu: (FileItem, Int) -> Unit = { _, _ -> },
+    assistantMode: Boolean = false,
+    onToggleAssistant: () -> Unit = {},
+    onAssistantCommand: (OfflineAssistantCommand) -> Unit = {}
 ) {
     var actionMenu by remember { mutableStateOf(false) }
     val nothingSelected = s.selected.isEmpty()
@@ -141,7 +144,7 @@ internal fun DualPaneBrowser(
     Scaffold(
         modifier = Modifier.glassBackground(), containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snack) },
-        topBar = { DualHeader(s, vm, onExit, onSettings, onBrowseSaf, onOpenFile, onDialog) },
+        topBar = { DualHeader(s, vm, onExit, onSettings, onBrowseSaf, onOpenFile, onDialog, assistantMode, onToggleAssistant, onAssistantCommand) },
         bottomBar = { DualBottomBar(s, vm, onDialog, actionMenu, { actionMenu = it }, onOpenWith, onProperties) }
     ) { pad ->
         PanePager(s, vm, pad, onOpenItem, onItemMenu)
@@ -156,7 +159,9 @@ internal fun DualPaneBrowser(
 private fun DualHeader(
     s: BrowserState, vm: FileBrowserViewModel,
     onExit: () -> Unit, onSettings: () -> Unit, onBrowseSaf: () -> Unit,
-    onOpenFile: (String, Tool) -> Unit, onDialog: (Dlg) -> Unit
+    onOpenFile: (String, Tool) -> Unit, onDialog: (Dlg) -> Unit,
+    assistantMode: Boolean, onToggleAssistant: () -> Unit,
+    onAssistantCommand: (OfflineAssistantCommand) -> Unit
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val p = LocalPalette.current
@@ -188,7 +193,8 @@ private fun DualHeader(
                     DropdownMenuItem({ Text("Settings") }, { navOpen = false; onSettings() })
                 }
             }
-            if (s.searching) TextField(
+            if (s.searching && assistantMode) OfflineAssistantBar(onAssistantCommand, Modifier.weight(1f))
+            else if (s.searching) TextField(
                 value = s.query,
                 onValueChange = vm::setQuery,
                 modifier = Modifier.weight(1f),
@@ -222,6 +228,9 @@ private fun DualHeader(
             // Keep one clear (X) inside the active search field; show search launcher only when closed.
             if (!s.searching) IconButton(vm::toggleSearch) {
                 Icon(Icons.Default.Search, "Search")
+            }
+            IconButton(onClick = onToggleAssistant) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = if (assistantMode) "Close offline assistant" else "Open offline assistant")
             }
             Box {
                 IconButton({ menuOpen = true }) { Icon(Icons.Default.MoreVert, "More options") }
