@@ -126,19 +126,20 @@ internal object AiStructuredDocumentExtractor {
                 require(count <= MAX_ZIP_ENTRIES) { "Office archive contains too many entries" }
                 val name = entry.name
                 require(!name.startsWith("/") && name.split('/').none { it == ".." }) { "Invalid Office archive path" }
-                if (!entry.isDirectory && (name == "[Content_Types].xml" || name == "word/document.xml" ||
-                        name == "xl/sharedStrings.xml" || name.matches(Regex("xl/worksheets/sheet[0-9]+\\.xml")) ||
-                        name.matches(Regex("ppt/slides/slide[0-9]+\\.xml")))) {
-                    val out = ByteArrayOutputStream()
+                if (!entry.isDirectory) {
+                    val selected = name == "[Content_Types].xml" || name == "word/document.xml" ||
+                        name == "xl/sharedStrings.xml" || name.matches(Regex("xl/worksheets/sheet[0-9]+\\\\.xml")) ||
+                        name.matches(Regex("ppt/slides/slide[0-9]+\\\\.xml"))
+                    val out = if (selected) ByteArrayOutputStream() else null
                     val buffer = ByteArray(4096)
                     while (true) {
                         val n = zip.read(buffer)
                         if (n < 0) break
                         total += n
-                        require(total <= MAX_EXPANDED_BYTES) { "Office document expands beyond the 2 MB processing limit" }
-                        out.write(buffer, 0, n)
+                        require(total <= MAX_EXPANDED_BYTES) { "Office archive expands beyond the 2 MB processing limit" }
+                        out?.write(buffer, 0, n)
                     }
-                    result[name] = out.toByteArray()
+                    if (out != null) result[name] = out.toByteArray()
                 }
                 zip.closeEntry()
             }
