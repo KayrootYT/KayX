@@ -88,12 +88,12 @@ fun AiDocumentDialog(onDismiss: () -> Unit) {
                     onClick = {
                         picker.launch(arrayOf(
                             "text/*", "application/json", "application/xml",
-                            "application/yaml", "application/x-yaml", "*/*"
+                            "application/yaml", "application/x-yaml", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "*/*"
                         ))
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !sending
-                ) { Text("Choose text document") }
+                ) { Text("Choose document") }
                 if (documents.isNotEmpty()) {
                     Text("Selected documents (${documents.size})", style = MaterialTheme.typography.titleSmall)
                     documents.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
