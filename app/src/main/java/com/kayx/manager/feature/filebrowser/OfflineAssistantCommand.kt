@@ -11,6 +11,8 @@ sealed interface OfflineAssistantCommand {
     data object Help : OfflineAssistantCommand
     data class Search(val query: String) : OfflineAssistantCommand
     data class OpenFolder(val name: String) : OfflineAssistantCommand
+    data class OpenItem(val name: String) : OfflineAssistantCommand
+    data class SearchContent(val query: String) : OfflineAssistantCommand
     data object GoBack : OfflineAssistantCommand
     data object GoUp : OfflineAssistantCommand
     data object Refresh : OfflineAssistantCommand
@@ -26,11 +28,18 @@ sealed interface OfflineAssistantCommand {
     data class RenameSelected(val newName: String) : OfflineAssistantCommand
     data object DeleteSelected : OfflineAssistantCommand
     data object Undo : OfflineAssistantCommand
+    data object ZipSelected : OfflineAssistantCommand
+    data object ShareSelected : OfflineAssistantCommand
+    data object InvertSelection : OfflineAssistantCommand
+    data class SelectPattern(val pattern: String) : OfflineAssistantCommand
+    data class Extract(val name: String) : OfflineAssistantCommand
+    data object BookmarkCurrent : OfflineAssistantCommand
+    data object ToggleDualPane : OfflineAssistantCommand
     data object StorageSummary : OfflineAssistantCommand
 }
 
 object OfflineAssistantParser {
-    const val HELP_TEXT = "Try: search photos, open folder Download, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, undo, storage info."
+    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info."
 
     fun parse(raw: String): OfflineAssistantCommand? {
         val input = raw.trim().replace(Regex("\\s+"), " ")
@@ -42,17 +51,17 @@ object OfflineAssistantParser {
 
         return when {
             value in setOf("help", "commands", "madad", "sahayata") -> OfflineAssistantCommand.Help
-            value in setOf("back", "go back", "piche jao", "peeche jao") -> OfflineAssistantCommand.GoBack
-            value in setOf("up", "go up", "parent folder", "upar jao", "ek folder upar") -> OfflineAssistantCommand.GoUp
+            value in setOf("back", "go back", "piche jao", "peeche jao", "वापस जाओ") -> OfflineAssistantCommand.GoBack
+            value in setOf("up", "go up", "parent folder", "upar jao", "ek folder upar", "ऊपर जाओ") -> OfflineAssistantCommand.GoUp
             value in setOf("refresh", "reload", "refresh folder", "folder refresh karo") -> OfflineAssistantCommand.Refresh
-            value in setOf("show hidden", "show hidden files", "hidden files dikhao") -> OfflineAssistantCommand.ShowHidden(true)
-            value in setOf("hide hidden", "hide hidden files", "hidden files chhupao") -> OfflineAssistantCommand.ShowHidden(false)
-            value in setOf("select all", "sab select karo", "sabhi select karo") -> OfflineAssistantCommand.SelectAll
-            value in setOf("clear selection", "deselect all", "selection hatao") -> OfflineAssistantCommand.ClearSelection
-            value in setOf("copy", "copy selected", "selected copy karo") -> OfflineAssistantCommand.Copy(false)
-            value in setOf("cut", "cut selected", "selected cut karo") -> OfflineAssistantCommand.Copy(true)
-            value in setOf("paste", "paste here", "yahan paste karo") -> OfflineAssistantCommand.Paste
-            value in setOf("delete", "delete selected", "selected delete karo") -> OfflineAssistantCommand.DeleteSelected
+            value in setOf("show hidden", "show hidden files", "hidden files dikhao", "छिपी फाइलें दिखाओ") -> OfflineAssistantCommand.ShowHidden(true)
+            value in setOf("hide hidden", "hide hidden files", "hidden files chhupao", "छिपी फाइलें छुपाओ") -> OfflineAssistantCommand.ShowHidden(false)
+            value in setOf("select all", "sab select karo", "sabhi select karo", "सब चुनो") -> OfflineAssistantCommand.SelectAll
+            value in setOf("clear selection", "deselect all", "selection hatao", "चयन हटाओ") -> OfflineAssistantCommand.ClearSelection
+            value in setOf("copy", "copy selected", "selected copy karo", "कॉपी") -> OfflineAssistantCommand.Copy(false)
+            value in setOf("cut", "cut selected", "selected cut karo", "कट") -> OfflineAssistantCommand.Copy(true)
+            value in setOf("paste", "paste here", "yahan paste karo", "पेस्ट") -> OfflineAssistantCommand.Paste
+            value in setOf("delete", "delete selected", "selected delete karo", "चुनी हुई फाइलें हटाओ") -> OfflineAssistantCommand.DeleteSelected
             value in setOf("undo", "undo last", "last action undo karo") -> OfflineAssistantCommand.Undo
             value in setOf("storage info", "storage", "storage dikhao", "kitni storage khali hai") -> OfflineAssistantCommand.StorageSummary
             value.startsWith("search ") || value.startsWith("find ") || value.startsWith("dhundo ") || value.startsWith("खोज ") ->
