@@ -180,7 +180,7 @@ private fun DualHeader(
         if (disk != null) append("  Disk: $disk")
     }
     Column(Modifier.fillMaxWidth().background(p.surface).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(if (s.searching && assistantMode) 84.dp else 60.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Box {
                 IconButton({ navOpen = true }) { Icon(Icons.Default.Menu, "Menu") }
                 DropdownMenu(navOpen, { navOpen = false }) {
