@@ -71,7 +71,7 @@ object OfflineStorageInventory {
                 val (directory, depth) = pending.removeLast()
                 val canonical = runCatching { directory.canonicalPath }.getOrNull() ?: continue
                 if (!visited.add(canonical)) continue
-                val children = directory.listFiles()
+                val children = runCatching { directory.listFiles() }.getOrNull()
                 if (children == null) { inaccessibleRoots++; continue }
                 for (child in children) {
                     currentCoroutineContext().ensureActive()
@@ -108,7 +108,7 @@ object OfflineStorageInventory {
                 currentCoroutineContext().ensureActive()
                 val (directory, relative, depth) = pending.removeLast()
                 if (!visited.add(directory.uri.toString())) continue
-                val children = try { directory.listFiles() } catch (_: SecurityException) {
+                val children = try { directory.listFiles() } catch (_: Exception) {
                     inaccessibleRoots++
                     continue
                 }
@@ -153,18 +153,20 @@ object OfflineStorageInventory {
         val buckets = entries.asSequence().filter { it.size >= MIN_DUPLICATE_BYTES }
             .groupBy { it.size }.values.filter { it.size > 1 }
         val digestGroups = LinkedHashMap<String, MutableList<Entry>>()
+        var attemptedCount = 0
         var hashedCount = 0
         var hashedBytes = 0L
         for (bucket in buckets) {
             for (entry in bucket) {
                 currentCoroutineContext().ensureActive()
-                if (hashedCount >= MAX_HASH_CANDIDATES || entry.size > MAX_HASHED_BYTES - hashedBytes) break
+                if (attemptedCount >= MAX_HASH_CANDIDATES || entry.size > MAX_HASHED_BYTES - hashedBytes) break
+                attemptedCount++
                 val digest = digest(context, entry) ?: continue
                 hashedCount++
                 hashedBytes += entry.size
                 digestGroups.getOrPut(entry.size.toString() + ":" + digest) { ArrayList() }.add(entry)
             }
-            if (hashedCount >= MAX_HASH_CANDIDATES || hashedBytes >= MAX_HASHED_BYTES) break
+            if (attemptedCount >= MAX_HASH_CANDIDATES || hashedBytes >= MAX_HASHED_BYTES) break
         }
         return digestGroups.values.filter { it.size > 1 }.flatten()
             .sortedByDescending { it.size }.take(100)
