@@ -1,6 +1,7 @@
 package com.kayx.manager.feature.filebrowser
 
 import com.kayx.manager.domain.model.SortBy
+import com.kayx.manager.data.storage.Category
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -42,6 +43,16 @@ class OfflineAssistantParserTest {
         assertEquals(OfflineAssistantCommand.FindDuplicates, OfflineAssistantParser.parse("find duplicates"))
         assertEquals(OfflineAssistantCommand.CancelStorageScan, OfflineAssistantParser.parse("cancel scan"))
         assertEquals(OfflineAssistantCommand.FindLargeFiles, OfflineAssistantParser.parse("बड़ी फाइलें खोजो"))
+    }
+
+    @Test fun parsesCategoryAndFolderSizeCommands() {
+        assertEquals(OfflineAssistantCommand.FindCategory(Category.IMAGES), OfflineAssistantParser.parse("find photos"))
+        assertEquals(OfflineAssistantCommand.FindCategory(Category.VIDEOS), OfflineAssistantParser.parse("find videos"))
+        assertEquals(OfflineAssistantCommand.FindCategory(Category.AUDIO), OfflineAssistantParser.parse("find audio"))
+        assertEquals(OfflineAssistantCommand.FindCategory(Category.DOCUMENTS), OfflineAssistantParser.parse("find documents"))
+        assertEquals(OfflineAssistantCommand.FindCategory(Category.APKS), OfflineAssistantParser.parse("find apks"))
+        assertEquals(OfflineAssistantCommand.FolderSize("Download"), OfflineAssistantParser.parse("folder size Download"))
+        assertEquals(OfflineAssistantCommand.FolderSize("DCIM"), OfflineAssistantParser.parse("folder ka size DCIM"))
     }
 
     @Test fun rejectsEmptyOversizedAndUnknownCommands() {
