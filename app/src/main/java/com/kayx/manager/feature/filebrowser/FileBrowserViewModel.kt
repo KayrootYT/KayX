@@ -650,33 +650,71 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun consumeMessage() = _s.update { it.copy(message = null) }
     /** Copy a previously previewed, revalidated set of local files into an explicit destination. */
     fun copyPreviewedFiles(entries: List<OfflineStorageInventory.Entry>, destinationPath: String) {
-        val destination = runCatching { File(destinationPath).canonicalFile }.getOrNull()
-        if (destination == null || !destination.isDirectory || !destination.canWrite()) {
-            notify("Organization destination is unavailable or not writable")
+        val context = appContext
+        if (context == null) {
+            notify("Storage context is not ready")
             return
         }
-        val safePaths = entries.mapNotNull { entry ->
-            val source = File(entry.path)
-            runCatching {
-                if (entry.saf || java.nio.file.Files.isSymbolicLink(source.toPath()) ||
-                    source.canonicalFile.path != source.absolutePath || !source.isFile || !source.canRead() ||
-                    source.length() != entry.size || source.lastModified() != entry.modified ||
-                    source.parentFile?.canonicalPath == destination.path) null
-                else entry.path
-            }.getOrNull()
-        }
-        if (safePaths.size != entries.size || safePaths.isEmpty()) {
-            notify("One or more previewed files changed or became unavailable. Scan and preview again.")
+        if (entries.isEmpty() || entries.size > OfflineOrganizationPlanner.MAX_FILES_PER_OPERATION) {
+            notify("Organization preview is empty or exceeds the 100-file safety limit")
             return
         }
-        startStorageTransfer(
-            safePaths.distinct(),
-            StorageLocation.Local(destination).stableKey(),
-            cut = false,
-            policy = Conflict.KEEP_BOTH,
-            sourcePane = null,
-            fromClipboard = false
-        )
+        viewModelScope.launch {
+            val validation = withContext(Dispatchers.IO) {
+                runCatching {
+                    val destination = File(destinationPath).canonicalFile
+                    require(destination.isDirectory && destination.canWrite() && destination.path == destinationPath) {
+                        "Organization destination is unavailable or not writable"
+                    }
+                    val sourceKeys = entries.map { entry ->
+                        if (entry.saf) {
+                            val source = StorageLocation.fromStableKey(entry.key) as? StorageLocation.Saf
+                                ?: error("A SAF source key is invalid: ${entry.name}")
+                            val tree = Uri.parse(source.treeUri)
+                            require(tree in SafRepository.persistedTrees(context)) {
+                                "Storage permission was revoked for ${entry.name}. Scan and preview again."
+                            }
+                            val document = SafRepository.findByRelativePath(context, tree, source.relativePath)
+                                ?.takeIf { it.isFile } ?: error("SAF source is unavailable: ${entry.name}")
+                            require(document.name == entry.name &&
+                                document.length().coerceAtLeast(0L) == entry.size &&
+                                document.lastModified() == entry.modified) {
+                                "A previewed SAF file changed: ${entry.name}"
+                            }
+                            context.contentResolver.openFileDescriptor(document.uri, "r")?.use { }
+                                ?: error("SAF source is no longer readable: ${entry.name}")
+                            entry.key
+                        } else {
+                            val source = File(entry.path)
+                            require(!java.nio.file.Files.isSymbolicLink(source.toPath()) &&
+                                source.canonicalFile.path == source.absolutePath && source.isFile && source.canRead() &&
+                                source.length() == entry.size && source.lastModified() == entry.modified &&
+                                source.parentFile?.canonicalPath != destination.path) {
+                                "A previewed local file changed or became unavailable: ${entry.name}"
+                            }
+                            entry.path
+                        }
+                    }
+                    require(sourceKeys.distinct().size == sourceKeys.size) { "The preview contains duplicate source keys" }
+                    destination to sourceKeys
+                }
+            }
+            validation.fold(
+                onSuccess = { (destination, sourceKeys) ->
+                    startStorageTransfer(
+                        sourceKeys,
+                        StorageLocation.Local(destination).stableKey(),
+                        cut = false,
+                        policy = Conflict.KEEP_BOTH,
+                        sourcePane = null,
+                        fromClipboard = false
+                    )
+                },
+                onFailure = { error ->
+                    notify(error.message ?: "Preview is stale. Run the organize command again.")
+                }
+            )
+        }
     }
 
     fun copySelected(cut: Boolean) {
