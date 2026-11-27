@@ -160,11 +160,12 @@ The user-facing assistant is a separate, fully local command feature. It is not 
 - [x] Add cancellable traversal with a 50,000-file / 24-level cap, progress callbacks, and inaccessible-root/truncation reporting.
 - [x] Add offline category filters for images, videos, audio, documents and APKs, plus folder-size rollups by folder name (same-name folders are combined and clearly reported).
 - [ ] Add byte-verified duplicate grouping and resumable/checkpointed scans; current duplicate results are bounded SHA-256 candidates and are never automatic deletion targets.
-- [ ] Add preview-first bulk organization workflows with explicit destination and destructive-action confirmations.
+- [x] Add preview-first offline bulk copy organization with explicit destination, exact file/size preview, separate confirmation, stale-source revalidation, KEEP_BOTH conflicts, and a 100-file cap; original files are never deleted.
+- [ ] Extend organization to SAF/provider roots and add separately confirmed move/delete actions only after provider-safe revalidation and recovery tests.
 - [ ] Add safe command history and user-controlled local preferences; no telemetry or cloud memory.
 - [ ] Add broader command coverage for tags, recycle bin, archives, APK tools, private space and network-storage screens, respecting each screen's existing permissions.
 
-Phase 2 current limits: scan results are in-memory only; up to 50,000 entries/24 levels are inspected, duplicate hashing is capped at 500 files/512 MiB, and no move/delete action is exposed by inventory commands.
+Phase 2 current limits: scan results are in-memory only; up to 50,000 entries/24 levels are inspected, duplicate hashing is capped at 500 files/512 MiB, and confirmed organization copies are limited to 100 local files per operation. SAF bulk organization and move/delete remain unavailable.
 
 ## AI expansion roadmap (added 2026-11-27)
 
