@@ -139,6 +139,29 @@ This update repairs the specific build-log compiler error, improves file-type ic
 - Folder icons follow content (`ui/FolderKind.kt`, toggle in Settings).
 
 
+## Offline File Assistant roadmap (added 2026-11-27)
+
+The user-facing assistant is a separate, fully local command feature. It is not the optional HTTPS provider assistant and must not depend on AI API keys or internet access.
+
+### Phase 1 — Search-bar assistant and local commands (implementation in review)
+- [x] Add a deterministic, allow-listed command parser with English/Hinglish/Hindi aliases; reject unknown and oversized commands.
+- [x] Add assistant mode beside the existing file-browser search field in both single-pane and dual-pane layouts.
+- [x] Wire navigation, filename/content search, hidden files, sorting, selection, copy/cut/paste, create, rename, delete confirmation, zip/extract, share, undo, bookmarks, dual-pane and storage summary commands to existing KayX flows.
+- [x] Add optional microphone input using Android's on-device SpeechRecognizer only; no network recognizer fallback.
+- [x] Request RECORD_AUDIO only after the user taps the microphone; add the permission to the APK review allowlist.
+- [x] Add parser unit tests and privacy/command documentation.
+- [ ] Run Build & Test, Android unit tests, debug/release APK verification and Security Scan on the final PR head.
+- [ ] Validate text commands, microphone permission, offline language-pack availability and speech recognition on physical Android devices (no emulator required).
+- [ ] Validate assistant commands against SAF/SD-card providers; unsupported provider actions must remain clearly unavailable.
+
+### Phase 2 — Whole-storage intelligence and workflows (not yet implemented)
+- [ ] Add permission-aware storage inventory across user-accessible internal and SAF/SD-card roots.
+- [ ] Add natural-language filters for large files, old files, duplicate candidates, media/documents and folder size summaries.
+- [ ] Add preview-first bulk organization workflows with explicit destination and destructive-action confirmations.
+- [ ] Add cancellable background scans with bounded memory, progress and resume support.
+- [ ] Add safe command history and user-controlled local preferences; no telemetry or cloud memory.
+- [ ] Add broader command coverage for tags, recycle bin, archives, APK tools, private space and network-storage screens, respecting each screen's existing permissions.
+
 ## AI expansion roadmap (added 2026-11-27)
 
 AI is an optional extension and must not weaken KayX's offline-first/free product rules. The first AI foundation is being delivered separately from existing file-manager phases.
