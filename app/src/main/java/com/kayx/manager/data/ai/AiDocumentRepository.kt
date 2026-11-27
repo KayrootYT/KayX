@@ -1,6 +1,7 @@
 package com.kayx.manager.data.ai
 
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -26,7 +27,8 @@ sealed interface AiDocumentResult {
 
 /** Bounded, memory-only document ingestion. It never uploads or persists document text. */
 class AiDocumentRepository(
-    private val resolver: ContentResolver
+    private val resolver: ContentResolver,
+    private val context: Context? = null
 ) {
     fun load(uri: Uri, displayName: String, mimeType: String?): AiDocumentResult {
         if (!isSupported(displayName, mimeType)) {
@@ -38,13 +40,40 @@ class AiDocumentRepository(
             stream.use { input ->
                 val bytes = readBounded(input, MAX_DOCUMENT_BYTES)
                     ?: return AiDocumentResult.Failure("Document exceeds the 2 MB processing limit")
-                val decoder = Charsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                val text = runCatching { decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString() }
-                    .getOrElse { return AiDocumentResult.Unsupported("Only valid UTF-8 text documents are supported") }
-                if ('\u0000' in text) return AiDocumentResult.Unsupported("Binary documents are not supported")
-                val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
+                val extension = displayName.substringAfterLast('.', "").lowercase().ifBlank {
+                    when (mimeType?.lowercase()) {
+                        "application/pdf" -> "pdf"
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> "docx"
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> "xlsx"
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> "pptx"
+                        else -> ""
+                    }
+                }
+                val extracted = when (extension) {
+                    "pdf" -> {
+                        val appContext = context?.applicationContext
+                            ?: return AiDocumentResult.Failure("PDF extraction requires an Android application context")
+                        runCatching { AiStructuredDocumentExtractor.extractPdf(appContext, bytes) }
+                            .getOrElse { return AiDocumentResult.Unsupported(
+                                if (it.javaClass.simpleName.contains("Password", ignoreCase = true)) "Password-protected PDFs are not supported"
+                                else "Could not extract readable text from this PDF"
+                            ) }
+                    }
+                    "docx", "xlsx", "pptx" -> runCatching {
+                        AiStructuredDocumentExtractor.extractOffice(bytes, extension)
+                    }.getOrElse { return AiDocumentResult.Unsupported(
+                        it.message?.takeIf(String::isNotBlank) ?: "Could not extract readable text from this Office document"
+                    ) }
+                    else -> {
+                        val decoder = Charsets.UTF_8.newDecoder()
+                            .onMalformedInput(CodingErrorAction.REPORT)
+                            .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        runCatching { decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString() }
+                            .getOrElse { return AiDocumentResult.Unsupported("Only valid UTF-8 text documents are supported") }
+                    }
+                }
+                if ('\u0000' in extracted) return AiDocumentResult.Unsupported("Binary documents are not supported")
+                val normalized = extracted.replace("\r\n", "\n").replace('\r', '\n')
                     .filter { it == '\n' || it == '\t' || it >= ' ' }
                     .trim()
                 if (normalized.isBlank()) return AiDocumentResult.Failure("The selected document contains no readable text")
@@ -93,11 +122,11 @@ class AiDocumentRepository(
 
     private fun isSupported(name: String, mime: String?): Boolean {
         val extension = name.substringAfterLast('.', "").lowercase()
-        val allowedExtensions = setOf("txt", "md", "markdown", "csv", "json", "xml", "html", "htm", "log", "kt", "java", "py", "js", "ts", "css", "yaml", "yml", "toml", "ini", "properties", "sh", "rs", "c", "cpp", "h")
+        val allowedExtensions = setOf("txt", "md", "markdown", "csv", "json", "xml", "html", "htm", "log", "kt", "java", "py", "js", "ts", "css", "yaml", "yml", "toml", "ini", "properties", "sh", "rs", "c", "cpp", "h", "pdf", "docx", "xlsx", "pptx")
         val allowedMime = mime?.lowercase()?.let {
-            it.startsWith("text/") || it in setOf("application/json", "application/xml", "application/yaml", "application/x-yaml")
+            it.startsWith("text/") || it in setOf("application/json", "application/xml", "application/yaml", "application/x-yaml", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation")
         } == true
-        return extension in allowedExtensions || allowedMime && extension !in setOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx")
+        return extension in allowedExtensions || allowedMime && extension !in setOf("doc", "xls", "ppt")
     }
 
     companion object {

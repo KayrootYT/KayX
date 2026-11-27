@@ -35,17 +35,19 @@ import com.kayx.manager.data.ai.AiDocumentPromptBuilder
 import com.kayx.manager.data.ai.AiLocalRetriever
 import com.kayx.manager.data.ai.AiSettingsStore
 import com.kayx.manager.data.ai.OpenAiCompatibleChatClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun AiDocumentDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val repository = remember(context) { AiDocumentRepository(context.contentResolver) }
+    val repository = remember(context) { AiDocumentRepository(context.contentResolver, context) }
     val scope = rememberCoroutineScope()
     var chunks by remember { mutableStateOf(emptyList<AiDocumentChunk>()) }
     var documents by remember { mutableStateOf(emptyList<String>()) }
     var query by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf("Choose text documents to search locally on this device.") }
+    var status by remember { mutableStateOf("Choose documents to search locally on this device.") }
     var error by remember { mutableStateOf(false) }
     var showShareConsent by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
@@ -57,16 +59,21 @@ fun AiDocumentDialog(onDismiss: () -> Unit) {
                     ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
             }.getOrNull()?.take(256)
                 ?: uri.lastPathSegment?.substringAfterLast('/')?.take(256) ?: "Selected document"
-            when (val result = repository.load(uri, name, context.contentResolver.getType(uri))) {
-                is AiDocumentResult.Success -> {
-                    chunks = (chunks + result.document.chunks).takeLast(AiDocumentRepository.MAX_CHUNKS)
-                    documents = (documents + result.document.documentName).distinct().takeLast(20)
-                    status = "Loaded ${result.document.characterCount} characters from ${result.document.documentName}. Text remains in memory only."
-                    error = false
-                    aiAnswer = null
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    repository.load(uri, name, context.contentResolver.getType(uri))
                 }
-                is AiDocumentResult.Unsupported -> { status = result.reason; error = true }
-                is AiDocumentResult.Failure -> { status = result.reason; error = true }
+                when (result) {
+                    is AiDocumentResult.Success -> {
+                        chunks = (chunks + result.document.chunks).takeLast(AiDocumentRepository.MAX_CHUNKS)
+                        documents = (documents + result.document.documentName).distinct().takeLast(20)
+                        status = "Loaded ${result.document.characterCount} characters from ${result.document.documentName}. Text remains in memory only."
+                        error = false
+                        aiAnswer = null
+                    }
+                    is AiDocumentResult.Unsupported -> { status = result.reason; error = true }
+                    is AiDocumentResult.Failure -> { status = result.reason; error = true }
+                }
             }
         }
     }
@@ -88,12 +95,12 @@ fun AiDocumentDialog(onDismiss: () -> Unit) {
                     onClick = {
                         picker.launch(arrayOf(
                             "text/*", "application/json", "application/xml",
-                            "application/yaml", "application/x-yaml", "*/*"
+                            "application/yaml", "application/x-yaml", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "*/*"
                         ))
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !sending
-                ) { Text("Choose text document") }
+                ) { Text("Choose document") }
                 if (documents.isNotEmpty()) {
                     Text("Selected documents (${documents.size})", style = MaterialTheme.typography.titleSmall)
                     documents.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
@@ -136,7 +143,7 @@ fun AiDocumentDialog(onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    "Supported: TXT, Markdown, CSV, JSON, XML, HTML, logs and common source/config text. PDF and Office files are currently unsupported. Maximum 2 MB and 120,000 characters per document.",
+                    "Supported: TXT, Markdown, CSV, JSON, XML, HTML, logs, source/config text, text-based PDF, DOCX, XLSX and PPTX. Legacy DOC/XLS/PPT, encrypted PDFs and scanned image-only PDFs are unsupported. Maximum 2 MB input, 120,000 extracted characters, 200 PDF pages and 2 MB expanded Office XML.",
                     style = MaterialTheme.typography.labelSmall
                 )
             }

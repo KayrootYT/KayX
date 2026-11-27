@@ -25,6 +25,10 @@
 # KayX does not configure EL expression filters; keep the core event bus usable without EL.
 -dontwarn javax.el.**
 
+# PDFBox Android's optional JPEG-2000 codec is not bundled. KayX only extracts PDF text;
+# JPX image decoding is not required, so allow PDFBox's documented optional decoder to be absent.
+-dontwarn com.gemalto.jp2.JP2Decoder
+
 # SMBJ includes optional Kerberos/SPNEGO authentication support. KayX currently
 # authenticates SMB shares with username/password (NTLM); Android does not ship
 # the Java GSSAPI (org.ietf.jgss) module. Do not package a desktop Kerberos stack.
