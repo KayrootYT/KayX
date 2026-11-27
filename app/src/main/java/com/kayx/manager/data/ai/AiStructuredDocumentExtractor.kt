@@ -7,7 +7,7 @@ import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.io.InputStream
+import java.io.InputStream\nimport java.io.Writer
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import org.xml.sax.InputSource
@@ -23,11 +23,12 @@ internal object AiStructuredDocumentExtractor {
         PDDocument.load(ByteArrayInputStream(bytes)).use { document ->
             require(!document.isEncrypted) { "Encrypted PDFs are not supported" }
             require(document.numberOfPages in 1..MAX_PDF_PAGES) { "PDF page count exceeds the processing limit" }
-            val text = PDFTextStripper().apply {
+            val bounded = BoundedTextWriter(MAX_EXTRACTED_CHARS)
+            PDFTextStripper().apply {
                 startPage = 1
                 endPage = document.numberOfPages
-            }.getText(document)
-            return normalize(text)
+            }.writeText(document, bounded)
+            return normalize(bounded.value())
         }
     }
 
@@ -50,7 +51,20 @@ internal object AiStructuredDocumentExtractor {
         return normalize(text)
     }
 
-    private fun extractSpreadsheet(entries: Map<String, ByteArray>): String {
+
+    private class BoundedTextWriter(private val maxChars: Int) : Writer() {
+        private val content = StringBuilder()
+        override fun write(chars: CharArray, offset: Int, length: Int) {
+            if (content.length + length > maxChars) {
+                throw java.io.IOException("Extracted PDF text exceeds the processing limit")
+            }
+            content.append(chars, offset, length)
+        }
+        override fun flush() = Unit
+        override fun close() = Unit
+        fun value(): String = content.toString()
+    }
+\n    private fun extractSpreadsheet(entries: Map<String, ByteArray>): String {
         val shared = entries["xl/sharedStrings.xml"]?.let { xml ->
             parseXml(xml).getElementsByTagNameNS("*", "si").let { nodes ->
                 (0 until nodes.length).map { index ->
@@ -137,7 +151,7 @@ internal object AiStructuredDocumentExtractor {
         .filter { it == '\n' || it == '\t' || it >= ' ' }
         .trim()
 
-    const val MAX_PDF_PAGES = 200
+    const val MAX_EXTRACTED_CHARS = 120_000\n    const val MAX_PDF_PAGES = 200
     const val MAX_ZIP_ENTRIES = 256
     const val MAX_EXPANDED_BYTES = 2 * 1024 * 1024
 }
