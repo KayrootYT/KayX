@@ -58,7 +58,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation("androidx.documentfile:documentfile:1.0.1")\n    // Bounded, local PDF text extraction (Apache PDFBox Android port).\n    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     // Original DEX disassembly engine (Apache 2.0)
     implementation("org.smali:baksmali:2.5.2")
     implementation("org.smali:smali:2.5.2")
