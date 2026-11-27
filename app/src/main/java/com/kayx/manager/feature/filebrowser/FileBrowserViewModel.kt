@@ -687,6 +687,12 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                             require(tree in SafRepository.persistedTrees(context)) {
                                 "Storage permission was revoked for ${entry.name}. Scan and preview again."
                             }
+                            if (safDestination != null && tree == Uri.parse(safDestination.treeUri)) {
+                                val sourceParent = source.relativePath.substringBeforeLast('/', "")
+                                require(sourceParent != safDestination.relativePath) {
+                                    "A source file is already inside the selected destination folder."
+                                }
+                            }
                             val document = SafRepository.findByRelativePath(context, tree, source.relativePath)
                                 ?.takeIf { it.isFile } ?: error("SAF source is unavailable: ${entry.name}")
                             require(document.name == entry.name &&
