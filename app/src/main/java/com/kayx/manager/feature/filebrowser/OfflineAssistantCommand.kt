@@ -55,7 +55,7 @@ object OfflineAssistantParser {
             value in setOf("delete", "delete selected", "selected delete karo") -> OfflineAssistantCommand.DeleteSelected
             value in setOf("undo", "undo last", "last action undo karo") -> OfflineAssistantCommand.Undo
             value in setOf("storage info", "storage", "storage dikhao", "kitni storage khali hai") -> OfflineAssistantCommand.StorageSummary
-            value.startsWith("search ") || value.startsWith("find ") || value.startsWith("dhundo ") || value.startsWith(" खोज ") ->
+            value.startsWith("search ") || value.startsWith("find ") || value.startsWith("dhundo ") || value.startsWith("खोज ") ->
                 tail("search", "find", "dhundo", "खोज")?.let(OfflineAssistantCommand::Search)
             value.startsWith("open folder ") || value.startsWith("folder kholo ") || value.startsWith("open ") ->
                 tail("open folder", "folder kholo", "open")?.let(OfflineAssistantCommand::OpenFolder)
