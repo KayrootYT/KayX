@@ -7,7 +7,7 @@ import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.io.InputStream\nimport java.io.Writer
+import java.io.Writer
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import org.xml.sax.InputSource
@@ -48,9 +48,9 @@ internal object AiStructuredDocumentExtractor {
             "xlsx" -> extractSpreadsheet(entries)
             else -> throw IllegalArgumentException("Unsupported Office format")
         }
+        require(text.length <= MAX_EXTRACTED_CHARS) { "Office text exceeds the 120,000 character processing limit" }
         return normalize(text)
     }
-
 
     private class BoundedTextWriter(private val maxChars: Int) : Writer() {
         private val content = StringBuilder()
