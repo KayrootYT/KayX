@@ -77,7 +77,7 @@ object OfflineStorageInventory {
                     currentCoroutineContext().ensureActive()
                     if (java.nio.file.Files.isSymbolicLink(child.toPath())) continue
                     if (child.isDirectory) {
-                        if (depth < maxDepth && child.name !in setOf("Android", ".Trash", ".trashed")) {
+                        if (depth < maxDepth && child.name !in setOf(".Trash", ".trashed") && !(directory.name == "Android" && child.name in setOf("data", "obb"))) {
                             pending.add(child to depth + 1)
                         }
                     } else if (child.isFile && child.canRead()) {
@@ -118,7 +118,7 @@ object OfflineStorageInventory {
                     if (name == "." || name == ".." || name.contains('/') || name.contains('\\')) continue
                     val childPath = if (relative.isEmpty()) name else relative + "/" + name
                     if (child.isDirectory) {
-                        if (depth < maxDepth && name !in setOf("Android", ".Trash", ".trashed")) {
+                        if (depth < maxDepth && name !in setOf(".Trash", ".trashed") && !(directory.name == "Android" && name in setOf("data", "obb"))) {
                             pending.add(Triple(child, childPath, depth + 1))
                         }
                     } else if (child.isFile) {
@@ -158,7 +158,7 @@ object OfflineStorageInventory {
         for (bucket in buckets) {
             for (entry in bucket) {
                 currentCoroutineContext().ensureActive()
-                if (hashedCount >= MAX_HASH_CANDIDATES || hashedBytes >= MAX_HASHED_BYTES) break
+                if (hashedCount >= MAX_HASH_CANDIDATES || entry.size > MAX_HASHED_BYTES - hashedBytes) break
                 val digest = digest(context, entry) ?: continue
                 hashedCount++
                 hashedBytes += entry.size
@@ -174,7 +174,7 @@ object OfflineStorageInventory {
         val input = try {
             if (entry.saf) context.contentResolver.openInputStream(Uri.parse(entry.key))
             else File(entry.key).takeIf { it.isFile && it.canRead() }?.inputStream()
-        } catch (_: SecurityException) { null } ?: return null
+        } catch (_: Exception) { null } ?: return null
         return input.use { stream ->
             val md = MessageDigest.getInstance("SHA-256")
             val buffer = ByteArray(64 * 1024)
