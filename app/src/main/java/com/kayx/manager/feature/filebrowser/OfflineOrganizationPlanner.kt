@@ -92,7 +92,7 @@ internal object OfflineOrganizationPlanner {
                     !Files.isSymbolicLink(file.toPath()) &&
                         file.canonicalFile.path == entry.path && file.isFile && file.canRead() &&
                         file.length() == entry.size && file.lastModified() == entry.modified &&
-                        destination == null || file.parentFile?.canonicalPath != destination.path
+                        (destination == null || file.parentFile?.canonicalPath != destination.path)
                 }
             }
     }.getOrDefault(false)
