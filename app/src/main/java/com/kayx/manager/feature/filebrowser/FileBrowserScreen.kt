@@ -77,8 +77,8 @@ private val FONT_EXTENSIONS = setOf("ttf", "otf", "woff", "woff2")
 private val OFFICE_EXTENSIONS = setOf("pdf", "doc", "docx", "docm", "dot", "dotx", "xls", "xlsx", "xlsm", "xltx", "ods", "odt", "ppt", "pptx", "pptm", "ppsx", "odp", "epub", "mobi")
 
 internal sealed interface Dlg {
-    data object NewFolder : Dlg
-    data object NewFile : Dlg
+    data class NewFolder(val initialName: String = "") : Dlg
+    data class NewFile(val initialName: String = "") : Dlg
     data class Rename(val path: String, val name: String) : Dlg
     data object Delete : Dlg
     data object Zip : Dlg
@@ -108,6 +108,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     var menu by remember { mutableStateOf(false) }
     var sortPage by remember { mutableStateOf(false) }
     var searchModeMenu by remember { mutableStateOf(false) }
+    var assistantMode by remember { mutableStateOf(false) }
     var openFor by remember { mutableStateOf<FileItem?>(null) }
     var webFor by remember { mutableStateOf<FileItem?>(null) }
     var itemMenu by remember { mutableStateOf<Pair<FileItem, Int>?>(null) }
@@ -181,12 +182,89 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     }
     LaunchedEffect(Unit) { vm.syncDefaults() }
     LaunchedEffect(s.message) { s.message?.let { android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show(); snack.showSnackbar(it); vm.consumeMessage() } }
-    BackHandler { if (!vm.up()) onExit() }
+    BackHandler {
+        if (assistantMode) assistantMode = false
+        else if (!vm.up()) onExit()
+    }
+
+    val executeAssistantCommand: (OfflineAssistantCommand) -> Unit = { command ->
+                                when (command) {
+                                    OfflineAssistantCommand.Help -> vm.notify(OfflineAssistantParser.HELP_TEXT)
+                                    is OfflineAssistantCommand.Search -> vm.setQuery(command.query)
+                                    is OfflineAssistantCommand.SearchContent -> { if (!s.grep) vm.toggleGrep(); vm.setQuery(command.query) }
+                                    is OfflineAssistantCommand.OpenFolder -> {
+                                        val folder = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { it.isDir && it.name.equals(command.name, ignoreCase = true) }
+                                        if (folder != null) vm.openActive(folder.path) else vm.notify("Folder not found in this location")
+                                    }
+                                    is OfflineAssistantCommand.OpenItem -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
+                                        if (item == null) vm.notify("Item not found in this location")
+                                        else if (item.isDir) vm.openActive(item.path) else openItem(item)
+                                    }
+                                    OfflineAssistantCommand.GoBack -> vm.goBack()
+                                    OfflineAssistantCommand.GoUp -> vm.goUp()
+                                    OfflineAssistantCommand.Refresh -> vm.reload()
+                                    is OfflineAssistantCommand.ShowHidden -> if (s.showHidden != command.visible) vm.toggleHidden()
+                                    is OfflineAssistantCommand.Sort -> vm.setSort(command.by)
+                                    OfflineAssistantCommand.SelectAll -> vm.selectAll()
+                                    OfflineAssistantCommand.ClearSelection -> vm.clearSelection()
+                                    is OfflineAssistantCommand.SelectName -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
+                                        if (item != null) vm.selectPaths(setOf(item.path)) else vm.notify("Item not found in this location")
+                                    }
+                                    is OfflineAssistantCommand.Copy -> {
+                                        if (s.selected.isEmpty()) vm.notify("Select files first")
+                                        else vm.copySelected(command.cut)
+                                    }
+                                    OfflineAssistantCommand.Paste -> if (s.clipboard.isEmpty()) vm.notify("Clipboard is empty") else dlg = Dlg.ConfirmPaste
+                                    is OfflineAssistantCommand.NewFolder -> { dlg = Dlg.NewFolder(command.name) }
+                                    is OfflineAssistantCommand.NewFile -> { dlg = Dlg.NewFile(command.name) }
+                                    is OfflineAssistantCommand.RenameSelected -> {
+                                        if (s.selected.size != 1) vm.notify("Select exactly one item to rename")
+                                        else dlg = Dlg.Rename(s.selected.first(), command.newName)
+                                    }
+                                    OfflineAssistantCommand.DeleteSelected -> {
+                                        if (s.selected.isEmpty()) vm.notify("Select files first") else dlg = Dlg.Delete
+                                    }
+                                    OfflineAssistantCommand.Undo -> vm.undoLastOperation()
+                                    OfflineAssistantCommand.ZipSelected -> if (s.selected.isEmpty()) vm.notify("Select files first") else dlg = Dlg.Zip
+                                    OfflineAssistantCommand.ShareSelected -> {
+                                        if (s.selected.isEmpty()) vm.notify("Select files first")
+                                        else if (s.selected.any { StorageLocation.fromStableKey(it) is StorageLocation.Saf }) vm.notify("Sharing SAF items is not available from this menu yet")
+                                        else ExternalOps.share(ctx, s.selected.map(::File))
+                                    }
+                                    OfflineAssistantCommand.InvertSelection -> vm.invertSelection()
+                                    is OfflineAssistantCommand.SelectPattern -> vm.selectPattern(command.pattern)
+                                    is OfflineAssistantCommand.Extract -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { it.name.equals(command.name, ignoreCase = true) }
+                                        if (item == null) vm.notify("Archive not found in this location") else vm.extractHere(item.path)
+                                    }
+                                    OfflineAssistantCommand.BookmarkCurrent -> {
+                                        val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
+                                        vm.notify(if (SettingsStore.addBookmark(activePath)) "Bookmark added" else "Already bookmarked")
+                                    }
+                                    OfflineAssistantCommand.ToggleDualPane -> vm.toggleDualPane()
+                                    OfflineAssistantCommand.StorageSummary -> {
+                                        val activePath = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
+                                        val usage = runCatching { android.os.StatFs(activePath).let {
+                                            "Storage used: ${fmtSize(it.totalBytes - it.availableBytes)} / ${fmtSize(it.totalBytes)} · Free: ${fmtSize(it.availableBytes)}"
+                                        } }.getOrElse { "Storage information is unavailable for this location" }
+                                        vm.notify(usage)
+                                    }
+                                }
+                            }
 
     if (s.dualPane) DualPaneBrowser(
         s, vm, snack, onExit, onSettings, onBrowseSaf = { safLocationPicker.launch(null) }, onOpenFile = onOpenFile,
         onDialog = { dlg = it }, onOpenItem = openItem, onOpenWith = { openFor = it }, onProperties = { infoFor = it },
-        onItemMenu = { f, pane -> itemMenu = f to pane }
+        onItemMenu = { f, pane -> itemMenu = f to pane },
+        assistantMode = assistantMode,
+        onToggleAssistant = { if (!s.searching) vm.toggleSearch(); assistantMode = !assistantMode },
+        onAssistantCommand = executeAssistantCommand
     ) else Scaffold(
         modifier = Modifier.glassBackground(), containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snack) },
@@ -206,7 +284,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
             ) {
                 Row(Modifier.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton({ if (!vm.up()) onExit() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                    if (s.searching) TextField(
+                    if (s.searching && assistantMode) OfflineAssistantBar(
+                        onCommand = executeAssistantCommand
+                    ) else if (s.searching) TextField(
                         value = s.query,
                         onValueChange = vm::setQuery,
                         modifier = Modifier.weight(1f).focusRequester(searchFocusRequester),
@@ -283,6 +363,12 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         if (!s.searching) IconButton(vm::toggleSearch) {
                             Icon(Icons.Default.Search, "Search")
                         }
+                        IconButton(onClick = {
+                            if (!s.searching) vm.toggleSearch()
+                            assistantMode = !assistantMode
+                        }) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = if (assistantMode) "Close offline assistant" else "Open offline assistant")
+                        }
                         Box {
                             IconButton({ menu = true }) { Icon(Icons.Default.MoreVert, "More options") }
                             DropdownMenu(menu, { menu = false; sortPage = false }) {
@@ -335,6 +421,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         }
                         IconButton(vm::selectAll) { Icon(Icons.Default.SelectAll, "Select all") }
                         IconButton(vm::clearSelection) { Icon(Icons.Default.Close, "Clear selection") }
+                        IconButton(onClick = { if (!s.searching) vm.toggleSearch(); assistantMode = !assistantMode }) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "Open offline assistant")
+                        }
                     }
                 }
             }
@@ -436,7 +525,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 @Composable fun Q(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) =
                     Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Color(0x22FFFFFF)).clickable(onClick = onClick).padding(vertical = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, label); Text(label, style = MaterialTheme.typography.labelMedium) }
-                Q(Icons.Default.NoteAdd, "New Doc") { dlg = Dlg.NewFile }
+                Q(Icons.Default.NoteAdd, "New Doc") { dlg = Dlg.NewFile() }
                 Q(Icons.Default.SwapHoriz, "Convert") {
                     if (f1.extension.lowercase() in setOf("pdf", "png", "jpg", "jpeg", "webp")) vm.convert(ctx, f1.absolutePath)
                     else vm.notify(ExternalOps.convert(ctx, f1))
@@ -551,8 +640,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         var addMenu by remember { mutableStateOf(false) }
                         IconButton({ addMenu = true }) { Icon(Icons.Default.Add, "New") }
                         DropdownMenu(addMenu, { addMenu = false }) {
-                            DropdownMenuItem({ Text("New folder") }, { dlg = Dlg.NewFolder; addMenu = false })
-                            DropdownMenuItem({ Text("New file") }, { dlg = Dlg.NewFile; addMenu = false })
+                            DropdownMenuItem({ Text("New folder") }, { dlg = Dlg.NewFolder(); addMenu = false })
+                            DropdownMenuItem({ Text("New file") }, { dlg = Dlg.NewFile(); addMenu = false })
                         }
                     }
                     IconButton({ vm.toggleDualPane() }) { Icon(if (s.dualPane) Icons.Default.ViewAgenda else Icons.Default.ViewColumn, "Dual pane") }
@@ -581,8 +670,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
     }
 
     when (val d = dlg) {
-        is Dlg.NewFolder -> NameDialog("New folder", "", { dlg = null }) { vm.newFolder(it); dlg = null }
-        is Dlg.NewFile -> NameDialog("New file", "", { dlg = null }) { vm.newFile(it); dlg = null }
+        is Dlg.NewFolder -> NameDialog("New folder", d.initialName, { dlg = null }) { vm.newFolder(it); dlg = null }
+        is Dlg.NewFile -> NameDialog("New file", d.initialName, { dlg = null }) { vm.newFile(it); dlg = null }
         is Dlg.Rename -> NameDialog("Rename", d.name, { dlg = null }) { vm.rename(d.path, it); dlg = null }
         is Dlg.Zip -> NameDialog("Create ZIP", "archive.zip", { dlg = null }) { vm.zipSelected(it); dlg = null }
         is Dlg.Delete -> AlertDialog({ dlg = null }, title = { Text("Delete ${s.selected.size} item(s)?") }, text = { Text("This cannot be undone.") },

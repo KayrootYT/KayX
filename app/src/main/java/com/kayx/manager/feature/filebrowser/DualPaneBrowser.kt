@@ -133,7 +133,10 @@ internal fun DualPaneBrowser(
     onOpenItem: (FileItem) -> Unit,
     onOpenWith: (FileItem) -> Unit,
     onProperties: (FileItem) -> Unit,
-    onItemMenu: (FileItem, Int) -> Unit = { _, _ -> }
+    onItemMenu: (FileItem, Int) -> Unit = { _, _ -> },
+    assistantMode: Boolean = false,
+    onToggleAssistant: () -> Unit = {},
+    onAssistantCommand: (OfflineAssistantCommand) -> Unit = {}
 ) {
     var actionMenu by remember { mutableStateOf(false) }
     val nothingSelected = s.selected.isEmpty()
@@ -141,7 +144,7 @@ internal fun DualPaneBrowser(
     Scaffold(
         modifier = Modifier.glassBackground(), containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snack) },
-        topBar = { DualHeader(s, vm, onExit, onSettings, onBrowseSaf, onOpenFile, onDialog) },
+        topBar = { DualHeader(s, vm, onExit, onSettings, onBrowseSaf, onOpenFile, onDialog, assistantMode, onToggleAssistant, onAssistantCommand) },
         bottomBar = { DualBottomBar(s, vm, onDialog, actionMenu, { actionMenu = it }, onOpenWith, onProperties) }
     ) { pad ->
         PanePager(s, vm, pad, onOpenItem, onItemMenu)
@@ -156,7 +159,9 @@ internal fun DualPaneBrowser(
 private fun DualHeader(
     s: BrowserState, vm: FileBrowserViewModel,
     onExit: () -> Unit, onSettings: () -> Unit, onBrowseSaf: () -> Unit,
-    onOpenFile: (String, Tool) -> Unit, onDialog: (Dlg) -> Unit
+    onOpenFile: (String, Tool) -> Unit, onDialog: (Dlg) -> Unit,
+    assistantMode: Boolean, onToggleAssistant: () -> Unit,
+    onAssistantCommand: (OfflineAssistantCommand) -> Unit
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val p = LocalPalette.current
@@ -175,7 +180,7 @@ private fun DualHeader(
         if (disk != null) append("  Disk: $disk")
     }
     Column(Modifier.fillMaxWidth().background(p.surface).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(if (s.searching && assistantMode) 84.dp else 60.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Box {
                 IconButton({ navOpen = true }) { Icon(Icons.Default.Menu, "Menu") }
                 DropdownMenu(navOpen, { navOpen = false }) {
@@ -188,7 +193,8 @@ private fun DualHeader(
                     DropdownMenuItem({ Text("Settings") }, { navOpen = false; onSettings() })
                 }
             }
-            if (s.searching) TextField(
+            if (s.searching && assistantMode) OfflineAssistantBar(onAssistantCommand, Modifier.weight(1f))
+            else if (s.searching) TextField(
                 value = s.query,
                 onValueChange = vm::setQuery,
                 modifier = Modifier.weight(1f),
@@ -222,6 +228,9 @@ private fun DualHeader(
             // Keep one clear (X) inside the active search field; show search launcher only when closed.
             if (!s.searching) IconButton(vm::toggleSearch) {
                 Icon(Icons.Default.Search, "Search")
+            }
+            IconButton(onClick = onToggleAssistant) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = if (assistantMode) "Close offline assistant" else "Open offline assistant")
             }
             Box {
                 IconButton({ menuOpen = true }) { Icon(Icons.Default.MoreVert, "More options") }
@@ -509,8 +518,8 @@ private fun DualBottomBar(
                     var addMenu by remember { mutableStateOf(false) }
                     IconButton({ addMenu = true }) { Icon(Icons.Default.Add, "New") }
                     DropdownMenu(addMenu, { addMenu = false }) {
-                        DropdownMenuItem({ Text("New folder") }, { addMenu = false; onDialog(Dlg.NewFolder) })
-                        DropdownMenuItem({ Text("New file") }, { addMenu = false; onDialog(Dlg.NewFile) })
+                        DropdownMenuItem({ Text("New folder") }, { addMenu = false; onDialog(Dlg.NewFolder()) })
+                        DropdownMenuItem({ Text("New file") }, { addMenu = false; onDialog(Dlg.NewFile()) })
                     }
                 }
                 IconButton(vm::swapPanes, Modifier.weight(1f)) { Icon(Icons.Default.SwapHoriz, "Swap panes") }
