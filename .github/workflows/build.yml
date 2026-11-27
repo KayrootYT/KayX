@@ -66,6 +66,8 @@ jobs:
           rm -f "$RUNNER_TEMP/kayx-signing-check.csr"
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon
+      - name: Compile Android instrumentation tests
+        run: ./gradlew assembleDebugAndroidTest --no-daemon
       - name: Build APK
         env:
           KAYX_KEYSTORE_PATH: ${{ runner.temp }}/kayx-release.jks
