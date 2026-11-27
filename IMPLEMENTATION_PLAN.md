@@ -154,13 +154,17 @@ The user-facing assistant is a separate, fully local command feature. It is not 
 - [ ] Validate text commands, microphone permission, offline language-pack availability and speech recognition on physical Android devices (no emulator required).
 - [ ] Validate assistant commands against SAF/SD-card providers; unsupported provider actions must remain clearly unavailable.
 
-### Phase 2 — Whole-storage intelligence and workflows (not yet implemented)
-- [ ] Add permission-aware storage inventory across user-accessible internal and SAF/SD-card roots.
-- [ ] Add natural-language filters for large files, old files, duplicate candidates, media/documents and folder size summaries.
+### Phase 2 — Whole-storage intelligence and workflows (foundation implemented; follow-up remains)
+- [x] Add a bounded, read-only inventory over readable shared internal storage and persisted SAF tree grants, including user-granted SD-card/provider roots; avoid duplicate primary-tree scanning when the shared root is readable.
+- [x] Add offline commands for large files (100 MiB+), old files (180+ days), and SHA-256 duplicate candidates. Android/data and Android/obb are excluded; Android/media is included only where readable.
+- [x] Add cancellable traversal with a 50,000-file / 24-level cap, progress callbacks, and inaccessible-root/truncation reporting.
+- [ ] Add category-specific natural-language filters for media/documents and folder-size summaries.
+- [ ] Add byte-verified duplicate grouping and resumable/checkpointed scans; current duplicate results are bounded SHA-256 candidates and are never automatic deletion targets.
 - [ ] Add preview-first bulk organization workflows with explicit destination and destructive-action confirmations.
-- [ ] Add cancellable background scans with bounded memory, progress and resume support.
 - [ ] Add safe command history and user-controlled local preferences; no telemetry or cloud memory.
 - [ ] Add broader command coverage for tags, recycle bin, archives, APK tools, private space and network-storage screens, respecting each screen's existing permissions.
+
+Phase 2 current limits: scan results are in-memory only; up to 50,000 entries/24 levels are inspected, duplicate hashing is capped at 500 files/512 MiB, and no move/delete action is exposed by inventory commands.
 
 ## AI expansion roadmap (added 2026-11-27)
 
