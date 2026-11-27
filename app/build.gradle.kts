@@ -60,7 +60,11 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.documentfile:documentfile:1.0.1")
     // Bounded, local PDF text extraction (Apache PDFBox Android port).
-    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0") {
+        // KayX already pins the maintained jdk18on BouncyCastle artifacts below.
+        // Do not package PDFBox Android's older jdk15to18 variants alongside them.
+        exclude(group = "org.bouncycastle")
+    }
     // Original DEX disassembly engine (Apache 2.0)
     implementation("org.smali:baksmali:2.5.2")
     implementation("org.smali:smali:2.5.2")
