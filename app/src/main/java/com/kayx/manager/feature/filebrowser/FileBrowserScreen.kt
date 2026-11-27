@@ -818,7 +818,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 confirmButton = {
                     TextButton({
                         if (OfflineOrganizationPlanner.isStillValid(plan)) {
-                            vm.copyPathsTo(plan.files.map { it.path }, plan.destinationPath)
+                            vm.copyPreviewedFiles(plan.files, plan.destinationPath)
                         } else vm.notify("Preview is stale. Run the organize command again.")
                         dlg = null
                     }) { Text("Confirm copy") }
