@@ -514,7 +514,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 @Composable fun Q(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) =
                     Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Color(0x22FFFFFF)).clickable(onClick = onClick).padding(vertical = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, label); Text(label, style = MaterialTheme.typography.labelMedium) }
-                Q(Icons.Default.NoteAdd, "New Doc") { dlg = Dlg.NewFile }
+                Q(Icons.Default.NoteAdd, "New Doc") { dlg = Dlg.NewFile() }
                 Q(Icons.Default.SwapHoriz, "Convert") {
                     if (f1.extension.lowercase() in setOf("pdf", "png", "jpg", "jpeg", "webp")) vm.convert(ctx, f1.absolutePath)
                     else vm.notify(ExternalOps.convert(ctx, f1))
