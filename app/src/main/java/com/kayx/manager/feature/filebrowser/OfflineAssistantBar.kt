@@ -21,6 +21,9 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -48,6 +51,25 @@ fun OfflineAssistantBar(
     var status by remember { mutableStateOf("Offline assistant · text and on-device voice") }
     var listening by remember { mutableStateOf(false) }
     var recognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
+    val historyPrefs = remember(context) { context.getSharedPreferences("kayx_offline_assistant", Context.MODE_PRIVATE) }
+    var historyEnabled by remember { mutableStateOf(historyPrefs.getBoolean("history_enabled", true)) }
+    var history by remember { mutableStateOf(historyPrefs.getString("history", "").orEmpty().lineSequence().filter { it.isNotBlank() }.take(20).toList()) }
+    var showHistory by remember { mutableStateOf(false) }
+
+    fun submitCommand(raw: String) {
+        val command = OfflineAssistantParser.parse(raw)
+        if (command == null) {
+            status = "Command not understood. Type help for examples"
+            return
+        }
+        onCommand(command)
+        if (historyEnabled) {
+            history = (listOf(raw.trim()) + history.filterNot { it.equals(raw.trim(), ignoreCase = true) }).take(20)
+            historyPrefs.edit().putString("history", history.joinToString("\\n")).apply()
+        }
+        status = "Executed offline"
+        text = ""
+    }
 
     fun startOfflineVoice() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
@@ -76,11 +98,7 @@ fun OfflineAssistantBar(
                         listening = false
                         val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                         text = spoken
-                        val command = OfflineAssistantParser.parse(spoken)
-                        if (command != null) {
-                            onCommand(command)
-                            status = "Executed offline: $spoken"
-                        } else status = "Command not understood. Say or type: help"
+                        submitCommand(spoken)
                     }
                     override fun onPartialResults(partialResults: Bundle?) = Unit
                     override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -126,6 +144,7 @@ fun OfflineAssistantBar(
                 placeholder = { Text("Ask KayX: find large videos…") },
                 textStyle = MaterialTheme.typography.bodyMedium
             )
+            TextButton(onClick = { showHistory = true }) { Text("History") }
             IconButton(onClick = {
                 if (listening) {
                     recognizer?.cancel()
@@ -141,18 +160,42 @@ fun OfflineAssistantBar(
             }) {
                 Icon(if (listening) Icons.Default.Stop else Icons.Default.Mic, contentDescription = if (listening) "Stop voice input" else "Speak offline command")
             }
-            IconButton(onClick = {
-                val command = OfflineAssistantParser.parse(text)
-                if (command == null) status = "Command not understood. Type help for examples"
-                else {
-                    onCommand(command)
-                    status = "Executed offline"
-                    text = ""
-                }
-            }, enabled = text.isNotBlank()) {
+            IconButton(onClick = { submitCommand(text) }, enabled = text.isNotBlank()) {
                 Icon(Icons.Default.Send, contentDescription = "Run offline command")
             }
         }
         Text(status, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+
+    if (showHistory) AlertDialog(
+        onDismissRequest = { showHistory = false },
+        title = { Text("Offline command history") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = historyEnabled, onCheckedChange = {
+                        historyEnabled = it
+                        historyPrefs.edit().putBoolean("history_enabled", it).apply()
+                        if (!it) {
+                            history = emptyList()
+                            historyPrefs.edit().remove("history").apply()
+                        }
+                    })
+                    Text("Save command history on this device")
+                }
+                if (historyEnabled && history.isNotEmpty()) {
+                    history.forEach { entry ->
+                        TextButton(onClick = { text = entry; showHistory = false }) {
+                            Text(entry, maxLines = 1)
+                        }
+                    }
+                    TextButton(onClick = {
+                        history = emptyList()
+                        historyPrefs.edit().remove("history").apply()
+                    }) { Text("Clear history") }
+                } else Text("No saved commands")
+            }
+        },
+        confirmButton = { TextButton(onClick = { showHistory = false }) { Text("Close") } }
+    )
 }
