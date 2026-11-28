@@ -36,6 +36,12 @@ class OfflineAssistantParserTest {
         assertEquals(OfflineAssistantCommand.Extract("archive.zip"), OfflineAssistantParser.parse("extract archive.zip"))
     }
 
+    @Test fun parsesOfflineRecoveryCommands() {
+        assertEquals(OfflineAssistantCommand.ShowLastScan, OfflineAssistantParser.parse("show last scan"))
+        assertEquals(OfflineAssistantCommand.TransferRecoveryStatus, OfflineAssistantParser.parse("transfer status"))
+        assertEquals(OfflineAssistantCommand.TransferRecoveryStatus, OfflineAssistantParser.parse("transfer ki sthiti"))
+    }
+
     @Test fun parsesWholeStorageInventoryCommands() {
         assertEquals(OfflineAssistantCommand.ScanStorage, OfflineAssistantParser.parse("scan storage"))
         assertEquals(OfflineAssistantCommand.ResumeStorageScan, OfflineAssistantParser.parse("resume scan"))
