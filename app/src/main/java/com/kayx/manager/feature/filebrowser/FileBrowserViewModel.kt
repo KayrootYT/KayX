@@ -680,9 +680,11 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                         "Move is enabled only for local files and local folders. SAF/provider moves stay disabled until provider recovery is verified."
                     }
                     val localDestination = if (safDestination == null) {
-                        ((destinationLocation as? StorageLocation.Local)?.directory ?: File(destinationPath)).canonicalFile.also { destination ->
-                            require(destination.isDirectory && destination.canWrite() && destination.path == destinationPath) {
-                                "Organization destination is unavailable or not writable"
+                        val requestedLocalDestination = (destinationLocation as? StorageLocation.Local)?.directory ?: File(destinationPath)
+                        requestedLocalDestination.canonicalFile.also { destination ->
+                            require(destination.isDirectory && destination.canWrite() &&
+                                destination.path == requestedLocalDestination.absoluteFile.path) {
+                                "Organization destination is unavailable, not writable, or resolves through a symbolic link"
                             }
                         }
                     } else {
