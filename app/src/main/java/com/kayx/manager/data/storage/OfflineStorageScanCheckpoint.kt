@@ -21,6 +21,7 @@ internal object OfflineStorageScanCheckpoint {
     )
 
     private const val VERSION = "KAYX_SCAN_V1"
+    private const val MAX_CHECKPOINT_BYTES = 64L * 1024 * 1024
     private fun file(context: Context) = File(context.applicationContext.filesDir, "offline-assistant-scan.checkpoint")
 
     fun load(context: Context, root: File, maxEntries: Int, maxDepth: Int): State? =
@@ -28,10 +29,9 @@ internal object OfflineStorageScanCheckpoint {
 
     internal fun loadFile(target: File, root: File, maxEntries: Int, maxDepth: Int): State? = runCatching {
         val backup = File(target.parentFile, target.name + ".bak")
-        if (!target.exists() && backup.exists()) check(backup.renameTo(target))
-        else if (target.exists()) backup.delete()
-        if (!target.isFile || target.length() > 64L * 1024 * 1024) return null
-        val lines = target.readLines(Charsets.UTF_8)
+        fun readCandidate(candidate: File): State? {
+            if (!candidate.isFile || candidate.length() > MAX_CHECKPOINT_BYTES) return null
+            val lines = candidate.readLines(Charsets.UTF_8)
         val header = lines.firstOrNull()?.split('\t') ?: return null
         if (header.size != 6 || header[0] != VERSION || header[5] != "checkpoint") return null
         val savedRoot = decode(header[1])
@@ -75,7 +75,20 @@ internal object OfflineStorageScanCheckpoint {
                     source.length() == entry.size && source.lastModified() == entry.modified
             }.getOrDefault(false)
         }
-        State(savedRoot, maxEntries, maxDepth, complete, safePending, safeEntries)
+            State(savedRoot, maxEntries, maxDepth, complete, safePending, safeEntries)
+        }
+        val primary = readCandidate(target)
+        if (primary != null) {
+            backup.delete()
+            primary
+        } else {
+            val recovered = readCandidate(backup)
+            if (recovered != null) {
+                if (target.exists()) target.delete()
+                backup.renameTo(target)
+            } else null
+            recovered
+        }
     }.getOrNull()
 
     fun save(context: Context, state: State) = saveFile(file(context), state)
@@ -93,7 +106,9 @@ internal object OfflineStorageScanCheckpoint {
                     .append(encode(entry.name)).append('\n')
             }
         }
-        FileOutputStreamSync.write(temp, text)
+        val encoded = text.toByteArray(Charsets.UTF_8)
+        require(encoded.size.toLong() <= MAX_CHECKPOINT_BYTES) { "Scan checkpoint exceeds the 64 MiB safety limit" }
+        FileOutputStreamSync.write(temp, encoded)
         val backup = File(target.parentFile, target.name + ".bak")
         backup.delete()
         val hadCheckpoint = target.exists()
@@ -120,9 +135,9 @@ internal object OfflineStorageScanCheckpoint {
         String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8)
 
     private object FileOutputStreamSync {
-        fun write(file: File, value: String) {
+        fun write(file: File, value: ByteArray) {
             java.io.FileOutputStream(file).use { stream ->
-                stream.write(value.toByteArray(Charsets.UTF_8))
+                stream.write(value)
                 stream.flush()
                 stream.fd.sync()
             }
