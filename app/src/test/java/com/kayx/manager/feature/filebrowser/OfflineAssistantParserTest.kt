@@ -73,6 +73,9 @@ class OfflineAssistantParserTest {
         assertEquals(OfflineAssistantCommand.OpenTags, OfflineAssistantParser.parse("tags kholo"))
         assertEquals(OfflineAssistantCommand.OpenPrivateSpace, OfflineAssistantParser.parse("open private space"))
         assertEquals(OfflineAssistantCommand.TagSelected, OfflineAssistantParser.parse("tag selected"))
+        assertEquals(OfflineAssistantCommand.OpenNetworkStorage, OfflineAssistantParser.parse("open network storage"))
+        assertEquals(OfflineAssistantCommand.InspectApk("system.apk"), OfflineAssistantParser.parse("inspect apk system.apk"))
+        assertEquals(OfflineAssistantCommand.BrowseArchive("backup.zip"), OfflineAssistantParser.parse("browse archive backup.zip"))
     }
 
     @Test fun rejectsEmptyOversizedAndUnknownCommands() {
