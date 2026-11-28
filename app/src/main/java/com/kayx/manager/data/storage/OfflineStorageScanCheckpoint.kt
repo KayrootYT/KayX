@@ -92,7 +92,11 @@ internal object OfflineStorageScanCheckpoint {
         }
     }.getOrNull()
 
-    fun save(context: Context, state: State) = saveFile(file(context), state)
+    /** Checkpoint failures must never abort a read-only inventory scan. The last valid checkpoint remains intact. */
+    fun save(context: Context, state: State): Boolean = saveFileSafely(file(context), state)
+
+    internal fun saveFileSafely(target: File, state: State): Boolean =
+        runCatching { saveFile(target, state); true }.getOrDefault(false)
 
     internal fun saveFile(target: File, state: State) {
         val temp = File(target.parentFile, target.name + ".tmp")

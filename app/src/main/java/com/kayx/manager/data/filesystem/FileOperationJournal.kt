@@ -14,6 +14,8 @@ import java.util.Base64
  * Undo never overwrites an existing source and never deletes a copy whose content changed.
  */
 class FileOperationJournal(private val directory: File, private val maxEntries: Int = 50) {
+    init { require(maxEntries in 1..MAX_READ_ENTRIES) { "Undo journal entry limit is out of range" } }
+
     enum class Kind { MOVE, COPY, RENAME, TRASH }
     data class Entry(val kind: Kind, val source: String, val destination: String, val fingerprint: String)
 
@@ -83,50 +85,67 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
      */
     private fun readEntries(): List<Entry> {
         val backup = File(directory, "file-operations.undo.bak")
-        if (!file.exists() && backup.exists()) backup.renameTo(file)
-        else if (file.exists()) backup.delete()
-        if (!file.isFile) return emptyList()
 
-        return runCatching {
-            val bytes = file.readBytes()
-            val header = DataInputStream(ByteArrayInputStream(bytes))
-            val magic = if (bytes.size >= 4) header.readInt() else 0
-            if (magic == MAGIC) {
-                val version = header.readInt()
-                require(version == VERSION) { "Unsupported undo journal version" }
-                val count = header.readInt()
-                require(count in 0..MAX_READ_ENTRIES) { "Invalid undo journal entry count" }
-                buildList {
-                    repeat(count) {
-                        val kind = Kind.valueOf(header.readUTF())
-                        val source = header.readUTF()
-                        val destination = header.readUTF()
-                        val fingerprint = header.readUTF()
-                        if (isValidEntry(kind, source, destination)) {
-                            add(Entry(kind, source, destination, fingerprint))
+        fun readCandidate(candidate: File): List<Entry>? {
+            if (!candidate.isFile || candidate.length() > MAX_JOURNAL_BYTES) return null
+            val bytes = runCatching { candidate.readBytes() }.getOrNull() ?: return null
+            return runCatching {
+                val header = DataInputStream(ByteArrayInputStream(bytes))
+                val magic = if (bytes.size >= 4) header.readInt() else 0
+                if (magic == MAGIC) {
+                    val version = header.readInt()
+                    require(version == VERSION) { "Unsupported undo journal version" }
+                    val count = header.readInt()
+                    require(count in 0..MAX_READ_ENTRIES) { "Invalid undo journal entry count" }
+                    buildList {
+                        repeat(count) {
+                            val kind = Kind.valueOf(header.readUTF())
+                            val source = header.readUTF()
+                            val destination = header.readUTF()
+                            val fingerprint = header.readUTF()
+                            if (isValidEntry(kind, source, destination)) {
+                                add(Entry(kind, source, destination, fingerprint))
+                            }
                         }
-                    }
-                }.takeLast(maxEntries)
-            } else {
-                readLegacyEntries(bytes)
-            }
-        }.getOrDefault(emptyList())
+                    }.takeLast(maxEntries)
+                } else {
+                    readLegacyEntries(bytes)
+                }
+            }.getOrNull()
+        }
+
+        val primary = readCandidate(file)
+        if (primary != null) {
+            backup.delete()
+            return primary
+        }
+
+        // A crash or interrupted replacement must not make a valid backup disappear
+        // merely because the primary file exists but is corrupt or truncated.
+        val recovered = readCandidate(backup) ?: return emptyList()
+        if (file.exists()) file.delete()
+        if (backup.renameTo(file)) return recovered
+        return recovered
     }
 
-    private fun readLegacyEntries(bytes: ByteArray): List<Entry> =
+    private fun readLegacyEntries(bytes: ByteArray): List<Entry>? =
         runCatching<List<Entry>> {
-            String(bytes, Charsets.UTF_8).lineSequence().mapNotNull { line ->
+            require(bytes.isNotEmpty()) { "Empty undo journal" }
+            val lines = String(bytes, Charsets.UTF_8).lineSequence().filter { it.isNotBlank() }.toList()
+            require(lines.size <= MAX_READ_ENTRIES) { "Invalid legacy undo journal entry count" }
+            lines.map { line ->
                 val fields = line.split('\t', ignoreCase = false, limit = 4)
-                if (fields.size != 4) return@mapNotNull null
-                val kind = runCatching { Kind.valueOf(fields[0]) }.getOrNull() ?: return@mapNotNull null
+                require(fields.size == 4) { "Malformed legacy undo journal entry" }
+                val kind = Kind.valueOf(fields[0])
                 fun decode(value: String) = if (value == "-") "" else
                     String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8)
                 val source = decode(fields[1])
                 val destination = decode(fields[2])
                 val fingerprint = decode(fields[3])
-                if (isValidEntry(kind, source, destination)) Entry(kind, source, destination, fingerprint) else null
-            }.toList().takeLast(maxEntries)
-        }.getOrDefault(emptyList())
+                require(isValidEntry(kind, source, destination)) { "Invalid legacy undo journal entry" }
+                Entry(kind, source, destination, fingerprint)
+            }.takeLast(maxEntries)
+        }.getOrNull()
 
     private fun isValidEntry(kind: Kind, source: String, destination: String): Boolean =
         destination.isNotBlank() &&
@@ -156,6 +175,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
             stream.close()
         }
 
+        require(temp.length() <= MAX_JOURNAL_BYTES) { "Undo journal exceeds the 16 MiB safety limit" }
         val backup = File(directory, "file-operations.undo.bak")
         backup.delete()
         val hadJournal = file.exists()
@@ -237,5 +257,6 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
         const val MAGIC = 0x4B58554A // KXUJ
         const val VERSION = 1
         const val MAX_READ_ENTRIES = 10_000
+        const val MAX_JOURNAL_BYTES = 16L * 1024 * 1024
     }
 }
