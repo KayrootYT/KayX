@@ -38,6 +38,7 @@ class OfflineAssistantParserTest {
 
     @Test fun parsesWholeStorageInventoryCommands() {
         assertEquals(OfflineAssistantCommand.ScanStorage, OfflineAssistantParser.parse("scan storage"))
+        assertEquals(OfflineAssistantCommand.ResumeStorageScan, OfflineAssistantParser.parse("resume scan"))
         assertEquals(OfflineAssistantCommand.FindLargeFiles, OfflineAssistantParser.parse("find large files"))
         assertEquals(OfflineAssistantCommand.FindOldFiles, OfflineAssistantParser.parse("purani files dhundo"))
         assertEquals(OfflineAssistantCommand.FindDuplicates, OfflineAssistantParser.parse("find duplicates"))
