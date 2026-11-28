@@ -32,51 +32,52 @@ internal object OfflineStorageScanCheckpoint {
         fun readCandidate(candidate: File): State? {
             if (!candidate.isFile || candidate.length() > MAX_CHECKPOINT_BYTES) return null
             val lines = candidate.readLines(Charsets.UTF_8)
-        val header = lines.firstOrNull()?.split('\t') ?: return null
-        if (header.size != 6 || header[0] != VERSION || header[5] != "checkpoint") return null
-        val savedRoot = decode(header[1])
-        if (savedRoot != root.canonicalPath || header[2].toIntOrNull() != maxEntries ||
-            header[3].toIntOrNull() != maxDepth) return null
-        val complete = header[4] == "1"
-        val pending = ArrayList<PendingDirectory>()
-        val entries = ArrayList<OfflineStorageInventory.Entry>()
-        for (line in lines.drop(1)) {
-            val parts = line.split('\t')
-            when (parts.firstOrNull()) {
-                "D" -> if (parts.size == 3) {
-                    val depth = parts[1].toIntOrNull()?.takeIf { it in 0..maxDepth } ?: return null
-                    pending += PendingDirectory(decode(parts[2]), depth)
+            val header = lines.firstOrNull()?.split('\t') ?: return null
+            if (header.size != 6 || header[0] != VERSION || header[5] != "checkpoint") return null
+            val savedRoot = decode(header[1])
+            if (savedRoot != root.canonicalPath || header[2].toIntOrNull() != maxEntries ||
+                header[3].toIntOrNull() != maxDepth) return null
+            val complete = header[4] == "1"
+            val pending = ArrayList<PendingDirectory>()
+            val entries = ArrayList<OfflineStorageInventory.Entry>()
+            for (line in lines.drop(1)) {
+                val parts = line.split('\t')
+                when (parts.firstOrNull()) {
+                    "D" -> if (parts.size == 3) {
+                        val depth = parts[1].toIntOrNull()?.takeIf { it in 0..maxDepth } ?: return null
+                        pending += PendingDirectory(decode(parts[2]), depth)
+                    }
+                    "F" -> if (parts.size == 6) {
+                        val size = parts[1].toLongOrNull()?.takeIf { it >= 0L } ?: return null
+                        val modified = parts[2].toLongOrNull()?.takeIf { it >= 0L } ?: return null
+                        val category = parts[3].takeIf { it != "-" }?.let { Category.valueOf(it) }
+                        val path = decode(parts[4])
+                        val name = decode(parts[5])
+                        entries += OfflineStorageInventory.Entry(path, path, name, size, modified, category, saf = false)
+                    }
+                    else -> return null
                 }
-                "F" -> if (parts.size == 6) {
-                    val size = parts[1].toLongOrNull()?.takeIf { it >= 0L } ?: return null
-                    val modified = parts[2].toLongOrNull()?.takeIf { it >= 0L } ?: return null
-                    val category = parts[3].takeIf { it != "-" }?.let { Category.valueOf(it) }
-                    val path = decode(parts[4])
-                    val name = decode(parts[5])
-                    entries += OfflineStorageInventory.Entry(path, path, name, size, modified, category, saf = false)
-                }
-                else -> return null
             }
+            if (entries.size > maxEntries || pending.size > maxEntries) return null
+            val rootPrefix = savedRoot.trimEnd(File.separatorChar) + File.separator
+            val safePending = pending.filter { item ->
+                val directory = File(item.path)
+                runCatching {
+                    !java.nio.file.Files.isSymbolicLink(directory.toPath()) &&
+                        (directory.canonicalFile.path == savedRoot || directory.canonicalFile.path.startsWith(rootPrefix)) && directory.isDirectory
+                }.getOrDefault(false)
+            }
+            val safeEntries = entries.filter { entry ->
+                val source = File(entry.path)
+                runCatching {
+                    !java.nio.file.Files.isSymbolicLink(source.toPath()) &&
+                        source.canonicalFile.path == entry.path && source.canonicalFile.path.startsWith(rootPrefix) && source.isFile && source.canRead() &&
+                        source.length() == entry.size && source.lastModified() == entry.modified
+                }.getOrDefault(false)
+            }
+            return State(savedRoot, maxEntries, maxDepth, complete, safePending, safeEntries)
         }
-        if (entries.size > maxEntries || pending.size > maxEntries) return null
-        val rootPrefix = savedRoot.trimEnd(File.separatorChar) + File.separator
-        val safePending = pending.filter { item ->
-            val directory = File(item.path)
-            runCatching {
-                !java.nio.file.Files.isSymbolicLink(directory.toPath()) &&
-                    (directory.canonicalFile.path == savedRoot || directory.canonicalFile.path.startsWith(rootPrefix)) && directory.isDirectory
-            }.getOrDefault(false)
-        }
-        val safeEntries = entries.filter { entry ->
-            val source = File(entry.path)
-            runCatching {
-                !java.nio.file.Files.isSymbolicLink(source.toPath()) &&
-                    source.canonicalFile.path == entry.path && source.canonicalFile.path.startsWith(rootPrefix) && source.isFile && source.canRead() &&
-                    source.length() == entry.size && source.lastModified() == entry.modified
-            }.getOrDefault(false)
-        }
-            State(savedRoot, maxEntries, maxDepth, complete, safePending, safeEntries)
-        }
+
         val primary = readCandidate(target)
         if (primary != null) {
             backup.delete()
@@ -86,7 +87,7 @@ internal object OfflineStorageScanCheckpoint {
             if (recovered != null) {
                 if (target.exists()) target.delete()
                 backup.renameTo(target)
-            } else null
+            }
             recovered
         }
     }.getOrNull()
