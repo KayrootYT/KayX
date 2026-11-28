@@ -85,4 +85,15 @@ class OfflineStorageScanCheckpointTest {
         assertFalse(backup.exists())
     }
 
+    @Test fun safeSaveReportsFailureWithoutThrowing() {
+        val root = temporaryFolder.newFolder("safe-save-root")
+        val blocker = File(temporaryFolder.root, "not-a-directory").apply { writeText("block") }
+        val target = File(blocker, "scan.checkpoint")
+        val state = OfflineStorageScanCheckpoint.State(
+            root.canonicalPath, 50_000, 24, false, emptyList(), emptyList()
+        )
+
+        assertFalse(OfflineStorageScanCheckpoint.saveFileSafely(target, state))
+    }
+
 }
