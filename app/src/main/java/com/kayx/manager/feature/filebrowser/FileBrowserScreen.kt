@@ -333,6 +333,10 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                     OfflineAssistantCommand.OpenRecycleBin -> onOpenFile("", Tool.RECYCLE)
                                     OfflineAssistantCommand.OpenTags -> onOpenFile("", Tool.TAGS)
                                     OfflineAssistantCommand.OpenPrivateSpace -> onOpenFile("", Tool.PRIVATE)
+                                    OfflineAssistantCommand.TagSelected -> {
+                                        if (s.selected.isEmpty()) vm.notify("Select files first")
+                                        else dlg = Dlg.Tag
+                                    }
                                     OfflineAssistantCommand.ScanStorage,
                                     OfflineAssistantCommand.FindLargeFiles,
                                     OfflineAssistantCommand.FindOldFiles,
