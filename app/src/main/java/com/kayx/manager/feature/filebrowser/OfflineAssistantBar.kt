@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
@@ -144,7 +145,7 @@ fun OfflineAssistantBar(
                 placeholder = { Text("Ask KayX: find large videos…") },
                 textStyle = MaterialTheme.typography.bodyMedium
             )
-            TextButton(onClick = { showHistory = true }) { Text("History") }
+            IconButton(onClick = { showHistory = true }) { Icon(Icons.Default.History, contentDescription = "Command history") }
             IconButton(onClick = {
                 if (listening) {
                     recognizer?.cancel()
@@ -184,7 +185,7 @@ fun OfflineAssistantBar(
                     Text("Save command history on this device")
                 }
                 if (historyEnabled && history.isNotEmpty()) {
-                    history.forEach { entry ->
+                    history.take(8).forEach { entry ->
                         TextButton(onClick = { text = entry; showHistory = false }) {
                             Text(entry, maxLines = 1)
                         }
