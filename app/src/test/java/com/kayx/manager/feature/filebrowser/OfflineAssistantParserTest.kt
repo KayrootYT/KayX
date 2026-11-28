@@ -68,6 +68,12 @@ class OfflineAssistantParserTest {
         assertNull(OfflineAssistantParser.parse("organize images"))
     }
 
+    @Test fun parsesStorageToolNavigationCommands() {
+        assertEquals(OfflineAssistantCommand.OpenRecycleBin, OfflineAssistantParser.parse("open recycle bin"))
+        assertEquals(OfflineAssistantCommand.OpenTags, OfflineAssistantParser.parse("tags kholo"))
+        assertEquals(OfflineAssistantCommand.OpenPrivateSpace, OfflineAssistantParser.parse("open private space"))
+    }
+
     @Test fun rejectsEmptyOversizedAndUnknownCommands() {
         assertNull(OfflineAssistantParser.parse(""))
         assertNull(OfflineAssistantParser.parse("do something magical"))
