@@ -330,6 +330,9 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                         vm.notify(if (SettingsStore.addBookmark(activePath)) "Bookmark added" else "Already bookmarked")
                                     }
                                     OfflineAssistantCommand.ToggleDualPane -> vm.toggleDualPane()
+                                    OfflineAssistantCommand.OpenRecycleBin -> onOpenFile("", Tool.RECYCLE)
+                                    OfflineAssistantCommand.OpenTags -> onOpenFile("", Tool.TAGS)
+                                    OfflineAssistantCommand.OpenPrivateSpace -> onOpenFile("", Tool.PRIVATE)
                                     OfflineAssistantCommand.ScanStorage,
                                     OfflineAssistantCommand.FindLargeFiles,
                                     OfflineAssistantCommand.FindOldFiles,
