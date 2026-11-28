@@ -650,7 +650,18 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun notify(msg: String) = _s.update { it.copy(message = msg) }
     fun consumeMessage() = _s.update { it.copy(message = null) }
     /** Copy a previewed set into an explicitly selected local or persisted SAF destination. */
-    fun copyPreviewedFiles(entries: List<OfflineStorageInventory.Entry>, destinationPath: String) {
+    fun copyPreviewedFiles(entries: List<OfflineStorageInventory.Entry>, destinationPath: String) =
+        transferPreviewedFiles(entries, destinationPath, move = false)
+
+    /** Move is currently restricted to local-to-local transfers with the existing undo journal. */
+    fun movePreviewedFiles(entries: List<OfflineStorageInventory.Entry>, destinationPath: String) =
+        transferPreviewedFiles(entries, destinationPath, move = true)
+
+    private fun transferPreviewedFiles(
+        entries: List<OfflineStorageInventory.Entry>,
+        destinationPath: String,
+        move: Boolean
+    ) {
         val context = appContext
         if (context == null) {
             notify("Storage context is not ready")
@@ -664,6 +675,9 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             val validation = withContext(Dispatchers.IO) {
                 runCatching {
                     val safDestination = StorageLocation.fromStableKey(destinationPath) as? StorageLocation.Saf
+                    if (move) require(safDestination == null && entries.none { it.saf }) {
+                        "Move is enabled only for local files and local folders. SAF/provider moves stay disabled until provider recovery is verified."
+                    }
                     val localDestination = if (safDestination == null) {
                         File(destinationPath).canonicalFile.also { destination ->
                             require(destination.isDirectory && destination.canWrite() && destination.path == destinationPath) {
@@ -724,7 +738,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     startStorageTransfer(
                         sourceKeys,
                         safDestinationKey(destinationPath),
-                        cut = false,
+                        cut = move,
                         policy = Conflict.KEEP_BOTH,
                         sourcePane = null,
                         fromClipboard = false
