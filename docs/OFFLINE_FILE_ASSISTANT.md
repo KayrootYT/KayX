@@ -25,7 +25,7 @@ The Offline Assistant is opened from the sparkle button beside the file-browser 
 - Whole-storage inventory: `scan storage`, `find large files`, `find old files`, `find duplicates`, `cancel scan`
 - Category filters: `find photos` / `find images`, `find videos`, `find audio`, `find documents`, `find apks`
 - Folder rollup: `folder size Download` (combines matching folder names across accessible roots; use a distinctive folder name)
-- Organization preview: `organize images to /storage/emulated/0/Pictures/Sorted` (scans first, then shows a confirmation preview before copying)
+- Organization preview: `organize images to /storage/emulated/0/Pictures/Sorted` and `move images to /storage/emulated/0/Pictures/Sorted` (both scan first and show a confirmation preview; move is local-to-local only)
 
 Hindi and Hinglish aliases are provided for common navigation, selection, hidden-file, copy/cut/paste and search commands. The grammar is intentionally explicit; unsupported or ambiguous phrases are rejected instead of guessed.
 
@@ -51,4 +51,4 @@ Hindi and Hinglish aliases are provided for common navigation, selection, hidden
 - Category filters use the scanned filename extension metadata and report up to eight names; supported groups are images, videos, audio, documents and APK packages.
 - `folder size NAME` totals accessible files below every directory named NAME. If the same folder name exists in multiple locations, the output combines them and says so; it is a read-only estimate based on files visible to the bounded scan.
 - Result summaries show at most eight names per command. The inventory is in-memory only; no paths, file content, or scan history are uploaded or persisted.
-- Current limitations: scan resume/checkpoint persistence, duplicate cleanup from the review screen, and provider-safe move/delete organization actions remain pending. Recycle-bin restore and other existing screens remain available through KayX's native UI; this assistant does not bypass their confirmation or permission gates. Organization copies are limited to 100 files per explicit confirmation.
+- Duplicate review now offers a separate cleanup confirmation for local-only groups: every file is re-hashed and metadata/path revalidated, one copy is retained, and extras are moved into KayX Recycle Bin. Mixed SAF/provider groups are excluded. Preview-first move is available only for local sources to local destinations and uses the existing undo journal. Current limitations: scan resume/checkpoint persistence and provider-safe SAF move/delete organization actions remain pending. Recycle-bin restore and other existing screens remain available through KayX's native UI; this assistant does not bypass their confirmation or permission gates. Organization copies are limited to 100 files per explicit confirmation.
