@@ -26,14 +26,15 @@ internal object OfflineOrganizationPlanner {
         category: Category,
         destinationPath: String
     ): Result<OfflineOrganizationPlan> = runCatching {
-        val safDestination = StorageLocation.fromStableKey(destinationPath) as? StorageLocation.Saf
+        val destinationLocation = StorageLocation.fromStableKey(destinationPath)
+        val safDestination = destinationLocation as? StorageLocation.Saf
         val destination = if (safDestination != null) {
             require(safDestination.relativePath.split('/').none { it == "." || it == ".." || it.contains('\\') }) {
                 "SAF destination path is invalid."
             }
             null
         } else {
-            val requestedDestination = File(destinationPath)
+            val requestedDestination = (destinationLocation as? StorageLocation.Local)?.directory ?: File(destinationPath)
             require(requestedDestination.isAbsolute) { "Destination must be an absolute folder path or a selected SAF folder." }
             requestedDestination.canonicalFile.also {
                 require(it.isDirectory && it.canWrite()) { "Destination folder is unavailable or not writable." }
@@ -78,8 +79,10 @@ internal object OfflineOrganizationPlanner {
 
     /** Local files are checked here; SAF providers are authoritatively revalidated by the VM at confirmation. */
     fun isStillValid(plan: OfflineOrganizationPlan): Boolean = runCatching {
-        val safDestination = StorageLocation.fromStableKey(plan.destinationPath) as? StorageLocation.Saf
-        val destination = if (safDestination == null) File(plan.destinationPath).canonicalFile else null
+        val destinationLocation = StorageLocation.fromStableKey(plan.destinationPath)
+        val safDestination = destinationLocation as? StorageLocation.Saf
+        val localDestination = destinationLocation as? StorageLocation.Local
+        val destination = if (safDestination == null) (localDestination?.directory ?: File(plan.destinationPath)).canonicalFile else null
         if (destination != null && (!destination.isDirectory || !destination.canWrite() || destination.path != plan.destinationPath)) return false
         if (safDestination != null && safDestination.relativePath.split('/').any { it == "." || it == ".." }) return false
         plan.files.isNotEmpty() && plan.files.size <= MAX_FILES_PER_OPERATION &&
