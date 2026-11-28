@@ -674,12 +674,13 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         viewModelScope.launch {
             val validation = withContext(Dispatchers.IO) {
                 runCatching {
-                    val safDestination = StorageLocation.fromStableKey(destinationPath) as? StorageLocation.Saf
+                    val destinationLocation = StorageLocation.fromStableKey(destinationPath)
+                    val safDestination = destinationLocation as? StorageLocation.Saf
                     if (move) require(safDestination == null && entries.none { it.saf }) {
                         "Move is enabled only for local files and local folders. SAF/provider moves stay disabled until provider recovery is verified."
                     }
                     val localDestination = if (safDestination == null) {
-                        File(destinationPath).canonicalFile.also { destination ->
+                        ((destinationLocation as? StorageLocation.Local)?.directory ?: File(destinationPath)).canonicalFile.also { destination ->
                             require(destination.isDirectory && destination.canWrite() && destination.path == destinationPath) {
                                 "Organization destination is unavailable or not writable"
                             }
