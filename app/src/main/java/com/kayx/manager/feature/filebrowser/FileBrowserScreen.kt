@@ -333,6 +333,19 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                     OfflineAssistantCommand.OpenRecycleBin -> onOpenFile("", Tool.RECYCLE)
                                     OfflineAssistantCommand.OpenTags -> onOpenFile("", Tool.TAGS)
                                     OfflineAssistantCommand.OpenPrivateSpace -> onOpenFile("", Tool.PRIVATE)
+                                    OfflineAssistantCommand.OpenNetworkStorage -> onOpenFile("", Tool.FTP)
+                                    is OfflineAssistantCommand.InspectApk -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { !it.isDir && it.name.equals(command.name, ignoreCase = true) }
+                                        if (item == null || !item.name.endsWith(".apk", ignoreCase = true)) vm.notify("APK not found in this folder")
+                                        else onOpenFile(item.path, Tool.APK)
+                                    }
+                                    is OfflineAssistantCommand.BrowseArchive -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { !it.isDir && it.name.equals(command.name, ignoreCase = true) }
+                                        if (item == null || !MultiExtract.canExtract(item.path)) vm.notify("Supported archive not found in this folder")
+                                        else onOpenFile(item.path, Tool.ZIP)
+                                    }
                                     OfflineAssistantCommand.TagSelected -> {
                                         if (s.selected.isEmpty()) vm.notify("Select files first")
                                         else dlg = Dlg.Tag
