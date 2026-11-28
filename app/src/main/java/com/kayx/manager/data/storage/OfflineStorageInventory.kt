@@ -195,8 +195,12 @@ object OfflineStorageInventory {
         // A completed or hard-capped scan has no resumable work left under this bounded scan contract.
         // Interrupted scans exit before this point and retain the last atomic checkpoint.
         OfflineStorageScanCheckpoint.clear(app)
-        return Result(found, large, old, duplicates, duplicateGroups, found.sumOf { it.size },
+        val result = Result(found, large, old, duplicates, duplicateGroups, found.sumOf { it.size },
             rootsScanned, inaccessibleRoots, truncated, checkpointWarning)
+        // Keep the last completed inventory available after process death. This is a
+        // bounded app-private metadata snapshot; file contents are never copied or indexed.
+        if (!OfflineStorageInventorySnapshotStore(app.filesDir).save(result)) checkpointWarning = true
+        return result.copy(checkpointWarning = checkpointWarning)
     }
 
     private suspend fun findDuplicateGroups(context: Context, entries: List<Entry>): List<DuplicateGroup> {
