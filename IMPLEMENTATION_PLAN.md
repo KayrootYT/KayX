@@ -160,11 +160,13 @@ The user-facing assistant is a separate, fully local command feature. It is not 
 - [x] Add cancellable traversal with a 50,000-file / 24-level cap, progress callbacks, and inaccessible-root/truncation reporting.
 - [x] Add offline category filters for images, videos, audio, documents and APKs, plus folder-size rollups by folder name (same-name folders are combined and clearly reported).
 - [x] Group duplicate candidates by verified SHA-256 and show a review dialog with each file path, per-copy size, and potential reclaimable bytes; retain one-copy accounting and never auto-delete.
-- [ ] Add resumable/checkpointed scans and separately confirmed duplicate cleanup through recoverable recycle-bin/provider-safe actions; this review phase performs no move or delete.
+- [ ] Add resumable/checkpointed scans.
+- [x] Add a separate duplicate-cleanup confirmation for local-only SHA-256 groups; re-hash and revalidate each source, retain one copy, and move extras to the existing recoverable Recycle Bin. Mixed SAF/provider groups are excluded.
 - [x] Add preview-first offline bulk copy organization with explicit destination, exact file/size preview, separate confirmation, stale-source revalidation, KEEP_BOTH conflicts, and a 100-file cap; original files are never deleted.
 - [x] Extend preview-first organization to SAF/provider source roots using tree-relative stable keys, persisted-grant checks, document re-resolution, metadata snapshot validation and read-open verification immediately before copy to a local destination.
 - [x] Add preview-first copy to a selected SAF/provider destination; require persisted read+write grants and re-resolve the destination at confirmation.
-- [ ] Add separately confirmed move/delete actions only after provider-safe revalidation and recovery tests.
+- [x] Add separately previewed and confirmed local-to-local category moves with source/destination revalidation and the existing undo journal.
+- [ ] Add provider-safe SAF/SD-card move/delete actions only after provider recovery tests; unsupported providers remain copy-only.
 - [x] Add opt-in local command history (20-entry cap), with user controls to disable and clear; stored only in app-private SharedPreferences, no telemetry or cloud memory.
 - [x] Add explicit offline commands that open existing Tags, Recycle Bin, Private Space, and Network Storage screens; tag selected files through the existing tag dialog; route visible APK/archive items to their existing inspection/viewer screens without bypassing permissions.
 
