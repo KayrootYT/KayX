@@ -54,6 +54,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import com.kayx.manager.data.storage.OfflineStorageInventory
+import com.kayx.manager.data.storage.OfflineStorageInventorySnapshotStore
 import kotlinx.coroutines.withContext
 import com.kayx.manager.data.filesystem.FileSearchCategory
 import java.io.File
@@ -253,7 +254,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     }
                     val coverage = "Roots: ${result.scannedRoots} · Inaccessible: ${result.inaccessibleRoots}" +
                         (if (result.truncated) " · Scan capped at ${OfflineStorageInventory.DEFAULT_MAX_ENTRIES} files" else "") +
-                        (if (result.checkpointWarning) " · Resume checkpoint could not be saved; keep KayX open until this scan finishes" else "")
+                        (if (result.checkpointWarning) " · Recovery metadata could not be saved; resume or last-scan recovery may be unavailable" else "")
                     if (query is OfflineAssistantCommand.PreviewOrganize) {
                         val activeFolder = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
                         val destination = if (query.destinationPath.equals("here", ignoreCase = true)) {
@@ -352,6 +353,20 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                     OfflineAssistantCommand.TagSelected -> {
                                         if (s.selected.isEmpty()) vm.notify("Select files first")
                                         else dlg = Dlg.Tag
+                                    }
+                                    OfflineAssistantCommand.TransferRecoveryStatus -> vm.notify(vm.transferRecoveryStatus())
+                                    OfflineAssistantCommand.AcknowledgeTransferRecovery -> vm.acknowledgeTransferRecovery()
+                                    OfflineAssistantCommand.ShowLastScan -> scope.launch {
+                                        val cached = withContext(Dispatchers.IO) {
+                                            OfflineStorageInventorySnapshotStore(ctx.filesDir).load()
+                                        }
+                                        if (cached == null) vm.notify("No valid saved inventory is available. Say scan storage first.")
+                                        else vm.notify(
+                                            "Last saved inventory\\nFiles: ${cached.entries.size} · Data: ${fmtSize(cached.totalBytes)} · Large: ${cached.largeFiles.size} · Old: ${cached.oldFiles.size}\\n" +
+                                                "Roots: ${cached.scannedRoots} · Inaccessible: ${cached.inaccessibleRoots}" +
+                                                (if (cached.truncated) " · Scan was capped" else "") +
+                                                "\\nDuplicate hashes are not restored from the saved snapshot; say find duplicates to rescan and hash."
+                                        )
                                     }
                                     OfflineAssistantCommand.ScanStorage,
                                     OfflineAssistantCommand.ResumeStorageScan,
