@@ -165,8 +165,8 @@ The user-facing assistant is a separate, fully local command feature. It is not 
 - [x] Extend preview-first organization to SAF/provider source roots using tree-relative stable keys, persisted-grant checks, document re-resolution, metadata snapshot validation and read-open verification immediately before copy to a local destination.
 - [x] Add preview-first copy to a selected SAF/provider destination; require persisted read+write grants and re-resolve the destination at confirmation.
 - [ ] Add separately confirmed move/delete actions only after provider-safe revalidation and recovery tests.
-- [ ] Add safe command history and user-controlled local preferences; no telemetry or cloud memory.
-- [ ] Add broader command coverage for tags, recycle bin, archives, APK tools, private space and network-storage screens, respecting each screen's existing permissions.
+- [x] Add opt-in local command history (20-entry cap), with user controls to disable and clear; stored only in app-private SharedPreferences, no telemetry or cloud memory.
+- [x] Add explicit offline commands that open existing Tags, Recycle Bin, Private Space, and Network Storage screens; tag selected files through the existing tag dialog; route visible APK/archive items to their existing inspection/viewer screens without bypassing permissions.
 
 Phase 2 current limits: scan results are in-memory only; up to 50,000 entries/24 levels are inspected, duplicate hashing is capped at 500 files/512 MiB, and confirmed organization copies are limited to 100 local files per operation. SAF sources can be copied to explicit local destinations, and local/SAF sources can be copied to an explicitly selected writable SAF destination after preview and revalidation; move/delete remain unavailable.
 
