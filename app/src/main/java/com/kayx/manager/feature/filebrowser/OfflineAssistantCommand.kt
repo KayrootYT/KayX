@@ -37,6 +37,7 @@ sealed interface OfflineAssistantCommand {
     data object OpenRecycleBin : OfflineAssistantCommand
     data object OpenTags : OfflineAssistantCommand
     data object OpenPrivateSpace : OfflineAssistantCommand
+    data object TagSelected : OfflineAssistantCommand
     data object ScanStorage : OfflineAssistantCommand
     data object FindLargeFiles : OfflineAssistantCommand
     data object FindOldFiles : OfflineAssistantCommand
@@ -76,6 +77,7 @@ object OfflineAssistantParser {
             value in setOf("open recycle bin", "recycle bin kholo", "recently deleted") -> OfflineAssistantCommand.OpenRecycleBin
             value in setOf("open tags", "tags kholo", "tag manager kholo") -> OfflineAssistantCommand.OpenTags
             value in setOf("open private space", "private space kholo") -> OfflineAssistantCommand.OpenPrivateSpace
+            value in setOf("tag selected", "selected ko tag karo", "tag lagao") -> OfflineAssistantCommand.TagSelected
             value in setOf("storage info", "storage", "storage dikhao", "kitni storage khali hai") -> OfflineAssistantCommand.StorageSummary
             value in setOf("scan storage", "scan all storage", "storage scan karo", "पूरी स्टोरेज स्कैन करो") -> OfflineAssistantCommand.ScanStorage
             value in setOf("find large files", "large files", "badi files dhundo", "बड़ी फाइलें खोजो") -> OfflineAssistantCommand.FindLargeFiles
