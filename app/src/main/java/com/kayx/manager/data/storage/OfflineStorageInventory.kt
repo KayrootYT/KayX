@@ -50,7 +50,8 @@ object OfflineStorageInventory {
         val totalBytes: Long,
         val scannedRoots: Int,
         val inaccessibleRoots: Int,
-        val truncated: Boolean
+        val truncated: Boolean,
+        val checkpointWarning: Boolean = false
     )
 
     suspend fun scan(
@@ -78,6 +79,7 @@ object OfflineStorageInventory {
         var rootsScanned = 0
         var inaccessibleRoots = 0
         var truncated = false
+        var checkpointWarning = false
         var localComplete = checkpoint?.localComplete == true
 
         if (localComplete && localRoot.isDirectory && localRoot.canRead()) rootsScanned++
@@ -94,10 +96,10 @@ object OfflineStorageInventory {
                 val directory = File(current.path)
                 val depth = current.depth
                 if (processedDirectories % 16 == 0) {
-                    OfflineStorageScanCheckpoint.save(app, OfflineStorageScanCheckpoint.State(
+                    if (!OfflineStorageScanCheckpoint.save(app, OfflineStorageScanCheckpoint.State(
                         localRoot.canonicalPath, maxEntries, maxDepth, false,
                         (pending.toList() + current), found.toList()
-                    ))
+                    ))) checkpointWarning = true
                 }
                 val canonical = runCatching { directory.canonicalFile }.getOrNull()
                 if (canonical == null || java.nio.file.Files.isSymbolicLink(directory.toPath())) {
@@ -129,9 +131,9 @@ object OfflineStorageInventory {
             }
             localComplete = !truncated
             if (localComplete) {
-                OfflineStorageScanCheckpoint.save(app, OfflineStorageScanCheckpoint.State(
+                if (!OfflineStorageScanCheckpoint.save(app, OfflineStorageScanCheckpoint.State(
                     localRoot.canonicalPath, maxEntries, maxDepth, true, emptyList(), found.toList()
-                ))
+                ))) checkpointWarning = true
             } else OfflineStorageScanCheckpoint.clear(app)
         }
 
@@ -194,7 +196,7 @@ object OfflineStorageInventory {
         // Interrupted scans exit before this point and retain the last atomic checkpoint.
         OfflineStorageScanCheckpoint.clear(app)
         return Result(found, large, old, duplicates, duplicateGroups, found.sumOf { it.size },
-            rootsScanned, inaccessibleRoots, truncated)
+            rootsScanned, inaccessibleRoots, truncated, checkpointWarning)
     }
 
     private suspend fun findDuplicateGroups(context: Context, entries: List<Entry>): List<DuplicateGroup> {
