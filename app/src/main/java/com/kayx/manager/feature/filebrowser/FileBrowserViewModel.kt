@@ -839,6 +839,10 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         } else emptyList()
         val control = FileOps.TransferControl()
         val recoveryStore = transferRecoveryStore
+        if (recoveryStore?.load() != null) {
+            notify("A previous transfer needs review. Say transfer status, inspect source and destination, then say acknowledge transfer recovery.")
+            return
+        }
         val recoverySaved = recoveryStore?.begin(
             OfflineTransferRecoveryStore.Record(
                 sources = keys,
@@ -938,6 +942,10 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             "Destination: " + record.destination + "\\nSources: " + record.sources.take(5).joinToString() +
             (if (record.sources.size > 5) " and " + (record.sources.size - 5) + " more" else "") +
             "\\nNo automatic retry is offered. Inspect source and destination before starting another transfer."
+    }
+    fun acknowledgeTransferRecovery() {
+        transferRecoveryStore?.clear()
+        notify("Saved transfer recovery record acknowledged and cleared. No files were changed.")
     }
     fun pauseTransfer() { _s.value.transferControl?.pause() }
     fun resumeTransfer() { _s.value.transferControl?.resume() }
