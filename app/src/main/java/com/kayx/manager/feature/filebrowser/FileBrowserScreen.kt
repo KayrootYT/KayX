@@ -94,7 +94,7 @@ internal sealed interface Dlg {
     data object ConfirmPaste : Dlg
     data object Tools : Dlg
     data object MultiProps : Dlg
-    data class OrganizationPreview(val plan: OfflineOrganizationPlan) : Dlg
+    data class OrganizationPreview(val plan: OfflineOrganizationPlan, val move: Boolean = false) : Dlg
     data class DuplicateReview(val groups: List<OfflineStorageInventory.DuplicateGroup>) : Dlg
     data class DuplicateCleanupConfirm(val groups: List<OfflineStorageInventory.DuplicateGroup>) : Dlg
 }
@@ -259,7 +259,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                 ?: StorageLocation.Local(File(activeFolder).canonicalFile).stableKey()
                         } else query.destinationPath
                         OfflineOrganizationPlanner.create(result.entries, query.category, destination)
-                            .onSuccess { dlg = Dlg.OrganizationPreview(it) }
+                            .onSuccess { dlg = Dlg.OrganizationPreview(it, query.move) }
                             .onFailure { vm.notify(it.message ?: "Could not prepare organization preview") }
                     } else if (query == OfflineAssistantCommand.FindDuplicates) {
                         dlg = Dlg.DuplicateReview(result.duplicateGroups)
@@ -831,7 +831,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
             val plan = d.plan
             AlertDialog(
                 onDismissRequest = { dlg = null },
-                title = { Text("Copy preview · ${plan.category.label}") },
+                title = { Text("${if (d.move) "Move" else "Copy"} preview · ${plan.category.label}") },
                 text = {
                     Column(
                         Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
@@ -839,20 +839,25 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     ) {
                         Text("${plan.files.size} files · ${fmtSize(plan.totalBytes)}")
                         Text("Destination:\n${plan.destinationLabel}")
-                        Text("No files have been changed. Confirm only if this list and destination are correct.")
+                        Text(if (d.move) "No files have been moved. Confirm only if this list and destination are correct." else "No files have been changed. Confirm only if this list and destination are correct.")
                         plan.files.forEach { entry ->
                             Text("• ${entry.name}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        Text("Existing names will be kept; copies receive a new name. Original files are not deleted.")
+                        Text(if (d.move) "Existing names will be kept; moved files receive a new name. Local moves can be undone from KayX Undo." else "Existing names will be kept; copies receive a new name. Original files are not deleted.")
                     }
                 },
                 confirmButton = {
-                    TextButton({
-                        if (OfflineOrganizationPlanner.isStillValid(plan)) {
-                            vm.copyPreviewedFiles(plan.files, plan.destinationPath)
-                        } else vm.notify("Preview is stale. Run the organize command again.")
-                        dlg = null
-                    }) { Text("Confirm copy") }
+                    val moveSupported = !plan.destinationPath.startsWith("saf:", ignoreCase = true) && plan.files.none { it.saf }
+                    TextButton(
+                        onClick = {
+                            if (OfflineOrganizationPlanner.isStillValid(plan)) {
+                                if (d.move) vm.movePreviewedFiles(plan.files, plan.destinationPath)
+                                else vm.copyPreviewedFiles(plan.files, plan.destinationPath)
+                            } else vm.notify("Preview is stale. Run the command again.")
+                            dlg = null
+                        },
+                        enabled = !d.move || moveSupported
+                    ) { Text(if (d.move) "Confirm move" else "Confirm copy") }
                 },
                 dismissButton = { TextButton({ dlg = null }) { Text("Cancel") } }
             )
