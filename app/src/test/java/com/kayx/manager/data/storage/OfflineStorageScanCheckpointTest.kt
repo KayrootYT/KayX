@@ -1,6 +1,7 @@
 package com.kayx.manager.data.storage
 
 import java.io.File
+import java.io.RandomAccessFile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -61,7 +62,7 @@ class OfflineStorageScanCheckpointTest {
         val checkpoint = File(temporaryFolder.root, "scan.checkpoint")
         checkpoint.writeText("not-a-kayx-checkpoint")
         assertNull(OfflineStorageScanCheckpoint.loadFile(checkpoint, root, 50_000, 24))
-        checkpoint.writeBytes(ByteArray(64 * 1024 * 1024 + 1))
+        RandomAccessFile(checkpoint, "rw").use { it.setLength(64L * 1024 * 1024 + 1) }
         assertNull(OfflineStorageScanCheckpoint.loadFile(checkpoint, root, 50_000, 24))
     }
 }
