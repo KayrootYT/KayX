@@ -126,20 +126,24 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
         return recovered
     }
 
-    private fun readLegacyEntries(bytes: ByteArray): List<Entry> =
+    private fun readLegacyEntries(bytes: ByteArray): List<Entry>? =
         runCatching<List<Entry>> {
-            String(bytes, Charsets.UTF_8).lineSequence().mapNotNull { line ->
+            require(bytes.isNotEmpty()) { "Empty undo journal" }
+            val lines = String(bytes, Charsets.UTF_8).lineSequence().filter { it.isNotBlank() }.toList()
+            require(lines.size <= MAX_READ_ENTRIES) { "Invalid legacy undo journal entry count" }
+            lines.map { line ->
                 val fields = line.split('\t', ignoreCase = false, limit = 4)
-                if (fields.size != 4) return@mapNotNull null
-                val kind = runCatching { Kind.valueOf(fields[0]) }.getOrNull() ?: return@mapNotNull null
+                require(fields.size == 4) { "Malformed legacy undo journal entry" }
+                val kind = Kind.valueOf(fields[0])
                 fun decode(value: String) = if (value == "-") "" else
                     String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8)
                 val source = decode(fields[1])
                 val destination = decode(fields[2])
                 val fingerprint = decode(fields[3])
-                if (isValidEntry(kind, source, destination)) Entry(kind, source, destination, fingerprint) else null
-            }.toList().takeLast(maxEntries)
-        }.getOrDefault(emptyList())
+                require(isValidEntry(kind, source, destination)) { "Invalid legacy undo journal entry" }
+                Entry(kind, source, destination, fingerprint)
+            }.takeLast(maxEntries)
+        }.getOrNull()
 
     private fun isValidEntry(kind: Kind, source: String, destination: String): Boolean =
         destination.isNotBlank() &&
