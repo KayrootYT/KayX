@@ -95,18 +95,19 @@ object OfflineStorageInventory {
                         (pending.toList() + current), found.toList()
                     ))
                 }
-                val canonical = runCatching { directory.canonicalPath }.getOrNull()
-                if (canonical == null || canonical != directory.absolutePath || java.nio.file.Files.isSymbolicLink(directory.toPath())) {
+                val canonical = runCatching { directory.canonicalFile }.getOrNull()
+                if (canonical == null || java.nio.file.Files.isSymbolicLink(directory.toPath())) {
                     processedDirectories++
                     continue
                 }
-                val children = runCatching { directory.listFiles() }.getOrNull()
+                val safeDirectory = canonical
+                val children = runCatching { safeDirectory.listFiles() }.getOrNull()
                 if (children == null) inaccessibleRoots++
                 else for (child in children) {
                     currentCoroutineContext().ensureActive()
                     if (java.nio.file.Files.isSymbolicLink(child.toPath())) continue
                     if (child.isDirectory) {
-                        if (depth < maxDepth && child.name !in setOf(".Trash", ".trashed") && !(directory.name == "Android" && child.name in setOf("data", "obb"))) {
+                        if (depth < maxDepth && child.name !in setOf(".Trash", ".trashed") && !(safeDirectory.name == "Android" && child.name in setOf("data", "obb"))) {
                             pending.add(OfflineStorageScanCheckpoint.PendingDirectory(child.absolutePath, depth + 1))
                         }
                     } else if (child.isFile && child.canRead()) {
