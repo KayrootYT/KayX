@@ -17,13 +17,15 @@ class OfflineStorageScanCheckpointTest {
     @Test fun roundTripsPendingDirectoriesAndLocalMetadata() {
         val root = temporaryFolder.newFolder("storage-root")
         val checkpoint = File(temporaryFolder.root, "scan.checkpoint")
-        val source = File(root, "Pictures/photo.jpg").absolutePath
+        val pictureDir = File(root, "Pictures").apply { mkdirs() }
+        val sourceFile = File(pictureDir, "photo.jpg").apply { writeText("photo") }
+        val source = sourceFile.absolutePath
         val entry = OfflineStorageInventory.Entry(
             key = source,
             path = source,
             name = "photo.jpg",
-            size = 123L,
-            modified = 456L,
+            size = sourceFile.length(),
+            modified = sourceFile.lastModified(),
             category = Category.IMAGES,
             saf = false
         )
@@ -32,7 +34,7 @@ class OfflineStorageScanCheckpointTest {
             maxEntries = 50_000,
             maxDepth = 24,
             localComplete = false,
-            pending = listOf(OfflineStorageScanCheckpoint.PendingDirectory(File(root, "Pictures").path, 1)),
+            pending = listOf(OfflineStorageScanCheckpoint.PendingDirectory(pictureDir.path, 1)),
             entries = listOf(entry)
         )
 
