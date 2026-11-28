@@ -71,6 +71,10 @@ object OfflineStorageInventory {
         val checkpoint = if (resume) OfflineStorageScanCheckpoint.load(app, localRoot, maxEntries, maxDepth) else null
         if (!resume || checkpoint == null) OfflineStorageScanCheckpoint.clear(app)
         val found = ArrayList<Entry>(minOf(maxEntries, 8_192)).apply { addAll(checkpoint?.entries.orEmpty()) }
+        // A crash can occur after a directory has been checkpointed but before all of
+        // its children are visited. Resuming that directory must not duplicate files
+        // already captured in the previous checkpoint.
+        val seenLocalPaths = found.asSequence().filterNot { it.saf }.map { it.path }.toHashSet()
         var rootsScanned = 0
         var inaccessibleRoots = 0
         var truncated = false
@@ -111,10 +115,13 @@ object OfflineStorageInventory {
                             pending.add(OfflineStorageScanCheckpoint.PendingDirectory(child.absolutePath, depth + 1))
                         }
                     } else if (child.isFile && child.canRead()) {
-                        if (found.size >= maxEntries) { truncated = true; break }
-                        found += Entry(child.absolutePath, child.absolutePath, child.name, child.length(),
-                            child.lastModified(), Category.of(child.name), saf = false)
-                        if (found.size % 128 == 0) onProgress(found.size)
+                        val childPath = child.absolutePath
+                        if (seenLocalPaths.add(childPath)) {
+                            if (found.size >= maxEntries) { truncated = true; break }
+                            found += Entry(childPath, childPath, child.name, child.length(),
+                                child.lastModified(), Category.of(child.name), saf = false)
+                            if (found.size % 128 == 0) onProgress(found.size)
+                        }
                     }
                 }
                 processedDirectories++

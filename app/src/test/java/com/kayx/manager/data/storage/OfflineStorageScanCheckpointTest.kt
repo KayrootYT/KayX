@@ -67,4 +67,22 @@ class OfflineStorageScanCheckpointTest {
         RandomAccessFile(checkpoint, "rw").use { it.setLength(64L * 1024 * 1024 + 1) }
         assertNull(OfflineStorageScanCheckpoint.loadFile(checkpoint, root, 50_000, 24))
     }
+    @Test fun recoversValidBackupWhenPrimaryCheckpointIsCorrupt() {
+        val root = temporaryFolder.newFolder("backup-root")
+        val checkpoint = File(temporaryFolder.root, "scan.checkpoint")
+        val state = OfflineStorageScanCheckpoint.State(
+            root.canonicalPath, 50_000, 24, true, emptyList(), emptyList()
+        )
+        OfflineStorageScanCheckpoint.saveFile(checkpoint, state)
+        val backup = File(temporaryFolder.root, "scan.checkpoint.bak")
+        assertTrue(checkpoint.renameTo(backup))
+        checkpoint.writeText("corrupt-primary")
+
+        val restored = OfflineStorageScanCheckpoint.loadFile(checkpoint, root, 50_000, 24)
+
+        assertEquals(state, restored)
+        assertTrue(checkpoint.isFile)
+        assertFalse(backup.exists())
+    }
+
 }
