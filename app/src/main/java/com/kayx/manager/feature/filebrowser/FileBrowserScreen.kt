@@ -202,7 +202,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 vm.notify("Scanning accessible internal storage and granted SD-card folders…")
                 val result = try {
                     withContext(Dispatchers.IO) {
-                        OfflineStorageInventory.scan(ctx, includeDuplicates = query == OfflineAssistantCommand.FindDuplicates) { count ->
+                        OfflineStorageInventory.scan(ctx, includeDuplicates = query == OfflineAssistantCommand.FindDuplicates, resume = query == OfflineAssistantCommand.ResumeStorageScan) { count ->
                             if (count > 0 && count % 1024 == 0) vm.notify("Storage scan progress: $count files")
                         }
                     }
@@ -237,7 +237,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         }
                     } else emptyList()
                     val details = when (query) {
-                        OfflineAssistantCommand.ScanStorage ->
+                        OfflineAssistantCommand.ScanStorage, OfflineAssistantCommand.ResumeStorageScan ->
                             "Files: ${result.entries.size} · Data: ${fmtSize(result.totalBytes)} · Large: ${result.largeFiles.size} · Old: ${result.oldFiles.size}"
                         is OfflineAssistantCommand.FolderSize ->
                             if (folderMatches.isEmpty()) "No accessible files found inside a folder named '${query.folderName}'."
@@ -352,6 +352,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                         else dlg = Dlg.Tag
                                     }
                                     OfflineAssistantCommand.ScanStorage,
+                                    OfflineAssistantCommand.ResumeStorageScan,
                                     OfflineAssistantCommand.FindLargeFiles,
                                     OfflineAssistantCommand.FindOldFiles,
                                     OfflineAssistantCommand.FindDuplicates,
