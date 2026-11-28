@@ -33,7 +33,7 @@ internal object OfflineStorageScanCheckpoint {
         if (!target.isFile || target.length() > 64L * 1024 * 1024) return null
         val lines = target.readLines(Charsets.UTF_8)
         val header = lines.firstOrNull()?.split('\t') ?: return null
-        if (header.size != 6 || header[0] != VERSION) return null
+        if (header.size != 6 || header[0] != VERSION || header[5] != "checkpoint") return null
         val savedRoot = decode(header[1])
         if (savedRoot != root.canonicalPath || header[2].toIntOrNull() != maxEntries ||
             header[3].toIntOrNull() != maxDepth) return null
@@ -44,12 +44,12 @@ internal object OfflineStorageScanCheckpoint {
             val parts = line.split('\t')
             when (parts.firstOrNull()) {
                 "D" -> if (parts.size == 3) {
-                    val depth = parts[1].toIntOrNull() ?: return null
+                    val depth = parts[1].toIntOrNull()?.takeIf { it in 0..maxDepth } ?: return null
                     pending += PendingDirectory(decode(parts[2]), depth)
                 }
                 "F" -> if (parts.size == 6) {
-                    val size = parts[1].toLongOrNull() ?: return null
-                    val modified = parts[2].toLongOrNull() ?: return null
+                    val size = parts[1].toLongOrNull()?.takeIf { it >= 0L } ?: return null
+                    val modified = parts[2].toLongOrNull()?.takeIf { it >= 0L } ?: return null
                     val category = parts[3].takeIf { it != "-" }?.let { Category.valueOf(it) }
                     val path = decode(parts[4])
                     val name = decode(parts[5])
