@@ -33,11 +33,20 @@ object OfflineStorageInventory {
         val saf: Boolean
     )
 
+    data class DuplicateGroup(
+        val sha256: String,
+        val size: Long,
+        val entries: List<Entry>
+    ) {
+        val reclaimableBytes: Long get() = size * (entries.size - 1L)
+    }
+
     data class Result(
         val entries: List<Entry>,
         val largeFiles: List<Entry>,
         val oldFiles: List<Entry>,
         val duplicateCandidates: List<Entry>,
+        val duplicateGroups: List<DuplicateGroup>,
         val totalBytes: Long,
         val scannedRoots: Int,
         val inaccessibleRoots: Int,
@@ -145,13 +154,14 @@ object OfflineStorageInventory {
             .sortedByDescending { it.size }.take(100).toList()
         val old = found.asSequence().filter { it.modified in 1 until oldCutoff }
             .sortedBy { it.modified }.take(100).toList()
-        val duplicates = if (includeDuplicates) findDuplicateCandidates(app, found) else emptyList()
+        val duplicateGroups = if (includeDuplicates) findDuplicateGroups(app, found) else emptyList()
+        val duplicates = duplicateGroups.flatMap { it.entries }
         onProgress(found.size)
-        return Result(found, large, old, duplicates, found.sumOf { it.size },
+        return Result(found, large, old, duplicates, duplicateGroups, found.sumOf { it.size },
             rootsScanned, inaccessibleRoots, truncated)
     }
 
-    private suspend fun findDuplicateCandidates(context: Context, entries: List<Entry>): List<Entry> {
+    private suspend fun findDuplicateGroups(context: Context, entries: List<Entry>): List<DuplicateGroup> {
         val buckets = entries.asSequence().filter { it.size >= MIN_DUPLICATE_BYTES }
             .groupBy { it.size }.values.filter { it.size > 1 }
         val digestGroups = LinkedHashMap<String, MutableList<Entry>>()
@@ -170,8 +180,19 @@ object OfflineStorageInventory {
             }
             if (attemptedCount >= MAX_HASH_CANDIDATES || hashedBytes >= MAX_HASHED_BYTES) break
         }
-        return digestGroups.values.filter { it.size > 1 }.flatten()
-            .sortedByDescending { it.size }.take(100)
+        return digestGroups.entries.asSequence()
+            .filter { it.value.size > 1 }
+            .map { (key, files) ->
+                val size = files.first().size
+                DuplicateGroup(
+                    sha256 = key.substringAfter(':'),
+                    size = size,
+                    entries = files.sortedWith(compareBy<Entry> { it.saf }.thenBy { it.path })
+                )
+            }
+            .sortedByDescending { it.reclaimableBytes }
+            .take(100)
+            .toList()
     }
 
     private suspend fun digest(context: Context, entry: Entry): String? {
