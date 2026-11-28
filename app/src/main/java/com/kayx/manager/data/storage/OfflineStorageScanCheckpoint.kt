@@ -25,7 +25,10 @@ internal object OfflineStorageScanCheckpoint {
 
     fun load(context: Context, root: File, maxEntries: Int, maxDepth: Int): State? = runCatching {
         val target = file(context)
-        if (!target.isFile || target.length() > 16L * 1024 * 1024) return null
+        val backup = File(target.parentFile, target.name + ".bak")
+        if (!target.exists() && backup.exists()) check(backup.renameTo(target))
+        else if (target.exists()) backup.delete()
+        if (!target.isFile || target.length() > 64L * 1024 * 1024) return null
         val lines = target.readLines(Charsets.UTF_8)
         val header = lines.firstOrNull()?.split('\t') ?: return null
         if (header.size != 6 || header[0] != VERSION) return null
@@ -72,13 +75,23 @@ internal object OfflineStorageScanCheckpoint {
             }
         }
         FileOutputStreamSync.write(temp, text)
-        if (target.exists()) check(target.delete()) { "Could not replace scan checkpoint" }
-        check(temp.renameTo(target)) { "Could not save scan checkpoint" }
+        val backup = File(target.parentFile, target.name + ".bak")
+        backup.delete()
+        val hadCheckpoint = target.exists()
+        if (hadCheckpoint) check(target.renameTo(backup)) { "Could not preserve previous scan checkpoint" }
+        try {
+            check(temp.renameTo(target)) { "Could not save scan checkpoint" }
+            backup.delete()
+        } catch (error: Throwable) {
+            if (hadCheckpoint) check(backup.renameTo(target)) { "Could not restore previous scan checkpoint" }
+            throw error
+        }
     }
 
     fun clear(context: Context) {
         file(context).delete()
         File(context.applicationContext.filesDir, "offline-assistant-scan.checkpoint.tmp").delete()
+        File(context.applicationContext.filesDir, "offline-assistant-scan.checkpoint.bak").delete()
     }
 
     private fun encode(value: String): String =
