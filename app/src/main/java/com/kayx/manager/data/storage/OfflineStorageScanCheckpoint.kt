@@ -64,7 +64,7 @@ internal object OfflineStorageScanCheckpoint {
             val directory = File(item.path)
             runCatching {
                 !java.nio.file.Files.isSymbolicLink(directory.toPath()) &&
-                    directory.canonicalFile.path.startsWith(rootPrefix) && directory.isDirectory
+                    (directory.canonicalFile.path == savedRoot || directory.canonicalFile.path.startsWith(rootPrefix)) && directory.isDirectory
             }.getOrDefault(false)
         }
         val safeEntries = entries.filter { entry ->
