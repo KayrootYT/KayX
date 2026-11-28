@@ -252,7 +252,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         }
                     }
                     val coverage = "Roots: ${result.scannedRoots} · Inaccessible: ${result.inaccessibleRoots}" +
-                        if (result.truncated) " · Scan capped at ${OfflineStorageInventory.DEFAULT_MAX_ENTRIES} files" else ""
+                        (if (result.truncated) " · Scan capped at ${OfflineStorageInventory.DEFAULT_MAX_ENTRIES} files" else "") +
+                        (if (result.checkpointWarning) " · Resume checkpoint could not be saved; keep KayX open until this scan finishes" else "")
                     if (query is OfflineAssistantCommand.PreviewOrganize) {
                         val activeFolder = if (s.dualPane && s.activePane == 1) s.secondaryDir else s.dir
                         val destination = if (query.destinationPath.equals("here", ignoreCase = true)) {
