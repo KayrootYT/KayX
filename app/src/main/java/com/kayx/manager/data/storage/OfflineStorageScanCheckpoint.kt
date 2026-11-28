@@ -71,7 +71,7 @@ internal object OfflineStorageScanCheckpoint {
             val source = File(entry.path)
             runCatching {
                 !java.nio.file.Files.isSymbolicLink(source.toPath()) &&
-                    source.canonicalFile.path == entry.path && source.isFile && source.canRead() &&
+                    source.canonicalFile.path == entry.path && source.canonicalFile.path.startsWith(rootPrefix) && source.isFile && source.canRead() &&
                     source.length() == entry.size && source.lastModified() == entry.modified
             }.getOrDefault(false)
         }
