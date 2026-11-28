@@ -215,6 +215,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 }
                 if (result != null) {
                     val matches = when (query) {
+                        OfflineAssistantCommand.ScanStorage, OfflineAssistantCommand.ResumeStorageScan -> result.entries
                         OfflineAssistantCommand.FindLargeFiles -> result.largeFiles
                         OfflineAssistantCommand.FindOldFiles -> result.oldFiles
                         OfflineAssistantCommand.FindDuplicates -> result.duplicateCandidates
