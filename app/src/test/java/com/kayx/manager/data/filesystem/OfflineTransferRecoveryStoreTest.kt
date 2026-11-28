@@ -22,11 +22,12 @@ class OfflineTransferRecoveryStoreTest {
     )
 
     @Test fun persistsProgressAndMarksRunningOperationInterruptedAfterRestart() {
-        val store = OfflineTransferRecoveryStore(temporaryFolder.newFolder())
+        val directory = temporaryFolder.newFolder()
+        val store = OfflineTransferRecoveryStore(directory)
         assertTrue(store.begin(record()))
         assertTrue(store.updateProgress(1))
 
-        val restored = OfflineTransferRecoveryStore(storeDirectory(store)).markInterrupted()
+        val restored = OfflineTransferRecoveryStore(directory).markInterrupted()
 
         assertNotNull(restored)
         assertEquals(OfflineTransferRecoveryStore.State.INTERRUPTED, restored!!.state)
@@ -62,9 +63,4 @@ class OfflineTransferRecoveryStoreTest {
         assertTrue(!backup.exists())
     }
 
-    private fun storeDirectory(store: OfflineTransferRecoveryStore): File {
-        val field = OfflineTransferRecoveryStore::class.java.getDeclaredField("directory")
-        field.isAccessible = true
-        return field.get(store) as File
-    }
 }
