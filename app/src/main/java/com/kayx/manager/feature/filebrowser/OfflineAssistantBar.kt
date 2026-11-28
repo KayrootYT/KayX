@@ -52,7 +52,7 @@ fun OfflineAssistantBar(
     var listening by remember { mutableStateOf(false) }
     var recognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     val historyPrefs = remember(context) { context.getSharedPreferences("kayx_offline_assistant", Context.MODE_PRIVATE) }
-    var historyEnabled by remember { mutableStateOf(historyPrefs.getBoolean("history_enabled", true)) }
+    var historyEnabled by remember { mutableStateOf(historyPrefs.getBoolean("history_enabled", false)) }
     var history by remember { mutableStateOf(historyPrefs.getString("history", "").orEmpty().lineSequence().filter { it.isNotBlank() }.take(20).toList()) }
     var showHistory by remember { mutableStateOf(false) }
 
