@@ -62,4 +62,27 @@ class FileOperationJournalTest {
             assertEquals("moved", destination.readText())
         } finally { root.deleteRecursively() }
     }
+    @Test fun recoversValidBackupWhenPrimaryJournalIsCorrupt() {
+        val root = createTempDir(prefix = "kayx-undo-backup-")
+        try {
+            val source = File(root, "source.txt")
+            val destination = File(root, "destination.txt").apply { writeText("moved") }
+            val journalDir = File(root, "private")
+            val journal = FileOperationJournal(journalDir)
+            journal.recordMove(source, destination)
+
+            val primary = File(journalDir, "file-operations.undo")
+            val backup = File(journalDir, "file-operations.undo.bak")
+            assertTrue(primary.copyTo(backup).exists())
+            primary.writeText("corrupt-primary")
+
+            val recovered = FileOperationJournal(journalDir).entries()
+
+            assertEquals(1, recovered.size)
+            assertEquals(FileOperationJournal.Kind.MOVE, recovered.single().kind)
+            assertTrue(primary.isFile)
+            assertFalse(backup.exists())
+        } finally { root.deleteRecursively() }
+    }
+
 }
