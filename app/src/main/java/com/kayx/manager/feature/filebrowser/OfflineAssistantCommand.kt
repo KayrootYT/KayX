@@ -34,18 +34,26 @@ sealed interface OfflineAssistantCommand {
     data object BookmarkCurrent : OfflineAssistantCommand
     data object ToggleDualPane : OfflineAssistantCommand
     data object StorageSummary : OfflineAssistantCommand
+    data object OpenRecycleBin : OfflineAssistantCommand
+    data object OpenTags : OfflineAssistantCommand
+    data object OpenPrivateSpace : OfflineAssistantCommand
+    data object TagSelected : OfflineAssistantCommand
+    data object OpenNetworkStorage : OfflineAssistantCommand
+    data class InspectApk(val name: String) : OfflineAssistantCommand
+    data class BrowseArchive(val name: String) : OfflineAssistantCommand
     data object ScanStorage : OfflineAssistantCommand
+    data object ResumeStorageScan : OfflineAssistantCommand
     data object FindLargeFiles : OfflineAssistantCommand
     data object FindOldFiles : OfflineAssistantCommand
     data object FindDuplicates : OfflineAssistantCommand
     data object CancelStorageScan : OfflineAssistantCommand
     data class FindCategory(val category: Category) : OfflineAssistantCommand
     data class FolderSize(val folderName: String) : OfflineAssistantCommand
-    data class PreviewOrganize(val category: Category, val destinationPath: String) : OfflineAssistantCommand
+    data class PreviewOrganize(val category: Category, val destinationPath: String, val move: Boolean = false) : OfflineAssistantCommand
 }
 
 object OfflineAssistantParser {
-    const val HELP_TEXT = "Try: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, organize images to /storage/emulated/0/Pictures or organize images to here (current folder), cancel scan."
+    const val HELP_TEXT = "Try: open recycle bin, open tags, open private space, open network storage, tag selected, inspect apk app.apk, browse archive backup.zip, plus: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, resume scan, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, organize images to /storage/emulated/0/Pictures, move images to /storage/emulated/0/Pictures, or organize images to here (current folder), cancel scan."
 
     fun parse(raw: String): OfflineAssistantCommand? {
         val input = raw.trim().replace(Regex("\\s+"), " ")
@@ -70,8 +78,16 @@ object OfflineAssistantParser {
             value in setOf("paste", "paste here", "yahan paste karo", "पेस्ट") -> OfflineAssistantCommand.Paste
             value in setOf("delete", "delete selected", "selected delete karo", "चुनी हुई फाइलें हटाओ") -> OfflineAssistantCommand.DeleteSelected
             value in setOf("undo", "undo last", "last action undo karo") -> OfflineAssistantCommand.Undo
+            value in setOf("open recycle bin", "recycle bin kholo", "recently deleted") -> OfflineAssistantCommand.OpenRecycleBin
+            value in setOf("open tags", "tags kholo", "tag manager kholo") -> OfflineAssistantCommand.OpenTags
+            value in setOf("open private space", "private space kholo") -> OfflineAssistantCommand.OpenPrivateSpace
+            value in setOf("tag selected", "selected ko tag karo", "tag lagao") -> OfflineAssistantCommand.TagSelected
+            value in setOf("open network storage", "network storage kholo", "ftp sftp smb webdav") -> OfflineAssistantCommand.OpenNetworkStorage
+            value.startsWith("inspect apk ") || value.startsWith("apk info ") -> tail("inspect apk", "apk info")?.let(OfflineAssistantCommand::InspectApk)
+            value.startsWith("browse archive ") || value.startsWith("open archive ") -> tail("browse archive", "open archive")?.let(OfflineAssistantCommand::BrowseArchive)
             value in setOf("storage info", "storage", "storage dikhao", "kitni storage khali hai") -> OfflineAssistantCommand.StorageSummary
             value in setOf("scan storage", "scan all storage", "storage scan karo", "पूरी स्टोरेज स्कैन करो") -> OfflineAssistantCommand.ScanStorage
+            value in setOf("resume scan", "continue scan", "scan resume karo", "स्कैन जारी रखो") -> OfflineAssistantCommand.ResumeStorageScan
             value in setOf("find large files", "large files", "badi files dhundo", "बड़ी फाइलें खोजो") -> OfflineAssistantCommand.FindLargeFiles
             value in setOf("find old files", "old files", "purani files dhundo", "पुरानी फाइलें खोजो") -> OfflineAssistantCommand.FindOldFiles
             value in setOf("find duplicates", "duplicate files", "same files dhundo", "डुप्लीकेट फाइलें खोजो") -> OfflineAssistantCommand.FindDuplicates
@@ -83,11 +99,11 @@ object OfflineAssistantParser {
             value in setOf("find apks", "find apk files", "apk dhundo", "एपीके खोजो") -> OfflineAssistantCommand.FindCategory(Category.APKS)
             value.startsWith("folder size ") || value.startsWith("size of folder ") || value.startsWith("folder ka size ") ->
                 tail("folder size", "size of folder", "folder ka size")?.let(OfflineAssistantCommand::FolderSize)
-            value.startsWith("organize ") -> {
-                val match = Regex("^organize\\s+(images|photos|videos|audio|music|documents|docs|apks)\\s+to\\s+(.+)$", RegexOption.IGNORE_CASE)
+            value.startsWith("organize ") || value.startsWith("move ") -> {
+                val match = Regex("^(organize|move)\\s+(images|photos|videos|audio|music|documents|docs|apks)\\s+to\\s+(.+)$", RegexOption.IGNORE_CASE)
                     .matchEntire(input)
                 match?.let {
-                    val category = when (it.groupValues[1].lowercase(Locale.ROOT)) {
+                    val category = when (it.groupValues[2].lowercase(Locale.ROOT)) {
                         "images", "photos" -> Category.IMAGES
                         "videos" -> Category.VIDEOS
                         "audio", "music" -> Category.AUDIO
@@ -95,7 +111,7 @@ object OfflineAssistantParser {
                         "apks" -> Category.APKS
                         else -> null
                     }
-                    category?.let { value -> OfflineAssistantCommand.PreviewOrganize(value, it.groupValues[2].trim()) }
+                    category?.let { value -> OfflineAssistantCommand.PreviewOrganize(value, it.groupValues[3].trim(), it.groupValues[1].equals("move", true)) }
                 }
             }
             value in setOf("zip selected", "compress selected", "selected zip karo") -> OfflineAssistantCommand.ZipSelected

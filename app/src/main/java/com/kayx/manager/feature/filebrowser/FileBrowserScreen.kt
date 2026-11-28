@@ -94,8 +94,9 @@ internal sealed interface Dlg {
     data object ConfirmPaste : Dlg
     data object Tools : Dlg
     data object MultiProps : Dlg
-    data class OrganizationPreview(val plan: OfflineOrganizationPlan) : Dlg
+    data class OrganizationPreview(val plan: OfflineOrganizationPlan, val move: Boolean = false) : Dlg
     data class DuplicateReview(val groups: List<OfflineStorageInventory.DuplicateGroup>) : Dlg
+    data class DuplicateCleanupConfirm(val groups: List<OfflineStorageInventory.DuplicateGroup>) : Dlg
 }
 
 private fun fmtSize(b: Long): String {
@@ -201,7 +202,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 vm.notify("Scanning accessible internal storage and granted SD-card folders…")
                 val result = try {
                     withContext(Dispatchers.IO) {
-                        OfflineStorageInventory.scan(ctx, includeDuplicates = query == OfflineAssistantCommand.FindDuplicates) { count ->
+                        OfflineStorageInventory.scan(ctx, includeDuplicates = query == OfflineAssistantCommand.FindDuplicates, resume = query == OfflineAssistantCommand.ResumeStorageScan) { count ->
                             if (count > 0 && count % 1024 == 0) vm.notify("Storage scan progress: $count files")
                         }
                     }
@@ -214,6 +215,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                 }
                 if (result != null) {
                     val matches = when (query) {
+                        OfflineAssistantCommand.ScanStorage, OfflineAssistantCommand.ResumeStorageScan -> result.entries
                         OfflineAssistantCommand.FindLargeFiles -> result.largeFiles
                         OfflineAssistantCommand.FindOldFiles -> result.oldFiles
                         OfflineAssistantCommand.FindDuplicates -> result.duplicateCandidates
@@ -236,7 +238,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         }
                     } else emptyList()
                     val details = when (query) {
-                        OfflineAssistantCommand.ScanStorage ->
+                        OfflineAssistantCommand.ScanStorage, OfflineAssistantCommand.ResumeStorageScan ->
                             "Files: ${result.entries.size} · Data: ${fmtSize(result.totalBytes)} · Large: ${result.largeFiles.size} · Old: ${result.oldFiles.size}"
                         is OfflineAssistantCommand.FolderSize ->
                             if (folderMatches.isEmpty()) "No accessible files found inside a folder named '${query.folderName}'."
@@ -258,7 +260,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                 ?: StorageLocation.Local(File(activeFolder).canonicalFile).stableKey()
                         } else query.destinationPath
                         OfflineOrganizationPlanner.create(result.entries, query.category, destination)
-                            .onSuccess { dlg = Dlg.OrganizationPreview(it) }
+                            .onSuccess { dlg = Dlg.OrganizationPreview(it, query.move) }
                             .onFailure { vm.notify(it.message ?: "Could not prepare organization preview") }
                     } else if (query == OfflineAssistantCommand.FindDuplicates) {
                         dlg = Dlg.DuplicateReview(result.duplicateGroups)
@@ -330,7 +332,28 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                         vm.notify(if (SettingsStore.addBookmark(activePath)) "Bookmark added" else "Already bookmarked")
                                     }
                                     OfflineAssistantCommand.ToggleDualPane -> vm.toggleDualPane()
+                                    OfflineAssistantCommand.OpenRecycleBin -> onOpenFile("", Tool.RECYCLE)
+                                    OfflineAssistantCommand.OpenTags -> onOpenFile("", Tool.TAGS)
+                                    OfflineAssistantCommand.OpenPrivateSpace -> onOpenFile("", Tool.PRIVATE)
+                                    OfflineAssistantCommand.OpenNetworkStorage -> onOpenFile("", Tool.FTP)
+                                    is OfflineAssistantCommand.InspectApk -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { !it.isDir && it.name.equals(command.name, ignoreCase = true) }
+                                        if (item == null || !item.name.endsWith(".apk", ignoreCase = true)) vm.notify("APK not found in this folder")
+                                        else onOpenFile(item.path, Tool.APK)
+                                    }
+                                    is OfflineAssistantCommand.BrowseArchive -> {
+                                        val item = (if (s.dualPane && s.activePane == 1) s.secondaryItems else s.items)
+                                            .firstOrNull { !it.isDir && it.name.equals(command.name, ignoreCase = true) }
+                                        if (item == null || !MultiExtract.canExtract(item.path)) vm.notify("Supported archive not found in this folder")
+                                        else onOpenFile(item.path, Tool.ZIP)
+                                    }
+                                    OfflineAssistantCommand.TagSelected -> {
+                                        if (s.selected.isEmpty()) vm.notify("Select files first")
+                                        else dlg = Dlg.Tag
+                                    }
                                     OfflineAssistantCommand.ScanStorage,
+                                    OfflineAssistantCommand.ResumeStorageScan,
                                     OfflineAssistantCommand.FindLargeFiles,
                                     OfflineAssistantCommand.FindOldFiles,
                                     OfflineAssistantCommand.FindDuplicates,
@@ -810,7 +833,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
             val plan = d.plan
             AlertDialog(
                 onDismissRequest = { dlg = null },
-                title = { Text("Copy preview · ${plan.category.label}") },
+                title = { Text("${if (d.move) "Move" else "Copy"} preview · ${plan.category.label}") },
                 text = {
                     Column(
                         Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
@@ -818,20 +841,25 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     ) {
                         Text("${plan.files.size} files · ${fmtSize(plan.totalBytes)}")
                         Text("Destination:\n${plan.destinationLabel}")
-                        Text("No files have been changed. Confirm only if this list and destination are correct.")
+                        Text(if (d.move) "No files have been moved. Confirm only if this list and destination are correct." else "No files have been changed. Confirm only if this list and destination are correct.")
                         plan.files.forEach { entry ->
                             Text("• ${entry.name}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        Text("Existing names will be kept; copies receive a new name. Original files are not deleted.")
+                        Text(if (d.move) "Existing names will be kept; moved files receive a new name. Local moves can be undone from KayX Undo." else "Existing names will be kept; copies receive a new name. Original files are not deleted.")
                     }
                 },
                 confirmButton = {
-                    TextButton({
-                        if (OfflineOrganizationPlanner.isStillValid(plan)) {
-                            vm.copyPreviewedFiles(plan.files, plan.destinationPath)
-                        } else vm.notify("Preview is stale. Run the organize command again.")
-                        dlg = null
-                    }) { Text("Confirm copy") }
+                    val moveSupported = StorageLocation.fromStableKey(plan.destinationPath) !is StorageLocation.Saf && plan.files.none { it.saf }
+                    TextButton(
+                        onClick = {
+                            if (OfflineOrganizationPlanner.isStillValid(plan)) {
+                                if (d.move) vm.movePreviewedFiles(plan.files, plan.destinationPath)
+                                else vm.copyPreviewedFiles(plan.files, plan.destinationPath)
+                            } else vm.notify("Preview is stale. Run the command again.")
+                            dlg = null
+                        },
+                        enabled = !d.move || moveSupported
+                    ) { Text(if (d.move) "Confirm move" else "Confirm copy") }
                 },
                 dismissButton = { TextButton({ dlg = null }) { Text("Cancel") } }
             )
@@ -870,7 +898,40 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             style = MaterialTheme.typography.bodySmall, color = Fg.copy(.7f))
                     }
                 },
-                confirmButton = { TextButton({ dlg = null }) { Text("Done") } }
+                confirmButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (groups.any { it.entries.size > 1 && it.entries.none { entry -> entry.saf } }) {
+                            TextButton({ dlg = Dlg.DuplicateCleanupConfirm(groups) }) { Text("Review cleanup") }
+                        }
+                        TextButton({ dlg = null }) { Text("Done") }
+                    }
+                }
+            )
+        }
+        is Dlg.DuplicateCleanupConfirm -> {
+            val localGroups = d.groups.filter { it.entries.size > 1 && it.entries.none { entry -> entry.saf } }
+            val extras = localGroups.sumOf { it.entries.size - 1 }
+            val reclaimable = localGroups.sumOf { it.reclaimableBytes }
+            AlertDialog(
+                onDismissRequest = { dlg = null },
+                title = { Text("Move duplicate copies to Recycle Bin?") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Keep one verified copy from each eligible local-only group.")
+                        Text("$extras extra file(s) · Up to ${fmtSize(reclaimable)} recoverable space")
+                        Text("Files will be re-hashed and revalidated immediately before moving. If any reviewed file changed, the cleanup is cancelled.")
+                        if (d.groups.any { it.entries.any { entry -> entry.saf } }) {
+                            Text("Groups containing SAF/SD-card files are excluded because provider trash recovery is not guaranteed.")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton({
+                        vm.recycleDuplicateCopies(d.groups)
+                        dlg = null
+                    }) { Text("Move to Recycle Bin") }
+                },
+                dismissButton = { TextButton({ dlg = null }) { Text("Cancel") } }
             )
         }
         is Dlg.MultiProps -> {

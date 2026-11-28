@@ -7,6 +7,7 @@ The Offline Assistant is opened from the sparkle button beside the file-browser 
 - Text commands are parsed locally by a deterministic, allow-listed Kotlin command grammar.
 - No cloud model, API key, network request, analytics event, or document upload is used by this assistant.
 - Voice input is optional and starts only after the user taps the microphone and grants Android's microphone permission.
+- Command history is opt-in, stored only in local app preferences, capped at 20 entries, and can be disabled or cleared from the History control. Disabling history clears saved entries.
 - Voice uses Android's on-device SpeechRecognizer API (Android 12/API 31+) only. KayX does not fall back to a network recognizer. If the device has no offline recognizer or language pack, the UI explains that and text commands remain available.
 - On Android 8–11, text commands work; the Android on-device SpeechRecognizer API used here is unavailable.
 - Commands never execute arbitrary shell text or model-generated code.
@@ -19,11 +20,12 @@ The Offline Assistant is opened from the sparkle button beside the file-browser 
 - Selection: `select all`, `select report.pdf`, `select pattern *.jpg`, `clear selection`, `invert selection`
 - Transfers: `copy`, `cut`, `paste`
 - File operations: `new folder Work`, `new file notes.txt`, `rename selected to notes-old.txt`, `delete selected`, `zip selected`, `extract archive.zip`, `share selected`, `undo`
-- Storage/navigation helpers: `storage info`, `bookmark current`
-- Whole-storage inventory: `scan storage`, `find large files`, `find old files`, `find duplicates`, `cancel scan`
+- Storage/navigation helpers: `storage info`, `bookmark current`, `open recycle bin`, `open tags`, `open private space`, `open network storage`, `tag selected` (opens KayX's existing tag dialog)
+- APK/archive tools: `inspect apk app.apk`, `browse archive backup.zip` (the named item must be visible in the current folder)
+- Whole-storage inventory: `scan storage`, `resume scan`, `find large files`, `find old files`, `find duplicates`, `cancel scan`
 - Category filters: `find photos` / `find images`, `find videos`, `find audio`, `find documents`, `find apks`
 - Folder rollup: `folder size Download` (combines matching folder names across accessible roots; use a distinctive folder name)
-- Organization preview: `organize images to /storage/emulated/0/Pictures/Sorted` (scans first, then shows a confirmation preview before copying)
+- Organization preview: `organize images to /storage/emulated/0/Pictures/Sorted` and `move images to /storage/emulated/0/Pictures/Sorted` (both scan first and show a confirmation preview; move is local-to-local only)
 
 Hindi and Hinglish aliases are provided for common navigation, selection, hidden-file, copy/cut/paste and search commands. The grammar is intentionally explicit; unsupported or ambiguous phrases are rejected instead of guessed.
 
@@ -36,12 +38,14 @@ Hindi and Hinglish aliases are provided for common navigation, selection, hidden
 - Operations still run through KayX's existing repository/SAF permission checks and undo journal where supported.
 - The assistant can only open/select/extract items visible in the current folder listing. It does not silently crawl the entire phone for arbitrary commands.
 - `organize CATEGORY to ABSOLUTE_FOLDER_PATH` is preview-first and copy-only: it lists the exact source files, total bytes and destination, and does not mutate anything until the user taps Confirm copy. It is capped at 100 files, uses KEEP_BOTH naming, revalidates source path/size/modified time and destination immediately before transfer, and never deletes originals.
-- Sources may come from readable local storage or persisted SAF/SD-card/provider tree grants. SAF entries use tree-relative stable keys; the app rechecks the persisted grant, resolves the document again, verifies name/size/modified time and opens it for reading immediately before transfer. Copies currently target an explicit writable local filesystem folder; SAF destinations are a separate follow-up.
+- Sources may come from readable local storage or persisted SAF/SD-card/provider tree grants. SAF entries use tree-relative stable keys; the app rechecks the persisted grant, resolves the document again, verifies name/size/modified time and opens it for reading immediately before transfer. Copies may target an explicit writable local filesystem folder or a selected writable SAF/provider folder. SAF destination grants and the destination document are revalidated at confirmation.
 
 ## Whole-storage inventory (Phase 2 foundation)
 
 - `scan storage` scans readable shared internal storage and persisted SAF tree grants, including user-granted SD-card/provider roots. A primary SAF tree is not scanned twice when the shared-storage filesystem root is readable.
 - The scanner is read-only. It never moves, renames, or deletes files.
+- Local shared-storage traversal writes an atomic, app-private checkpoint every 16 directories. After cancellation or process interruption, `resume scan` restores the last checkpoint and continues; if no compatible checkpoint exists it starts a fresh scan. A new `scan storage` always starts over. Checkpoints contain only local paths and file metadata, never contents.
+- SAF/provider roots are rescanned from their root on resume because providers do not expose a portable durable directory cursor; local traversal progress is preserved.
 - Traversal is bounded to 50,000 files and 24 directory levels. It checks coroutine cancellation between directories/files and reports scan progress, inaccessible roots, and whether the entry cap was reached.
 - Android/data and Android/obb are excluded; Android/media remains eligible where the platform grants access.
 - `find large files` reports files at least 100 MiB; `find old files` reports files not modified for at least 180 days.
@@ -49,4 +53,4 @@ Hindi and Hinglish aliases are provided for common navigation, selection, hidden
 - Category filters use the scanned filename extension metadata and report up to eight names; supported groups are images, videos, audio, documents and APK packages.
 - `folder size NAME` totals accessible files below every directory named NAME. If the same folder name exists in multiple locations, the output combines them and says so; it is a read-only estimate based on files visible to the bounded scan.
 - Result summaries show at most eight names per command. The inventory is in-memory only; no paths, file content, or scan history are uploaded or persisted.
-- Current limitations: scan resume/checkpoint persistence, SAF bulk organization, move/delete organization actions, and broader cross-screen commands remain pending. Organization copies are limited to 100 files per explicit confirmation; SAF/provider sources can currently be copied to local destinations, while SAF destinations and move/delete remain unavailable.
+- Duplicate review now offers a separate cleanup confirmation for local-only groups: every file is re-hashed and metadata/path revalidated, one copy is retained, and extras are moved into KayX Recycle Bin. Mixed SAF/provider groups are excluded. Preview-first move is available only for local sources to local destinations and uses the existing undo journal. Current limitations: durable per-directory SAF/provider cursors and provider-safe SAF move/delete organization actions remain pending. Recycle-bin restore and other existing screens remain available through KayX's native UI; this assistant does not bypass their confirmation or permission gates. Organization copies are limited to 100 files per explicit confirmation.

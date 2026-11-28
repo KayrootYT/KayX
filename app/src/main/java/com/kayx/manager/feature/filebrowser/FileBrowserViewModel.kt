@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runInterruptible
 import java.io.File
+import java.security.MessageDigest
 
 data class BrowserState(
     val root: String = "",
@@ -649,7 +650,18 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     fun notify(msg: String) = _s.update { it.copy(message = msg) }
     fun consumeMessage() = _s.update { it.copy(message = null) }
     /** Copy a previewed set into an explicitly selected local or persisted SAF destination. */
-    fun copyPreviewedFiles(entries: List<OfflineStorageInventory.Entry>, destinationPath: String) {
+    fun copyPreviewedFiles(entries: List<OfflineStorageInventory.Entry>, destinationPath: String) =
+        transferPreviewedFiles(entries, destinationPath, move = false)
+
+    /** Move is currently restricted to local-to-local transfers with the existing undo journal. */
+    fun movePreviewedFiles(entries: List<OfflineStorageInventory.Entry>, destinationPath: String) =
+        transferPreviewedFiles(entries, destinationPath, move = true)
+
+    private fun transferPreviewedFiles(
+        entries: List<OfflineStorageInventory.Entry>,
+        destinationPath: String,
+        move: Boolean
+    ) {
         val context = appContext
         if (context == null) {
             notify("Storage context is not ready")
@@ -662,11 +674,17 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         viewModelScope.launch {
             val validation = withContext(Dispatchers.IO) {
                 runCatching {
-                    val safDestination = StorageLocation.fromStableKey(destinationPath) as? StorageLocation.Saf
+                    val destinationLocation = StorageLocation.fromStableKey(destinationPath)
+                    val safDestination = destinationLocation as? StorageLocation.Saf
+                    if (move) require(safDestination == null && entries.none { it.saf }) {
+                        "Move is enabled only for local files and local folders. SAF/provider moves stay disabled until provider recovery is verified."
+                    }
                     val localDestination = if (safDestination == null) {
-                        File(destinationPath).canonicalFile.also { destination ->
-                            require(destination.isDirectory && destination.canWrite() && destination.path == destinationPath) {
-                                "Organization destination is unavailable or not writable"
+                        val requestedLocalDestination = (destinationLocation as? StorageLocation.Local)?.directory ?: File(destinationPath)
+                        requestedLocalDestination.canonicalFile.also { destination ->
+                            require(destination.isDirectory && destination.canWrite() &&
+                                destination.path == requestedLocalDestination.absoluteFile.path) {
+                                "Organization destination is unavailable, not writable, or resolves through a symbolic link"
                             }
                         }
                     } else {
@@ -723,7 +741,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     startStorageTransfer(
                         sourceKeys,
                         safDestinationKey(destinationPath),
-                        cut = false,
+                        cut = move,
                         policy = Conflict.KEEP_BOTH,
                         sourcePane = null,
                         fromClipboard = false
@@ -948,6 +966,61 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
         val out = File(activeDirectory(), n)
         run({ archive.create(f, out) }, "Created $n", FileActionSound.SUCCESS)
     }
+    /**
+     * Recycle only verified local extras from SHA-256 duplicate groups. Mixed SAF groups are
+     * deliberately skipped because SAF providers do not guarantee a recoverable trash API.
+     */
+    fun recycleDuplicateCopies(groups: List<OfflineStorageInventory.DuplicateGroup>) {
+        val context = appContext ?: return notify("Storage context is not ready")
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val extras = ArrayList<File>()
+                    val seen = HashSet<String>()
+                    for (group in groups) {
+                        if (group.entries.size < 2 || group.entries.any { it.saf }) continue
+                        val verified = group.entries.map { entry ->
+                            val file = File(entry.path)
+                            require(!java.nio.file.Files.isSymbolicLink(file.toPath()) &&
+                                file.canonicalFile.path == file.absolutePath && file.isFile && file.canRead() &&
+                                file.length() == entry.size && file.lastModified() == entry.modified) {
+                                "A duplicate changed since review: ${entry.name}. Run the scan again."
+                            }
+                            val digest = MessageDigest.getInstance("SHA-256")
+                            file.inputStream().buffered().use { input ->
+                                val buffer = ByteArray(64 * 1024)
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    if (count > 0) digest.update(buffer, 0, count)
+                                }
+                            }
+                            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+                            require(actual == group.sha256) { "Duplicate content changed since review: ${entry.name}" }
+                            file
+                        }
+                        verified.drop(1).forEach { file ->
+                            require(seen.add(file.canonicalPath)) { "A duplicate path appears in more than one group" }
+                            extras += file
+                        }
+                    }
+                    require(extras.isNotEmpty()) { "No recoverable local duplicate copies are available to recycle" }
+                    RecycleBin.trashWithEntries(extras).getOrThrow()
+                }
+            }
+            if (result.isSuccess) withContext(Dispatchers.IO) {
+                result.getOrThrow().forEach { operationJournal?.recordTrash(it.id) }
+            }
+            _s.update { it.copy(
+                undoAvailable = operationJournal?.entries()?.isNotEmpty() == true,
+                message = result.fold({ "Moved ${it.size} verified duplicate copy/copies to Recycle Bin" }, { it.message ?: "Duplicate cleanup failed" })
+            ) }
+            if (result.isSuccess) FileOperationSounds.play(context, FileActionSound.DELETE)
+            repo.invalidateSearchCache()
+            reload()
+        }
+    }
+
     fun deleteSelected() {
         val keys = _s.value.selected.toList()
         if (keys.all { locationOf(it) is StorageLocation.Local }) {

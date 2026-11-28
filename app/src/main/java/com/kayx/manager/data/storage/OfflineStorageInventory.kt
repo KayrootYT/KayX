@@ -60,36 +60,55 @@ object OfflineStorageInventory {
         largeBytes: Long = DEFAULT_LARGE_BYTES,
         oldAgeDays: Long = DEFAULT_OLD_AGE_DAYS,
         includeDuplicates: Boolean = false,
+        resume: Boolean = false,
         onProgress: (Int) -> Unit = {}
     ): Result {
         require(maxEntries in 1..DEFAULT_MAX_ENTRIES)
         require(maxDepth in 1..DEFAULT_MAX_DEPTH)
         require(largeBytes > 0 && oldAgeDays > 0)
         val app = context.applicationContext
-        val found = ArrayList<Entry>(minOf(maxEntries, 8_192))
+        val localRoot = Environment.getExternalStorageDirectory()
+        val checkpoint = if (resume) OfflineStorageScanCheckpoint.load(app, localRoot, maxEntries, maxDepth) else null
+        if (!resume || checkpoint == null) OfflineStorageScanCheckpoint.clear(app)
+        val found = ArrayList<Entry>(minOf(maxEntries, 8_192)).apply { addAll(checkpoint?.entries.orEmpty()) }
         var rootsScanned = 0
         var inaccessibleRoots = 0
         var truncated = false
-        val localRoot = Environment.getExternalStorageDirectory()
+        var localComplete = checkpoint?.localComplete == true
 
-        if (localRoot.isDirectory && localRoot.canRead()) {
-            rootsScanned++
-            val pending = ArrayDeque<Pair<File, Int>>()
-            pending.add(localRoot to 0)
-            val visited = HashSet<String>()
+        if (localComplete && localRoot.isDirectory && localRoot.canRead()) rootsScanned++
+        if (!localComplete) {
+            val pending = ArrayDeque<OfflineStorageScanCheckpoint.PendingDirectory>()
+            checkpoint?.pending?.forEach(pending::addLast)
+            if (pending.isEmpty() && localRoot.isDirectory && localRoot.canRead()) pending.add(localRoot.absoluteFile.let { OfflineStorageScanCheckpoint.PendingDirectory(it.path, 0) })
+            if (pending.isEmpty() && (!localRoot.isDirectory || !localRoot.canRead())) inaccessibleRoots++
+            else if (pending.isNotEmpty()) rootsScanned++
+            var processedDirectories = 0
             while (pending.isNotEmpty()) {
                 currentCoroutineContext().ensureActive()
-                val (directory, depth) = pending.removeLast()
-                val canonical = runCatching { directory.canonicalPath }.getOrNull() ?: continue
-                if (!visited.add(canonical)) continue
-                val children = runCatching { directory.listFiles() }.getOrNull()
-                if (children == null) { inaccessibleRoots++; continue }
-                for (child in children) {
+                val current = pending.removeLast()
+                val directory = File(current.path)
+                val depth = current.depth
+                if (processedDirectories % 16 == 0) {
+                    OfflineStorageScanCheckpoint.save(app, OfflineStorageScanCheckpoint.State(
+                        localRoot.canonicalPath, maxEntries, maxDepth, false,
+                        (pending.toList() + current), found.toList()
+                    ))
+                }
+                val canonical = runCatching { directory.canonicalFile }.getOrNull()
+                if (canonical == null || java.nio.file.Files.isSymbolicLink(directory.toPath())) {
+                    processedDirectories++
+                    continue
+                }
+                val safeDirectory = canonical
+                val children = runCatching { safeDirectory.listFiles() }.getOrNull()
+                if (children == null) inaccessibleRoots++
+                else for (child in children) {
                     currentCoroutineContext().ensureActive()
                     if (java.nio.file.Files.isSymbolicLink(child.toPath())) continue
                     if (child.isDirectory) {
-                        if (depth < maxDepth && child.name !in setOf(".Trash", ".trashed") && !(directory.name == "Android" && child.name in setOf("data", "obb"))) {
-                            pending.add(child to depth + 1)
+                        if (depth < maxDepth && child.name !in setOf(".Trash", ".trashed") && !(safeDirectory.name == "Android" && child.name in setOf("data", "obb"))) {
+                            pending.add(OfflineStorageScanCheckpoint.PendingDirectory(child.absolutePath, depth + 1))
                         }
                     } else if (child.isFile && child.canRead()) {
                         if (found.size >= maxEntries) { truncated = true; break }
@@ -98,9 +117,16 @@ object OfflineStorageInventory {
                         if (found.size % 128 == 0) onProgress(found.size)
                     }
                 }
+                processedDirectories++
                 if (truncated) break
             }
-        } else inaccessibleRoots++
+            localComplete = !truncated
+            if (localComplete) {
+                OfflineStorageScanCheckpoint.save(app, OfflineStorageScanCheckpoint.State(
+                    localRoot.canonicalPath, maxEntries, maxDepth, true, emptyList(), found.toList()
+                ))
+            } else OfflineStorageScanCheckpoint.clear(app)
+        }
 
         // Avoid double-counting the primary shared-storage tree when its filesystem root is readable.
         for (treeUri in SafRepository.persistedTrees(app)) {
@@ -157,6 +183,9 @@ object OfflineStorageInventory {
         val duplicateGroups = if (includeDuplicates) findDuplicateGroups(app, found) else emptyList()
         val duplicates = duplicateGroups.flatMap { it.entries }
         onProgress(found.size)
+        // A completed or hard-capped scan has no resumable work left under this bounded scan contract.
+        // Interrupted scans exit before this point and retain the last atomic checkpoint.
+        OfflineStorageScanCheckpoint.clear(app)
         return Result(found, large, old, duplicates, duplicateGroups, found.sumOf { it.size },
             rootsScanned, inaccessibleRoots, truncated)
     }
