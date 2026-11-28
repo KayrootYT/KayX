@@ -72,6 +72,7 @@ class OfflineAssistantParserTest {
         assertEquals(OfflineAssistantCommand.OpenRecycleBin, OfflineAssistantParser.parse("open recycle bin"))
         assertEquals(OfflineAssistantCommand.OpenTags, OfflineAssistantParser.parse("tags kholo"))
         assertEquals(OfflineAssistantCommand.OpenPrivateSpace, OfflineAssistantParser.parse("open private space"))
+        assertEquals(OfflineAssistantCommand.TagSelected, OfflineAssistantParser.parse("tag selected"))
     }
 
     @Test fun rejectsEmptyOversizedAndUnknownCommands() {
