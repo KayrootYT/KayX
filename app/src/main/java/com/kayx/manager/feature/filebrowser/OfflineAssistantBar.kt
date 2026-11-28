@@ -65,7 +65,7 @@ fun OfflineAssistantBar(
         onCommand(command)
         if (historyEnabled) {
             history = (listOf(raw.trim()) + history.filterNot { it.equals(raw.trim(), ignoreCase = true) }).take(20)
-            historyPrefs.edit().putString("history", history.joinToString("\\n")).apply()
+            historyPrefs.edit().putString("history", history.joinToString("\n")).apply()
         }
         status = "Executed offline"
         text = ""
