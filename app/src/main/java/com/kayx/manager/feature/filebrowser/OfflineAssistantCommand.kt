@@ -44,6 +44,7 @@ sealed interface OfflineAssistantCommand {
     data object ScanStorage : OfflineAssistantCommand
     data object ShowLastScan : OfflineAssistantCommand
     data object TransferRecoveryStatus : OfflineAssistantCommand
+    data object AcknowledgeTransferRecovery : OfflineAssistantCommand
     data object ResumeStorageScan : OfflineAssistantCommand
     data object FindLargeFiles : OfflineAssistantCommand
     data object FindOldFiles : OfflineAssistantCommand
@@ -55,7 +56,7 @@ sealed interface OfflineAssistantCommand {
 }
 
 object OfflineAssistantParser {
-    const val HELP_TEXT = "Try: open recycle bin, open tags, open private space, open network storage, tag selected, inspect apk app.apk, browse archive backup.zip, plus: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, show last scan, transfer status, resume scan, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, organize images to /storage/emulated/0/Pictures, move images to /storage/emulated/0/Pictures, or organize images to here (current folder), cancel scan."
+    const val HELP_TEXT = "Try: open recycle bin, open tags, open private space, open network storage, tag selected, inspect apk app.apk, browse archive backup.zip, plus: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, show last scan, transfer status, acknowledge transfer recovery, resume scan, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, organize images to /storage/emulated/0/Pictures, move images to /storage/emulated/0/Pictures, or organize images to here (current folder), cancel scan."
 
     fun parse(raw: String): OfflineAssistantCommand? {
         val input = raw.trim().replace(Regex("\\s+"), " ")
@@ -91,6 +92,7 @@ object OfflineAssistantParser {
             value in setOf("scan storage", "scan all storage", "storage scan karo", "पूरी स्टोरेज स्कैन करो") -> OfflineAssistantCommand.ScanStorage
             value in setOf("show last scan", "last scan dikhao", "pichla scan dikhao") -> OfflineAssistantCommand.ShowLastScan
             value in setOf("transfer status", "transfer recovery", "transfer ki sthiti") -> OfflineAssistantCommand.TransferRecoveryStatus
+            value in setOf("acknowledge transfer recovery", "clear transfer recovery record") -> OfflineAssistantCommand.AcknowledgeTransferRecovery
             value in setOf("resume scan", "continue scan", "scan resume karo", "स्कैन जारी रखो") -> OfflineAssistantCommand.ResumeStorageScan
             value in setOf("find large files", "large files", "badi files dhundo", "बड़ी फाइलें खोजो") -> OfflineAssistantCommand.FindLargeFiles
             value in setOf("find old files", "old files", "purani files dhundo", "पुरानी फाइलें खोजो") -> OfflineAssistantCommand.FindOldFiles
