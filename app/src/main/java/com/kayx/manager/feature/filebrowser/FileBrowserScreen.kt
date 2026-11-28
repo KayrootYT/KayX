@@ -54,6 +54,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import com.kayx.manager.data.storage.OfflineStorageInventory
+import com.kayx.manager.data.storage.OfflineStorageInventorySnapshotStore
 import kotlinx.coroutines.withContext
 import com.kayx.manager.data.filesystem.FileSearchCategory
 import java.io.File
@@ -353,7 +354,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                         if (s.selected.isEmpty()) vm.notify("Select files first")
                                         else dlg = Dlg.Tag
                                     }
-                                    OfflineAssistantCommand.ShowLastScan -> {
+                                    OfflineAssistantCommand.ShowLastScan -> scope.launch {
                                         val cached = withContext(Dispatchers.IO) {
                                             OfflineStorageInventorySnapshotStore(ctx.filesDir).load()
                                         }
