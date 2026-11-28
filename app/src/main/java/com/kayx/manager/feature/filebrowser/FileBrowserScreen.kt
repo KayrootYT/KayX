@@ -96,6 +96,7 @@ internal sealed interface Dlg {
     data object MultiProps : Dlg
     data class OrganizationPreview(val plan: OfflineOrganizationPlan) : Dlg
     data class DuplicateReview(val groups: List<OfflineStorageInventory.DuplicateGroup>) : Dlg
+    data class DuplicateCleanupConfirm(val groups: List<OfflineStorageInventory.DuplicateGroup>) : Dlg
 }
 
 private fun fmtSize(b: Long): String {
@@ -890,7 +891,40 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                             style = MaterialTheme.typography.bodySmall, color = Fg.copy(.7f))
                     }
                 },
-                confirmButton = { TextButton({ dlg = null }) { Text("Done") } }
+                confirmButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (groups.any { it.entries.size > 1 && it.entries.none { entry -> entry.saf } }) {
+                            TextButton({ dlg = Dlg.DuplicateCleanupConfirm(groups) }) { Text("Review cleanup") }
+                        }
+                        TextButton({ dlg = null }) { Text("Done") }
+                    }
+                }
+            )
+        }
+        is Dlg.DuplicateCleanupConfirm -> {
+            val localGroups = d.groups.filter { it.entries.size > 1 && it.entries.none { entry -> entry.saf } }
+            val extras = localGroups.sumOf { it.entries.size - 1 }
+            val reclaimable = localGroups.sumOf { it.reclaimableBytes }
+            AlertDialog(
+                onDismissRequest = { dlg = null },
+                title = { Text("Move duplicate copies to Recycle Bin?") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Keep one verified copy from each eligible local-only group.")
+                        Text("$extras extra file(s) · Up to ${fmtSize(reclaimable)} recoverable space")
+                        Text("Files will be re-hashed and revalidated immediately before moving. If any reviewed file changed, the cleanup is cancelled.")
+                        if (d.groups.any { it.entries.any { entry -> entry.saf } }) {
+                            Text("Groups containing SAF/SD-card files are excluded because provider trash recovery is not guaranteed.")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton({
+                        vm.recycleDuplicateCopies(d.groups)
+                        dlg = null
+                    }) { Text("Move to Recycle Bin") }
+                },
+                dismissButton = { TextButton({ dlg = null }) { Text("Cancel") } }
             )
         }
         is Dlg.MultiProps -> {
