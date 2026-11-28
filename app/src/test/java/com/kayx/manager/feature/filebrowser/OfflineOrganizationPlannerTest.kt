@@ -109,6 +109,20 @@ class OfflineOrganizationPlannerTest {
     }
 
 
+    @Test fun acceptsLocalDestinationStableKeyForPreview() {
+        val source = temporaryFolder.newFolder("local-key-source")
+        val destination = temporaryFolder.newFolder("local-key-destination")
+        val photo = File(source, "photo.jpg").apply { writeText("photo") }
+        val entry = OfflineStorageInventory.Entry(
+            key = photo.absolutePath, path = photo.absolutePath, name = photo.name,
+            size = photo.length(), modified = photo.lastModified(), category = Category.IMAGES, saf = false
+        )
+        val key = StorageLocation.Local(destination).stableKey()
+        val plan = OfflineOrganizationPlanner.create(listOf(entry), Category.IMAGES, key).getOrThrow()
+        assertEquals(destination.absolutePath, plan.destinationLabel)
+        assertTrue(OfflineOrganizationPlanner.isStillValid(plan))
+    }
+
     @Test fun acceptsSafDestinationStableKeyForPreview() {
         val source = temporaryFolder.newFolder("saf-destination-source")
         val photo = File(source, "photo.jpg").apply { writeText("photo") }
