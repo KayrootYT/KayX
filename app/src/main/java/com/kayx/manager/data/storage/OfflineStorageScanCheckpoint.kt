@@ -23,8 +23,10 @@ internal object OfflineStorageScanCheckpoint {
     private const val VERSION = "KAYX_SCAN_V1"
     private fun file(context: Context) = File(context.applicationContext.filesDir, "offline-assistant-scan.checkpoint")
 
-    fun load(context: Context, root: File, maxEntries: Int, maxDepth: Int): State? = runCatching {
-        val target = file(context)
+    fun load(context: Context, root: File, maxEntries: Int, maxDepth: Int): State? =
+        loadFile(file(context), root, maxEntries, maxDepth)
+
+    internal fun loadFile(target: File, root: File, maxEntries: Int, maxDepth: Int): State? = runCatching {
         val backup = File(target.parentFile, target.name + ".bak")
         if (!target.exists() && backup.exists()) check(backup.renameTo(target))
         else if (target.exists()) backup.delete()
@@ -60,8 +62,9 @@ internal object OfflineStorageScanCheckpoint {
         State(savedRoot, maxEntries, maxDepth, complete, pending, entries)
     }.getOrNull()
 
-    fun save(context: Context, state: State) {
-        val target = file(context)
+    fun save(context: Context, state: State) = saveFile(file(context), state)
+
+    internal fun saveFile(target: File, state: State) {
         val temp = File(target.parentFile, target.name + ".tmp")
         val text = buildString {
             append(VERSION).append('\t').append(encode(state.root)).append('\t')
