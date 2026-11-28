@@ -944,6 +944,10 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             "\\nNo automatic retry is offered. Inspect source and destination before starting another transfer."
     }
     fun acknowledgeTransferRecovery() {
+        if (transferRecoveryStore?.load()?.state == OfflineTransferRecoveryStore.State.RUNNING) {
+            notify("A transfer is still running. Wait for it to finish before acknowledging recovery.")
+            return
+        }
         transferRecoveryStore?.clear()
         notify("Saved transfer recovery record acknowledged and cleared. No files were changed.")
     }
