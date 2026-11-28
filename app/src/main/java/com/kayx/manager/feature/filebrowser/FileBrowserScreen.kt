@@ -95,6 +95,7 @@ internal sealed interface Dlg {
     data object Tools : Dlg
     data object MultiProps : Dlg
     data class OrganizationPreview(val plan: OfflineOrganizationPlan) : Dlg
+    data class DuplicateReview(val groups: List<OfflineStorageInventory.DuplicateGroup>) : Dlg
 }
 
 private fun fmtSize(b: Long): String {
@@ -259,6 +260,8 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                         OfflineOrganizationPlanner.create(result.entries, query.category, destination)
                             .onSuccess { dlg = Dlg.OrganizationPreview(it) }
                             .onFailure { vm.notify(it.message ?: "Could not prepare organization preview") }
+                    } else if (query == OfflineAssistantCommand.FindDuplicates) {
+                        dlg = Dlg.DuplicateReview(result.duplicateGroups)
                     } else vm.notify("$heading\n$details\n$coverage")
                 }
                 storageScanJob = null
@@ -831,6 +834,43 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     }) { Text("Confirm copy") }
                 },
                 dismissButton = { TextButton({ dlg = null }) { Text("Cancel") } }
+            )
+        }
+        is Dlg.DuplicateReview -> {
+            val groups = d.groups
+            AlertDialog(
+                onDismissRequest = { dlg = null },
+                title = { Text("Duplicate review · ${groups.size} groups") },
+                text = {
+                    Column(
+                        Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (groups.isEmpty()) {
+                            Text("No byte-identical duplicate groups were found in the accessible scan.")
+                        } else {
+                            Text("Verified using SHA-256. Potential reclaimable space if one copy per group is retained: ${fmtSize(groups.sumOf { it.reclaimableBytes })}.")
+                            groups.forEachIndexed { index, group ->
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("Group ${index + 1} · ${group.entries.size} copies · ${fmtSize(group.size)} each",
+                                        style = MaterialTheme.typography.titleSmall)
+                                    Text("SHA-256: ${group.sha256.take(20)}…",
+                                        style = MaterialTheme.typography.labelSmall, color = Fg.copy(.65f))
+                                    group.entries.forEach { entry ->
+                                        Text("• ${entry.name}\n  ${entry.path}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Text("Potential reclaim: ${fmtSize(group.reclaimableBytes)}",
+                                        style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                        Text("Review only: no files have been deleted or moved. Cleanup will require a separate explicit confirmation.",
+                            style = MaterialTheme.typography.bodySmall, color = Fg.copy(.7f))
+                    }
+                },
+                confirmButton = { TextButton({ dlg = null }) { Text("Done") } }
             )
         }
         is Dlg.MultiProps -> {
