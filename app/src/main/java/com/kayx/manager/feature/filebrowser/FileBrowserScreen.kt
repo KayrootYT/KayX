@@ -354,6 +354,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                         if (s.selected.isEmpty()) vm.notify("Select files first")
                                         else dlg = Dlg.Tag
                                     }
+                                    OfflineAssistantCommand.TransferRecoveryStatus -> vm.notify(vm.transferRecoveryStatus())
                                     OfflineAssistantCommand.ShowLastScan -> scope.launch {
                                         val cached = withContext(Dispatchers.IO) {
                                             OfflineStorageInventorySnapshotStore(ctx.filesDir).load()
