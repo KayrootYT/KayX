@@ -170,7 +170,7 @@ The user-facing assistant is a separate, fully local command feature. It is not 
 - [x] Add opt-in local command history (20-entry cap), with user controls to disable and clear; stored only in app-private SharedPreferences, no telemetry or cloud memory.
 - [x] Add explicit offline commands that open existing Tags, Recycle Bin, Private Space, and Network Storage screens; tag selected files through the existing tag dialog; route visible APK/archive items to their existing inspection/viewer screens without bypassing permissions.
 
-Phase 2 current limits: scan results are in-memory only; up to 50,000 entries/24 levels are inspected, duplicate hashing is capped at 500 files/512 MiB, and confirmed organization copies are limited to 100 local files per operation. SAF sources can be copied to explicit local destinations, and local/SAF sources can be copied to an explicitly selected writable SAF destination after preview and revalidation; move/delete remain unavailable.
+Phase 2 current limits: final scan results remain in-memory; the crash-safe checkpoint persists local paths/metadata only and resumes local traversal, while SAF/provider roots restart from the root. Up to 50,000 entries/24 levels are inspected, duplicate hashing is capped at 500 files/512 MiB, and confirmed organization transfers are limited to 100 files per operation. Local/SAF sources can be copied to explicit local or selected writable SAF destinations after preview and revalidation. Local-to-local preview moves use the undo journal; provider/SAF moves and deletes remain disabled until provider-specific recovery is verified. Duplicate cleanup is limited to local-only groups and uses the recoverable Recycle Bin.
 
 ## AI expansion roadmap (added 2026-11-27)
 
