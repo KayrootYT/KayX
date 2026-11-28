@@ -847,7 +847,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                     }
                 },
                 confirmButton = {
-                    val moveSupported = !plan.destinationPath.startsWith("saf:", ignoreCase = true) && plan.files.none { it.saf }
+                    val moveSupported = StorageLocation.fromStableKey(plan.destinationPath) !is StorageLocation.Saf && plan.files.none { it.saf }
                     TextButton(
                         onClick = {
                             if (OfflineOrganizationPlanner.isStillValid(plan)) {
