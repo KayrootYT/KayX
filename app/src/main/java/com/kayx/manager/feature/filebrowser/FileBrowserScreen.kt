@@ -355,6 +355,7 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                         else dlg = Dlg.Tag
                                     }
                                     OfflineAssistantCommand.TransferRecoveryStatus -> vm.notify(vm.transferRecoveryStatus())
+                                    OfflineAssistantCommand.AcknowledgeTransferRecovery -> vm.acknowledgeTransferRecovery()
                                     OfflineAssistantCommand.ShowLastScan -> scope.launch {
                                         val cached = withContext(Dispatchers.IO) {
                                             OfflineStorageInventorySnapshotStore(ctx.filesDir).load()
