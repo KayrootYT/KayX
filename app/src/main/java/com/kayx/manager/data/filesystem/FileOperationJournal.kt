@@ -14,6 +14,8 @@ import java.util.Base64
  * Undo never overwrites an existing source and never deletes a copy whose content changed.
  */
 class FileOperationJournal(private val directory: File, private val maxEntries: Int = 50) {
+    init { require(maxEntries in 1..MAX_READ_ENTRIES) { "Undo journal entry limit is out of range" } }
+
     enum class Kind { MOVE, COPY, RENAME, TRASH }
     data class Entry(val kind: Kind, val source: String, val destination: String, val fingerprint: String)
 
@@ -173,6 +175,7 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
             stream.close()
         }
 
+        require(temp.length() <= MAX_JOURNAL_BYTES) { "Undo journal exceeds the 16 MiB safety limit" }
         val backup = File(directory, "file-operations.undo.bak")
         backup.delete()
         val hadJournal = file.exists()
