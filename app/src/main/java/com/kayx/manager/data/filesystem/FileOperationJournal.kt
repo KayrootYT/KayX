@@ -83,34 +83,47 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
      */
     private fun readEntries(): List<Entry> {
         val backup = File(directory, "file-operations.undo.bak")
-        if (!file.exists() && backup.exists()) backup.renameTo(file)
-        else if (file.exists()) backup.delete()
-        if (!file.isFile) return emptyList()
 
-        return runCatching {
-            val bytes = file.readBytes()
-            val header = DataInputStream(ByteArrayInputStream(bytes))
-            val magic = if (bytes.size >= 4) header.readInt() else 0
-            if (magic == MAGIC) {
-                val version = header.readInt()
-                require(version == VERSION) { "Unsupported undo journal version" }
-                val count = header.readInt()
-                require(count in 0..MAX_READ_ENTRIES) { "Invalid undo journal entry count" }
-                buildList {
-                    repeat(count) {
-                        val kind = Kind.valueOf(header.readUTF())
-                        val source = header.readUTF()
-                        val destination = header.readUTF()
-                        val fingerprint = header.readUTF()
-                        if (isValidEntry(kind, source, destination)) {
-                            add(Entry(kind, source, destination, fingerprint))
+        fun readCandidate(candidate: File): List<Entry>? {
+            if (!candidate.isFile || candidate.length() > MAX_JOURNAL_BYTES) return null
+            val bytes = runCatching { candidate.readBytes() }.getOrNull() ?: return null
+            return runCatching {
+                val header = DataInputStream(ByteArrayInputStream(bytes))
+                val magic = if (bytes.size >= 4) header.readInt() else 0
+                if (magic == MAGIC) {
+                    val version = header.readInt()
+                    require(version == VERSION) { "Unsupported undo journal version" }
+                    val count = header.readInt()
+                    require(count in 0..MAX_READ_ENTRIES) { "Invalid undo journal entry count" }
+                    buildList {
+                        repeat(count) {
+                            val kind = Kind.valueOf(header.readUTF())
+                            val source = header.readUTF()
+                            val destination = header.readUTF()
+                            val fingerprint = header.readUTF()
+                            if (isValidEntry(kind, source, destination)) {
+                                add(Entry(kind, source, destination, fingerprint))
+                            }
                         }
-                    }
-                }.takeLast(maxEntries)
-            } else {
-                readLegacyEntries(bytes)
-            }
-        }.getOrDefault(emptyList())
+                    }.takeLast(maxEntries)
+                } else {
+                    readLegacyEntries(bytes)
+                }
+            }.getOrNull()
+        }
+
+        val primary = readCandidate(file)
+        if (primary != null) {
+            backup.delete()
+            return primary
+        }
+
+        // A crash or interrupted replacement must not make a valid backup disappear
+        // merely because the primary file exists but is corrupt or truncated.
+        val recovered = readCandidate(backup) ?: return emptyList()
+        if (file.exists()) file.delete()
+        if (backup.renameTo(file)) return recovered
+        return recovered
     }
 
     private fun readLegacyEntries(bytes: ByteArray): List<Entry> =
@@ -237,5 +250,6 @@ class FileOperationJournal(private val directory: File, private val maxEntries: 
         const val MAGIC = 0x4B58554A // KXUJ
         const val VERSION = 1
         const val MAX_READ_ENTRIES = 10_000
+        const val MAX_JOURNAL_BYTES = 16L * 1024 * 1024
     }
 }
