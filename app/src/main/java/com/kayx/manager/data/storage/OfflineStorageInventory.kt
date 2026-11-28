@@ -183,7 +183,9 @@ object OfflineStorageInventory {
         val duplicateGroups = if (includeDuplicates) findDuplicateGroups(app, found) else emptyList()
         val duplicates = duplicateGroups.flatMap { it.entries }
         onProgress(found.size)
-        if (!truncated) OfflineStorageScanCheckpoint.clear(app)
+        // A completed or hard-capped scan has no resumable work left under this bounded scan contract.
+        // Interrupted scans exit before this point and retain the last atomic checkpoint.
+        OfflineStorageScanCheckpoint.clear(app)
         return Result(found, large, old, duplicates, duplicateGroups, found.sumOf { it.size },
             rootsScanned, inaccessibleRoots, truncated)
     }
