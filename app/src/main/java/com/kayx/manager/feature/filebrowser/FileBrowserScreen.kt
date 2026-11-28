@@ -353,6 +353,18 @@ fun FileBrowserScreen(startPath: String, onExit: () -> Unit, onOpenFile: (String
                                         if (s.selected.isEmpty()) vm.notify("Select files first")
                                         else dlg = Dlg.Tag
                                     }
+                                    OfflineAssistantCommand.ShowLastScan -> {
+                                        val cached = withContext(Dispatchers.IO) {
+                                            OfflineStorageInventorySnapshotStore(ctx.filesDir).load()
+                                        }
+                                        if (cached == null) vm.notify("No valid saved inventory is available. Say scan storage first.")
+                                        else vm.notify(
+                                            "Last saved inventory\\nFiles: ${cached.entries.size} · Data: ${fmtSize(cached.totalBytes)} · Large: ${cached.largeFiles.size} · Old: ${cached.oldFiles.size}\\n" +
+                                                "Roots: ${cached.scannedRoots} · Inaccessible: ${cached.inaccessibleRoots}" +
+                                                (if (cached.truncated) " · Scan was capped" else "") +
+                                                "\\nDuplicate hashes are not restored from the saved snapshot; say find duplicates to rescan and hash."
+                                        )
+                                    }
                                     OfflineAssistantCommand.ScanStorage,
                                     OfflineAssistantCommand.ResumeStorageScan,
                                     OfflineAssistantCommand.FindLargeFiles,
