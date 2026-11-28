@@ -160,7 +160,7 @@ The user-facing assistant is a separate, fully local command feature. It is not 
 - [x] Add cancellable traversal with a 50,000-file / 24-level cap, progress callbacks, and inaccessible-root/truncation reporting.
 - [x] Add offline category filters for images, videos, audio, documents and APKs, plus folder-size rollups by folder name (same-name folders are combined and clearly reported).
 - [x] Group duplicate candidates by verified SHA-256 and show a review dialog with each file path, per-copy size, and potential reclaimable bytes; retain one-copy accounting and never auto-delete.
-- [ ] Add resumable/checkpointed scans.
+- [x] Add crash-safe local scan checkpoints every 16 directories and a `resume scan` command; a fresh `scan storage` resets the checkpoint. SAF/provider roots restart from their root on resume because durable provider cursors are not portable.
 - [x] Add a separate duplicate-cleanup confirmation for local-only SHA-256 groups; re-hash and revalidate each source, retain one copy, and move extras to the existing recoverable Recycle Bin. Mixed SAF/provider groups are excluded.
 - [x] Add preview-first offline bulk copy organization with explicit destination, exact file/size preview, separate confirmation, stale-source revalidation, KEEP_BOTH conflicts, and a 100-file cap; original files are never deleted.
 - [x] Extend preview-first organization to SAF/provider source roots using tree-relative stable keys, persisted-grant checks, document re-resolution, metadata snapshot validation and read-open verification immediately before copy to a local destination.
