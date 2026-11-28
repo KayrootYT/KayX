@@ -64,6 +64,10 @@ class OfflineAssistantParserTest {
             OfflineAssistantCommand.PreviewOrganize(Category.DOCUMENTS, "/storage/emulated/0/Documents"),
             OfflineAssistantParser.parse("organize docs to /storage/emulated/0/Documents")
         )
+        assertEquals(
+            OfflineAssistantCommand.PreviewOrganize(Category.IMAGES, "/storage/emulated/0/Pictures/Sorted", true),
+            OfflineAssistantParser.parse("move images to /storage/emulated/0/Pictures/Sorted")
+        )
         assertNull(OfflineAssistantParser.parse("organize everything to /storage/emulated/0"))
         assertNull(OfflineAssistantParser.parse("organize images"))
     }
