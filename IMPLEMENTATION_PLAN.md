@@ -159,7 +159,8 @@ The user-facing assistant is a separate, fully local command feature. It is not 
 - [x] Add offline commands for large files (100 MiB+), old files (180+ days), and SHA-256 duplicate candidates. Android/data and Android/obb are excluded; Android/media is included only where readable.
 - [x] Add cancellable traversal with a 50,000-file / 24-level cap, progress callbacks, and inaccessible-root/truncation reporting.
 - [x] Add offline category filters for images, videos, audio, documents and APKs, plus folder-size rollups by folder name (same-name folders are combined and clearly reported).
-- [ ] Add byte-verified duplicate grouping and resumable/checkpointed scans; current duplicate results are bounded SHA-256 candidates and are never automatic deletion targets.
+- [x] Group duplicate candidates by verified SHA-256 and show a review dialog with each file path, per-copy size, and potential reclaimable bytes; retain one-copy accounting and never auto-delete.
+- [ ] Add resumable/checkpointed scans and separately confirmed duplicate cleanup through recoverable recycle-bin/provider-safe actions; this review phase performs no move or delete.
 - [x] Add preview-first offline bulk copy organization with explicit destination, exact file/size preview, separate confirmation, stale-source revalidation, KEEP_BOTH conflicts, and a 100-file cap; original files are never deleted.
 - [x] Extend preview-first organization to SAF/provider source roots using tree-relative stable keys, persisted-grant checks, document re-resolution, metadata snapshot validation and read-open verification immediately before copy to a local destination.
 - [x] Add preview-first copy to a selected SAF/provider destination; require persisted read+write grants and re-resolve the destination at confirmation.
