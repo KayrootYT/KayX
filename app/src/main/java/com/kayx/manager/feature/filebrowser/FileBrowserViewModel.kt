@@ -13,6 +13,7 @@ import com.kayx.manager.data.filesystem.ExternalOps
 import com.kayx.manager.data.filesystem.RecycleBin
 import com.kayx.manager.data.filesystem.FileOps
 import com.kayx.manager.data.filesystem.FileOperationJournal
+import com.kayx.manager.data.filesystem.OfflineTransferRecoveryStore
 import com.kayx.manager.data.filesystem.FileOperationSounds
 import com.kayx.manager.data.filesystem.FileActionSound
 import com.kayx.manager.data.filesystem.FileRepository
@@ -156,12 +157,22 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
     private var applied = Triple(SettingsStore.showHidden, SettingsStore.defaultSort, SettingsStore.dualPane)
     private var appContext: Context? = null
     private var operationJournal: FileOperationJournal? = null
+    private var transferRecoveryStore: OfflineTransferRecoveryStore? = null
     val state: StateFlow<BrowserState> = _s
 
     fun attachSearchContext(context: Context) {
         appContext = context.applicationContext
         operationJournal = FileOperationJournal(context.applicationContext.filesDir)
-        _s.update { it.copy(undoAvailable = operationJournal?.entries()?.isNotEmpty() == true) }
+        transferRecoveryStore = OfflineTransferRecoveryStore(context.applicationContext.filesDir)
+        val interrupted = transferRecoveryStore?.markInterrupted()
+        _s.update {
+            it.copy(
+                undoAvailable = operationJournal?.entries()?.isNotEmpty() == true,
+                message = interrupted?.let {
+                    "An earlier file transfer was interrupted. Say transfer status to inspect its saved plan; it will not be retried automatically."
+                } ?: it.message
+            )
+        }
         repo.attachSearchContext(context)
     }
 
@@ -827,6 +838,21 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             }
         } else emptyList()
         val control = FileOps.TransferControl()
+        val recoveryStore = transferRecoveryStore
+        val recoverySaved = recoveryStore?.begin(
+            OfflineTransferRecoveryStore.Record(
+                sources = keys,
+                destination = destinationKey,
+                moving = cut,
+                conflictPolicy = effectivePolicy,
+                state = OfflineTransferRecoveryStore.State.RUNNING,
+                startedAtMillis = System.currentTimeMillis()
+            )
+        ) ?: false
+        if (!recoverySaved) {
+            notify("Could not safely save transfer recovery metadata. Transfer was not started.")
+            return
+        }
         _s.update { it.copy(conflicts = emptyList(), pending = null, recent = emptySet(), transferControl = control, retryTransfer = null) }
         viewModelScope.launch {
             _s.update { it.copy(transferProgress = TransferProgress(0, keys.size, "Preparing", cut)) }
@@ -836,6 +862,7 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
                     val elapsedMs = (System.currentTimeMillis() - transferStartedAt).coerceAtLeast(1L)
                     val speed = if (completedBytes > 0L) completedBytes * 1000L / elapsedMs else 0L
                     val eta = if (speed > 0L && totalBytes > completedBytes) (totalBytes - completedBytes) / speed else null
+                    recoveryStore.updateProgress(completed)
                     _s.update {
                         it.copy(transferProgress = TransferProgress(
                             completed, total, name, cut, completedBytes, totalBytes, speed, eta
@@ -846,6 +873,10 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             repo.invalidateSearchCache()
             val outcome = result.getOrNull()
             val failed = outcome?.failed.orEmpty()
+            val transferFullyResolved = result.isSuccess && outcome != null &&
+                failed.isEmpty() && outcome.cleanupWarnings.isEmpty() &&
+                outcome.completed + outcome.skipped == keys.size
+            if (transferFullyResolved) recoveryStore.clear() else recoveryStore.markNeedsReview()
             // Only journal fully completed local transfers with an unambiguous destination.
             // REPLACE is intentionally excluded because undo must not discard overwritten data.
             if (result.isSuccess && outcome != null && outcome.completed == keys.size && outcome.skipped == 0 &&
@@ -891,6 +922,19 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             ?: StorageLocation.Local(File(destination).canonicalFile).stableKey()
 
     fun dismissConflicts() = _s.update { it.copy(conflicts = emptyList(), pending = null) }
+    fun transferRecoveryStatus(): String {
+        val record = transferRecoveryStore?.load() ?: return "No interrupted transfer is waiting for review."
+        val mode = if (record.moving) "Move" else "Copy"
+        val state = when (record.state) {
+            OfflineTransferRecoveryStore.State.RUNNING -> "Running"
+            OfflineTransferRecoveryStore.State.INTERRUPTED -> "Interrupted"
+            OfflineTransferRecoveryStore.State.NEEDS_REVIEW -> "Needs review"
+        }
+        return state + " " + mode + " · " + record.completedItems + "/" + record.totalItems + " item(s) reported complete\\n" +
+            "Destination: " + record.destination + "\\nSources: " + record.sources.take(5).joinToString() +
+            (if (record.sources.size > 5) " and " + (record.sources.size - 5) + " more" else "") +
+            "\\nNo automatic retry is offered. Inspect source and destination before starting another transfer."
+    }
     fun pauseTransfer() { _s.value.transferControl?.pause() }
     fun resumeTransfer() { _s.value.transferControl?.resume() }
     fun cancelTransfer() { _s.value.transferControl?.cancel() }
