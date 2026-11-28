@@ -22,7 +22,7 @@ The Offline Assistant is opened from the sparkle button beside the file-browser 
 - File operations: `new folder Work`, `new file notes.txt`, `rename selected to notes-old.txt`, `delete selected`, `zip selected`, `extract archive.zip`, `share selected`, `undo`
 - Storage/navigation helpers: `storage info`, `bookmark current`, `open recycle bin`, `open tags`, `open private space`, `open network storage`, `tag selected` (opens KayX's existing tag dialog)
 - APK/archive tools: `inspect apk app.apk`, `browse archive backup.zip` (the named item must be visible in the current folder)
-- Whole-storage inventory: `scan storage`, `find large files`, `find old files`, `find duplicates`, `cancel scan`
+- Whole-storage inventory: `scan storage`, `resume scan`, `find large files`, `find old files`, `find duplicates`, `cancel scan`
 - Category filters: `find photos` / `find images`, `find videos`, `find audio`, `find documents`, `find apks`
 - Folder rollup: `folder size Download` (combines matching folder names across accessible roots; use a distinctive folder name)
 - Organization preview: `organize images to /storage/emulated/0/Pictures/Sorted` and `move images to /storage/emulated/0/Pictures/Sorted` (both scan first and show a confirmation preview; move is local-to-local only)
@@ -44,6 +44,8 @@ Hindi and Hinglish aliases are provided for common navigation, selection, hidden
 
 - `scan storage` scans readable shared internal storage and persisted SAF tree grants, including user-granted SD-card/provider roots. A primary SAF tree is not scanned twice when the shared-storage filesystem root is readable.
 - The scanner is read-only. It never moves, renames, or deletes files.
+- Local shared-storage traversal writes an atomic, app-private checkpoint every 16 directories. After cancellation or process interruption, `resume scan` restores the last checkpoint and continues; if no compatible checkpoint exists it starts a fresh scan. A new `scan storage` always starts over. Checkpoints contain only local paths and file metadata, never contents.
+- SAF/provider roots are rescanned from their root on resume because providers do not expose a portable durable directory cursor; local traversal progress is preserved.
 - Traversal is bounded to 50,000 files and 24 directory levels. It checks coroutine cancellation between directories/files and reports scan progress, inaccessible roots, and whether the entry cap was reached.
 - Android/data and Android/obb are excluded; Android/media remains eligible where the platform grants access.
 - `find large files` reports files at least 100 MiB; `find old files` reports files not modified for at least 180 days.
