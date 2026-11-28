@@ -858,11 +858,15 @@ class FileBrowserViewModel(private val repo: FileRepository = FileRepository(), 
             _s.update { it.copy(transferProgress = TransferProgress(0, keys.size, "Preparing", cut)) }
             val transferStartedAt = System.currentTimeMillis()
             val result = withContext(Dispatchers.IO) {
+                var lastPersistedCompleted = -1
                 storageTransfers.transfer(context, keys, destinationKey, cut, effectivePolicy, control) { completed, total, name, completedBytes, totalBytes ->
                     val elapsedMs = (System.currentTimeMillis() - transferStartedAt).coerceAtLeast(1L)
                     val speed = if (completedBytes > 0L) completedBytes * 1000L / elapsedMs else 0L
                     val eta = if (speed > 0L && totalBytes > completedBytes) (totalBytes - completedBytes) / speed else null
-                    recoveryStore.updateProgress(completed)
+                    if (completed != lastPersistedCompleted) {
+                        recoveryStore.updateProgress(completed)
+                        lastPersistedCompleted = completed
+                    }
                     _s.update {
                         it.copy(transferProgress = TransferProgress(
                             completed, total, name, cut, completedBytes, totalBytes, speed, eta
