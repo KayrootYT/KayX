@@ -82,8 +82,10 @@ internal object OfflineOrganizationPlanner {
         val destinationLocation = StorageLocation.fromStableKey(plan.destinationPath)
         val safDestination = destinationLocation as? StorageLocation.Saf
         val localDestination = destinationLocation as? StorageLocation.Local
-        val destination = if (safDestination == null) (localDestination?.directory ?: File(plan.destinationPath)).canonicalFile else null
-        if (destination != null && (!destination.isDirectory || !destination.canWrite() || destination.path != plan.destinationPath)) return false
+        val requestedLocalDestination = localDestination?.directory ?: File(plan.destinationPath)
+        val destination = if (safDestination == null) requestedLocalDestination.canonicalFile else null
+        if (destination != null && (!destination.isDirectory || !destination.canWrite() ||
+                destination.path != requestedLocalDestination.absoluteFile.path)) return false
         if (safDestination != null && safDestination.relativePath.split('/').any { it == "." || it == ".." }) return false
         plan.files.isNotEmpty() && plan.files.size <= MAX_FILES_PER_OPERATION &&
             plan.files.all { entry ->
