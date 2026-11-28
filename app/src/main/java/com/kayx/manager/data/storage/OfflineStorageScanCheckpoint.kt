@@ -59,7 +59,23 @@ internal object OfflineStorageScanCheckpoint {
             }
         }
         if (entries.size > maxEntries || pending.size > maxEntries) return null
-        State(savedRoot, maxEntries, maxDepth, complete, pending, entries)
+        val rootPrefix = savedRoot.trimEnd(File.separatorChar) + File.separator
+        val safePending = pending.filter { item ->
+            val directory = File(item.path)
+            runCatching {
+                !java.nio.file.Files.isSymbolicLink(directory.toPath()) &&
+                    directory.canonicalFile.path.startsWith(rootPrefix) && directory.isDirectory
+            }.getOrDefault(false)
+        }
+        val safeEntries = entries.filter { entry ->
+            val source = File(entry.path)
+            runCatching {
+                !java.nio.file.Files.isSymbolicLink(source.toPath()) &&
+                    source.canonicalFile.path == entry.path && source.isFile && source.canRead() &&
+                    source.length() == entry.size && source.lastModified() == entry.modified
+            }.getOrDefault(false)
+        }
+        State(savedRoot, maxEntries, maxDepth, complete, safePending, safeEntries)
     }.getOrNull()
 
     fun save(context: Context, state: State) = saveFile(file(context), state)
