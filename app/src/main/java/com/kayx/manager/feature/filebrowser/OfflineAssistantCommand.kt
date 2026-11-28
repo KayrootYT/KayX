@@ -48,11 +48,11 @@ sealed interface OfflineAssistantCommand {
     data object CancelStorageScan : OfflineAssistantCommand
     data class FindCategory(val category: Category) : OfflineAssistantCommand
     data class FolderSize(val folderName: String) : OfflineAssistantCommand
-    data class PreviewOrganize(val category: Category, val destinationPath: String) : OfflineAssistantCommand
+    data class PreviewOrganize(val category: Category, val destinationPath: String, val move: Boolean = false) : OfflineAssistantCommand
 }
 
 object OfflineAssistantParser {
-    const val HELP_TEXT = "Try: open recycle bin, open tags, open private space, open network storage, tag selected, inspect apk app.apk, browse archive backup.zip, plus: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, organize images to /storage/emulated/0/Pictures or organize images to here (current folder), cancel scan."
+    const val HELP_TEXT = "Try: open recycle bin, open tags, open private space, open network storage, tag selected, inspect apk app.apk, browse archive backup.zip, plus: search photos, search content invoice, open folder Download, open report.pdf, go back, go up, show hidden, sort by size, select all, select report.pdf, copy, cut, paste, new folder Work, new file notes.txt, rename selected to notes-old.txt, delete selected, zip selected, share selected, extract archive.zip, undo, storage info, scan storage, find large files, find old files, find duplicates, find images, find videos, find audio, find documents, find apks, folder size Download, organize images to /storage/emulated/0/Pictures, move images to /storage/emulated/0/Pictures, or organize images to here (current folder), cancel scan."
 
     fun parse(raw: String): OfflineAssistantCommand? {
         val input = raw.trim().replace(Regex("\\s+"), " ")
@@ -97,11 +97,11 @@ object OfflineAssistantParser {
             value in setOf("find apks", "find apk files", "apk dhundo", "एपीके खोजो") -> OfflineAssistantCommand.FindCategory(Category.APKS)
             value.startsWith("folder size ") || value.startsWith("size of folder ") || value.startsWith("folder ka size ") ->
                 tail("folder size", "size of folder", "folder ka size")?.let(OfflineAssistantCommand::FolderSize)
-            value.startsWith("organize ") -> {
-                val match = Regex("^organize\\s+(images|photos|videos|audio|music|documents|docs|apks)\\s+to\\s+(.+)$", RegexOption.IGNORE_CASE)
+            value.startsWith("organize ") || value.startsWith("move ") -> {
+                val match = Regex("^(organize|move)\\s+(images|photos|videos|audio|music|documents|docs|apks)\\s+to\\s+(.+)$", RegexOption.IGNORE_CASE)
                     .matchEntire(input)
                 match?.let {
-                    val category = when (it.groupValues[1].lowercase(Locale.ROOT)) {
+                    val category = when (it.groupValues[2].lowercase(Locale.ROOT)) {
                         "images", "photos" -> Category.IMAGES
                         "videos" -> Category.VIDEOS
                         "audio", "music" -> Category.AUDIO
@@ -109,7 +109,7 @@ object OfflineAssistantParser {
                         "apks" -> Category.APKS
                         else -> null
                     }
-                    category?.let { value -> OfflineAssistantCommand.PreviewOrganize(value, it.groupValues[2].trim()) }
+                    category?.let { value -> OfflineAssistantCommand.PreviewOrganize(value, it.groupValues[3].trim(), it.groupValues[1].equals("move", true)) }
                 }
             }
             value in setOf("zip selected", "compress selected", "selected zip karo") -> OfflineAssistantCommand.ZipSelected
